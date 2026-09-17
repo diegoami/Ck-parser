@@ -11,9 +11,10 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
-from ck3parser.parser import Block, date_key
+from ck3parser.parser import Block
+from ck3parser.titles import TitleRecord, normalize_history
 
 SCHEMA_PATH = Path(__file__).with_name("schema.cypher")
 
@@ -97,45 +98,43 @@ def apply_schema(session, path: Path = SCHEMA_PATH) -> None:
 # ------------------------------------------------------------ pure helpers
 
 
-def holder_intervals(history: Block | None, end_date: str | None, current_holder: int | None = None) -> list[dict[str, Any]]:
-    """Turn a title ``history`` block into ``[{holder, from, to}]``.
+def holder_intervals(
+    history: Block | list[tuple[str, int | None, str | None]] | None,
+    end_date: str | None,
+    current_holder: int | None = None,
+) -> list[dict[str, Any]]:
+    """Turn a title history into ``[{holder, from, to, open, reason}]``.
 
-    ``date=holder`` entries open an interval that closes at the next entry.
-    ``date={ type=... }`` entries (destroyed, created, ...) close the running
-    interval without opening one. The last open interval closes at ``end_date``
-    (the snapshot date) and is marked ``open=True``.
+    Takes either a raw ``history`` block or the normalised tuples of a
+    :class:`~ck3parser.titles.TitleRecord`. An entry with a holder opens a
+    tenure and closes the running one; a terminal entry (``type=destroyed``)
+    only closes, because its holder names the outgoing ruler. The last open
+    tenure closes at ``end_date`` and is marked ``open``. A title with no
+    history but a current holder gets one open interval.
     """
-    events: list[tuple[str, Any]] = []
-    if isinstance(history, Block):
-        events = [(str(d), v) for d, v in history]
-    events.sort(key=lambda e: date_key(e[0]))
+    # NB: Block subclasses list, so it must be tested for first.
+    if history is None:
+        entries: list[tuple[str, int | None, str | None]] = []
+    elif isinstance(history, Block):
+        entries = normalize_history(history)
+    else:
+        entries = list(history)
     intervals: list[dict[str, Any]] = []
-    cur: dict[str, Any] | None = None
-    for date, value in events:
-        if cur is not None:
-            cur["to"] = date
-            intervals.append(cur)
-            cur = None
-        if isinstance(value, int):
-            cur = {"holder": value, "from": date, "to": None, "open": False}
-        elif isinstance(value, Block) and isinstance(value.get("holder"), int):
-            cur = {"holder": value["holder"], "from": date, "to": None, "open": False}
-    if cur is not None:
-        cur["to"] = end_date
-        cur["open"] = True
-        intervals.append(cur)
-    elif current_holder and not intervals:
-        intervals.append({"holder": current_holder, "from": None, "to": end_date, "open": True})
+    current: dict[str, Any] | None = None
+    for date, holder, reason in entries:
+        if current is not None:
+            current["to"] = date
+            intervals.append(current)
+            current = None
+        if holder is not None:
+            current = {"holder": holder, "from": date, "to": None, "open": False, "reason": reason}
+    if current is not None:
+        current["to"] = end_date
+        current["open"] = True
+        intervals.append(current)
+    elif current_holder is not None and not intervals:
+        intervals.append({"holder": current_holder, "from": None, "to": end_date, "open": True, "reason": None})
     return intervals
-
-
-def clean_title_name(key: str) -> str:
-    """``e_germania`` -> ``Germania``; used only when the save gives no ``name``."""
-    for prefix in ("e_", "k_", "d_", "c_", "b_", "x_"):
-        if key.startswith(prefix):
-            key = key[len(prefix):]
-            break
-    return key.replace("_", " ").title()
 
 
 def character_props(char_id: int, char: Block) -> dict[str, Any]:
@@ -168,14 +167,20 @@ def load_snapshot(session, fp) -> None:
     )
 
 
-def load_title(session, fp, title: Block, intervals: list[dict[str, Any]], characters: dict[int, Block]) -> None:
-    key = str(title.get("key"))
+def load_title(
+    session,
+    fp,
+    title: TitleRecord,
+    intervals: list[dict[str, Any]],
+    characters: dict[int, Block],
+) -> None:
     session.run(
         """
         MERGE (t:Title {key: $key})
-        SET t.name = $name, t.tier = $tier, t.first_seen = coalesce(t.first_seen, $date), t.last_seen = $date
+        SET t.name = $name, t.tier = $tier, t.holder = $holder,
+            t.first_seen = coalesce(t.first_seen, $date), t.last_seen = $date
         """,
-        key=key, name=str(title.get("name") or clean_title_name(key)), tier=str(title.get("tier") or ""), date=fp.date,
+        key=title.key, name=title.display_name, tier=title.tier, holder=title.holder, date=fp.date,
     )
     for cid, char in characters.items():
         props = character_props(cid, char)
@@ -197,7 +202,21 @@ def load_title(session, fp, title: Block, intervals: list[dict[str, Any]], chara
             MATCH (t:Title {key: $key})
             MERGE (c:Character {id: $holder})
             MERGE (t)-[r:HELD_BY {from: $from}]->(c)
-            SET r.to = $to, r.open = $open
+            SET r.to = $to, r.open = $open, r.reason = $reason
             """,
-            key=key, holder=iv["holder"], **{"from": iv["from"]}, to=iv["to"], open=iv["open"],
+            key=title.key, holder=iv["holder"], **{"from": iv["from"]},
+            to=iv["to"], open=iv["open"], reason=iv.get("reason"),
         )
+
+
+def load_vassal_edge(session, vassal: TitleRecord, liege: TitleRecord, fp, kind: str = "de_facto") -> None:
+    """``(:Title)-[:VASSAL_OF {kind, as_of}]->(:Title)`` for one liege link."""
+    session.run(
+        """
+        MERGE (v:Title {key: $vassal})
+        MERGE (l:Title {key: $liege})
+        MERGE (v)-[r:VASSAL_OF {kind: $kind}]->(l)
+        SET r.as_of = $date
+        """,
+        vassal=vassal.key, liege=liege.key, kind=kind, date=fp.date,
+    )
