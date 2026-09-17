@@ -1,0 +1,24 @@
+[project]
+name = "ck3-history-extractor"
+version = "0.1.0"
+description = "Extract characters, dynasties and title histories from Crusader Kings 3 saves into a Neo4j graph."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "neo4j>=5.20",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ck3parser", "src/ck3graph"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

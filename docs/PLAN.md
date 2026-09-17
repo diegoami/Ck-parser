@@ -1,0 +1,339 @@
+# CK3 History Extractor — Project Plan
+
+Starting point: the "CK3 History Extractor — Repo Setup Prompt" artifact
+(scaffold pass: extract → parse → filter → load one lineage into Neo4j; narrative
+generation deferred until a small local LLM is chosen). This document turns that
+prompt into a phased plan and adds a new requirement: **grouping save files that
+belong to the same CK3 run (playthrough) saved at different in-game dates**, under
+the assumption that the player does not save-scum.
+
+Everything in the "Verified against the sample saves" section was checked against
+three release assets from the same run:
+
+| Label | Release | File | Size | sha256 |
+|---|---|---|---|---|
+| A | 0.0.4 | `Fylkir_Asa_of_Immasonian_Fylkirate_1358_09_13.ck3` | 72.8 MB | `69b78aae…8b57` |
+| B | 0.0.3 | `Fylkir_Ludwig_of_Immasonian_Fylkirate_1361_01_17.ck3` | 73.1 MB | `a2b12bbb…a37b` |
+| C | 0.0.2 | `Fylkir_Ludwig_of_Immasonian_Fylkirate_1364_03_10.ck3` | 73.8 MB | `919ad2c7…946a` |
+
+A succession (Åsa → Ludwig, 1360.6.8) falls between A and B, so the chain covers
+both a ruler change and a same-ruler interval.
+
+---
+
+## 1. Phases
+
+| Phase | Deliverable | Depends on |
+|---|---|---|
+| 0 | Repo scaffold exactly as the setup prompt describes (`pyproject.toml`, `src/ck3parser`, `src/ck3graph`, fixtures, `.env.example`, README, CI) | — |
+| 1 | Save container + header reader: `.ck3` → metadata dict + streamed `gamestate` | 0 |
+| 2 | Streaming Clausewitz parser that survives the real file (see quirks below) | 1 |
+| 3 | One-lineage extraction into Neo4j (`(:Title)-[:HELD_BY {from,to}]->(:Character)`) | 2 |
+| 4 | **Run grouping**: fingerprint saves, cluster them into runs, order them, verify the chain | 1, 2 (partial) |
+| 5 | Multi-snapshot loading: merge several saves of one run into one graph with provenance | 3, 4 |
+| 6 | Full-save scale (all referenced characters, all titles) | 5 |
+| 7 | Narrative generation (deferred, local LLM) | 6 |
+
+Phases 0–3 are the setup prompt. Phase 4 is the new work and is designed so it can
+be built right after Phase 1, because most of the signal lives in the first few
+hundred lines of the save.
+
+---
+
+## 2. Phase 0–3: scaffold and single-save pipeline
+
+Follow the setup prompt as written, with these corrections learned from the real
+file:
+
+- **`pyproject.toml` dependencies**: `neo4j`, `pytest` only. The prompt's
+  dependency line still lists `anthropic`; the rest of the prompt says not to add
+  an LLM SDK yet. Do not add it.
+- **Container format** (`extract.py`): the file starts with a one-line `SAV…`
+  header, then a plaintext `meta_data={ … }` block, then a zip archive whose only
+  member is `gamestate`. The first line is `SAV0102` + 8 hex digits + 8 hex digits;
+  the last 8 hex digits are the byte length of the `meta_data` text that follows
+  (checked on all three saves: `0x6b6f` = 27 503, `0x6ae7` = 27 367, `0x6afb` = 27 387), so the reader can
+  slice the header exactly instead of searching for `PK\x03\x04`. The middle 8 hex
+  digits differ between saves and are not yet understood. The zip starts right
+  after the header, so the header is small enough to read fully before touching the
+  zip. Stream the zip member with
+  `zipfile` (`ZipFile.open`) in chunks; the sample's `gamestate` is 283 MB
+  uncompressed.
+- **Parser** (`parser.py`) must be brace-driven, never indentation-driven. Real
+  quirks:
+  - `landed_titles` is nested twice (`landed_titles={ dynamic_templates={…}
+    landed_titles={ 0={…} 1={…} … } }`) and the numbered entries sit at column 0
+    with no leading tab.
+  - `history={ … }` mixes two forms: `date=holder_id` and
+    `date={ type=destroyed }` (or other typed blocks).
+  - Lists of anonymous blocks look like `legacy={ { … }\n { … } }`.
+  - Keys can be bare integers (`50544311={`), dates (`867.1.1=`), or identifiers.
+  - Values can be quoted strings, bare tokens, numbers, dates, `yes`/`no`, and
+    inline lists (`skill={ 5 7 4 4 2 9 }`).
+- **Section index**: the parser should emit top-level section boundaries so later
+  stages can seek. In the sample: `meta_data` (line 1), `date`/`bookmark_date`/
+  `random_seed`/`random_count` (lines 415–420), `provinces` (3 035), `landed_titles`
+  (238 167), `dynasties` (558 547), `living` (1 857 131), `dead_unprunable`
+  (4 337 622), `characters` (9 692 133), `religion`, `wars`, `culture_manager`,
+  `played_character` (14 007 265), `currently_played_characters`.
+- **Character records** live in three places, all with the same record shape
+  (`first_name birth culture faith dynasty_house skill traits family_data …`):
+  `living={ <id>={…} }`, `dead_unprunable={ <id>={…} }`, and
+  `characters={ dead_prunable={ <id>={…} } }` (two tabs deep). Dead records carry
+  `dead_data={ date reason liege … }` instead of `alive_data`. The setup prompt only
+  mentions the first two; `dead_prunable` is the one the game deletes from over time
+  (see Phase 5). Culture and faith are numeric ids that resolve through
+  `culture_manager` / `religion`.
+- **Title names**: `landed_titles` entries carry `key`, `name`, `adj`, `holder`,
+  `date`, `history`, `capital`. The player's empire is stored by its display name
+  (`meta_title_name="Empire of Germania"`), so name lookups should go through
+  `name=` as well as `key=`.
+
+Success criterion stays as in the prompt: fixture tests pass and one traced run on
+the fixture loads a handful of nodes into Neo4j.
+
+---
+
+## 3. Phase 4: grouping saves from the same run
+
+### 3.1 Terminology and the core assumption
+
+- **Run** (playthrough): one continuous game started from a bookmark and played
+  forward. The player may save many times.
+- **Snapshot**: one `.ck3` file, a frozen copy of the run at in-game `date`.
+- **No save scumming** means the player never loads an older snapshot and plays a
+  different future from it. Therefore the snapshots of a run form a **single linear
+  chain** ordered by in-game date, and everything recorded in an earlier snapshot
+  (title history, deaths, played rulers) is a **strict prefix** of what the later
+  snapshot records. Grouping never has to detect branches; it only has to detect
+  "same run or not" and then order.
+
+### 3.2 What the file gives us to identify a run
+
+The sample save has **no `playthrough_id`** anywhere in the header or the
+gamestate, so the game's own load-menu grouping is not available in this version.
+The usable signals, from cheapest to most expensive:
+
+| Signal | Where | Cost to read | Behaviour across snapshots of one run |
+|---|---|---|---|
+| `random_seed` | gamestate line ~419 | decompress first few KB of the zip member | Same for the whole run (verified: `576691683` in all three saves, spanning six in-game years and a succession). Different runs from the same bookmark get different seeds. This is the primary key. |
+| `bookmark_date` | gamestate line ~416 | same | Constant. |
+| `game_rules`, `dlcs`, `version`, `ironman` | plaintext header | free | Constant in practice. `version` (`"1.6.1.2"` in all three saves) appears to be the game version at the **start** of the run, not at save time: the player reports the run was started long ago and carried through later patches, and the DLC list contains DLCs released well after 1.6. Not yet checked against a save from a freshly started game. Kept as a warning, not a key. |
+| `played_character.name`, `player=1` | gamestate `played_character` block, far into the file | full stream | Constant (the Paradox account name). |
+| `played_character.legacy` | same block | full stream | Ordered list of `{character, date, …}` for every ruler the player controlled. Earlier snapshot's list is a **prefix** of the later one (verified on `(character, date)`: A lists 19 rulers, B and C list the same 19 plus Ludwig, so both the strict-prefix and the equal case are covered). The last entry is the ruler in play and has fewer fields than it will have once the ruler is succeeded; compare on `(character, date)` only. |
+| `meta_main_portrait.id` | header | free | Currently played character id; equals the last `legacy` entry's `character`. |
+| `date` / `meta_date` | gamestate line ~415 / header | free | Strictly increasing along the chain. |
+| `random_count` | gamestate line ~420 | first few KB | Strictly increasing along the chain (RNG draw counter; verified `52 401 480` → `52 761 528` → `53 241 628`). Tie-breaker when two snapshots share a date. |
+| `meta_real_date` | header | free | Real-world date the file was saved, as years since 1900: `126.2.21`, `126.2.26`, `126.3.6` = 2026-02-21 / 02-26 / 03-06 for A, B, C. Must be non-decreasing along the chain; a later in-game date with an earlier real date is a scumming signature. Second tie-breaker. |
+| Title `history` blocks, character death dates | `landed_titles`, `dead_unprunable` | full parse | Earlier snapshot ⊆ later snapshot for all dates ≤ earlier `date` (verified on both intervals: 12 906 and 12 907 titles, 0 history mismatches; 229 250 and 230 562 dead characters, 0 death-date changes). |
+
+Character ids alone do **not** identify a run: two runs from the same bookmark
+share the same initial ids, and later ids are allocated from the same counters.
+
+### 3.3 Algorithm
+
+Three tiers, each cheaper than the next; most files stop at tier 1.
+
+**Tier 1 — fingerprint (no full parse).**
+For each `.ck3` file read the plaintext header, then open the zip and decompress
+only until `random_count=` has been seen. A prototype of this needed 32 KB of
+decompressed `gamestate` and about 3 ms per file on the sample saves, so scanning
+a directory of hundreds of saves is instant. Produce:
+
+```
+Fingerprint = {
+  file, size, sha256 (or size+mtime for the cache key),
+  version, bookmark_date, random_seed, random_count, date,
+  player_name (header), house_name, title_name,
+  played_character_id (meta_main_portrait.id),
+  game_rules_hash, dlcs_hash, ironman,
+}
+RunKey = (random_seed, bookmark_date, game_rules_hash, dlcs_hash)
+```
+
+Group files by `RunKey`. Inside a group, order by `date`, then `random_count`,
+then file mtime.
+
+**Tier 2 — chain check (cheap parse of one block).**
+For each group with more than one snapshot, extract `played_character.legacy` from
+each and assert, for consecutive snapshots A < B:
+
+1. `A.random_count < B.random_count`
+2. `A.meta_real_date <= B.meta_real_date` (header only, so this one runs in tier 1)
+3. `A.legacy` is a prefix of `B.legacy` on `(character, date)`
+4. `A.played_character.name == B.played_character.name`
+
+If a check fails, the group is **split at that point** and both halves are reported
+as "divergent chain" with the failing check. This is what save scumming or a copied
+save would look like, and the plan explicitly does not try to reconcile it.
+
+**Tier 3 — content check (optional, full parse, sampled).**
+During the graph load (Phase 5) the loader already parses every snapshot, so it can
+verify cheaply that for the player's primary title and its immediate vassals every
+`history` entry dated ≤ `A.date` in A appears identically in B, and that every
+character dead in A is dead in B with the same date. Any mismatch is logged as a
+warning with the title/character id; it does not abort the load.
+
+### 3.4 Outputs
+
+- `runs.json` manifest next to the save directory (or in a configurable cache
+  dir), one entry per run:
+
+  ```json
+  {
+    "run_id": "576691683-867.1.1",
+    "random_seed": 576691683,
+    "bookmark_date": "867.1.1",
+    "player_name": "diegoami",
+    "snapshots": [
+      {"file": "…_1204_05_01.ck3", "date": "1204.5.1", "random_count": 31280100,
+       "played_character": 166423, "sha256": "…"},
+      {"file": "…_1364_03_10.ck3", "date": "1364.3.10", "random_count": 53241628,
+       "played_character": 50544311, "sha256": "…"}
+    ],
+    "warnings": []
+  }
+  ```
+
+- CLI (`python -m ck3parser.runs`): `scan <dir>` prints groups and ordering;
+  `verify <dir>` runs tier 2; `--json` writes the manifest. Re-scans are
+  incremental: a file whose `(size, sha256)` is already in the manifest is not
+  re-read.
+
+### 3.5 Edge cases to handle explicitly
+
+- **Ironman**: one file overwritten in place → a run with a single snapshot, which
+  is the degenerate case and needs no special code.
+- **Autosaves**: several files can share a `date` (autosave + manual save the same
+  day). `random_count` orders them; identical `random_count` means identical
+  content, keep one.
+- **Same seed, different rules or DLC set**: treated as different runs by the
+  `RunKey`; reported so the user can override if the game was patched mid-run.
+- **Game version changed mid-run**: same `RunKey`, different `version` → allowed,
+  logged as a warning on the run.
+- **Renamed or moved files**: nothing depends on the filename; the CK3 default
+  name (`<Ruler>_<Title>_<YYYY_MM_DD>.ck3`) is only used as a display label.
+- **Copied save played forward twice** (branching): shows up as a tier-2 failure
+  and is split. Out of scope to merge; out of scope by the stated assumption.
+
+### 3.6 Module layout
+
+```
+src/ck3parser/
+  container.py     # header + streamed zip member (Phase 1)
+  fingerprint.py   # tier-1 fingerprint from header + first KB of gamestate
+  runs.py          # grouping, ordering, tier-2 chain check, manifest I/O, CLI
+tests/
+  fixtures/runs/   # three tiny synthetic .ck3 files: two of one run, one of another
+  test_runs.py     # grouping, ordering, prefix check, divergence split
+```
+
+Fixture files are generated by a helper in `tests/` (header text + zipped
+`gamestate` stub) so they stay a few KB.
+
+---
+
+## 4. Phase 5: loading several snapshots of one run into the graph
+
+Why bother with older snapshots at all if the latest one is a superset: CK3
+**prunes** dead characters that nothing references any more. Measured between
+consecutive sample saves:
+
+| Movement | A → B (1358.9 → 1361.1) | B → C (1361.1 → 1364.3) |
+|---|---|---|
+| `dead_prunable` in earlier → **absent from later, zero mentions anywhere** | 1 060 | 1 545 |
+| `living` in earlier → `dead_prunable` in later | — | 1 486 |
+| `living` in earlier → `dead_unprunable` in later | — | 1 583 |
+| `dead_prunable` in earlier → `dead_unprunable` in later (became referenced) | — | 309 |
+| New ids in later | 2 404 | 3 413 |
+| Ids in earlier missing from later for any other reason | 0 | 0 |
+| Dynamic titles (`x_x_*`) in earlier missing from later | 6 | 3 |
+
+So roughly 500 characters a year vanish from the file, and the only source for
+them is an earlier snapshot. Destroyed dynamic titles vanish the same way. Older
+snapshots recover pruned history.
+
+Rules:
+
+- Graph gets `(:Run {run_id})` and `(:Snapshot {date, file})-[:OF]->(:Run)` nodes.
+- Load snapshots **oldest to newest**, upserting by id (`MERGE` on
+  `Character.id`, `Title.key`, `Dynasty.id`). A later snapshot overwrites scalar
+  properties; it never deletes nodes.
+- Every node gets `first_seen` and `last_seen` (snapshot dates) for provenance.
+- `HELD_BY` intervals are rebuilt from the newest snapshot that contains the title;
+  earlier snapshots only add intervals for titles absent later (destroyed titles
+  keep their `history`, so this is rare).
+- Character ids are stable within a run (verified indirectly: the `legacy` chain
+  references ids across five centuries and they resolve in the current save), so
+  merging by id is safe within a run and only within a run.
+
+---
+
+## 5. Verified against the sample saves
+
+| Fact | Save A (0.0.4) | Save B (0.0.3) | Save C (0.0.2) |
+|---|---|---|---|
+| Header first line | `SAV01025353630600006b6f` | `SAV0102df33d85900006ae7` | `SAV01024cd93a6200006afb` |
+| `gamestate` uncompressed bytes | 279 463 917 | 280 027 292 | 282 981 318 |
+| `version` | `"1.6.1.2"` | same | same |
+| `meta_date` / `date` | `1358.9.13` | `1361.1.17` | `1364.3.10` |
+| `meta_real_date` | `126.2.21` | `126.2.26` | `126.3.6` |
+| `bookmark_date` | `867.1.1` | same | same |
+| `random_seed` | `576691683` | same | same |
+| `random_count` | `52401480` | `52761528` | `53241628` |
+| `first_start` / `ironman` | `no` / `no` | same | same |
+| `meta_player_name` | `"Fylkir Åsa the Scholar"` | `"Fylkir Ludwig Åsasson"` | same as B |
+| `meta_title_name` / `meta_house_name` | `"Empire of Germania"` / `"af Munsö"` | same | same |
+| `meta_main_portrait.id` | `33747696` | `50544311` | `50544311` |
+| `played_character.name` | `"diegoami"` | same | same |
+| `played_character.legacy` | 19 entries, last `(33747696, 1323.7.5)` | 20 entries, last `(50544311, 1360.6.8)` | same as B |
+| `landed_titles` entries | 12 912 | 12 910 | 12 915 |
+| `living` / `dead_unprunable` / `dead_prunable` | 40 377 / 229 250 / 9 077 | 40 356 / 230 562 / 9 130 | 40 449 / 232 458 / 9 009 |
+| `playthrough_id` | absent | absent | absent |
+| DLC and game-rule sets | identical across all three | | |
+
+Results of the checks the plan relies on, run with a throwaway script over the
+three gamestates, on both consecutive intervals:
+
+| Check | A → B | B → C |
+|---|---|---|
+| Same `random_seed`, DLCs, rules | yes | yes |
+| `random_count` and `meta_real_date` increase with `date` | yes | yes |
+| `legacy` of earlier is a prefix of later | yes, strict (Ludwig appended) | yes, equal |
+| Title history of earlier ⊆ later for dates ≤ earlier `date` | 12 906 titles, 0 mismatches | 12 907 titles, 0 mismatches |
+| Every dead character in earlier is dead in later with the same date | 0 differences, 0 resurrections | 0 differences, 0 resurrections |
+| Characters present earlier but gone later | 1 060, all from `dead_prunable` | 1 545, all from `dead_prunable` |
+
+Note that `meta_player_name` and `meta_main_portrait.id` change at a succession,
+so neither belongs in the `RunKey`; they are display data only.
+
+Still open:
+
+1. Whether newer CK3 versions add a `playthrough_id`; if so, use it as the
+   `RunKey` and keep the seed as a fallback.
+2. Meaning of the middle 8 hex digits of the `SAV0102…` header line.
+3. Behaviour of the `RunKey` when a DLC is enabled or disabled mid-run (the
+   `dlcs_hash` would split the run; the CLI needs an override for that case).
+
+---
+
+## 6. Milestones
+
+1. Phase 0 scaffold merged, CI green on fixtures. **Done** (scaffold pass).
+2. Phase 1 container reader handles the real file; fingerprint extractable in
+   under a second per file without full decompression. **Done**: tier-1 scan of
+   the three real saves takes 83 ms in total.
+3. Phase 2 parser streams the full 283 MB `gamestate` without errors and emits
+   the section index. **Partly done**: the streaming parser reads
+   `landed_titles`, `living`, `dead_unprunable`, `characters.dead_prunable` and
+   `played_character` of the real saves without errors (about 25 s for a full
+   title trace); a whole-file pass and the section index are still open.
+4. Phase 4 `scan`/`verify` group a directory of saves; tests cover grouping,
+   ordering, prefix check, and divergence split. **Done**: `verify` on the three
+   real saves reports one clean run in about 11 s.
+5. Phase 3 + 5: one lineage from all snapshots of one run in Neo4j with
+   `Run`/`Snapshot` provenance. **Started**: `Run`/`Snapshot`/`Title`/
+   `Character`/`HELD_BY` writes exist and are traced with `--dry-run`; the
+   immediate-vassal expansion and the multi-snapshot merge loop are open.
+6. Phase 6 full-save scale; Phase 7 narrative generation once the local LLM is
+   chosen.

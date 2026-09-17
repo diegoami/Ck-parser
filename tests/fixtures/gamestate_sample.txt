@@ -1,0 +1,228 @@
+meta_data={
+	save_game_version=7
+	version="1.6.1.2"
+	portraits_version=3
+	meta_date=1100.6.1
+	meta_player_name="King Test of Testland"
+	meta_title_name="Kingdom of Testland"
+	meta_house_name="af Test"
+	meta_main_portrait={
+		type=male
+		id=200
+		age=0.5
+		genes={ 			hair_color={ 220 103 140 52 }
+ 			gene_chin_forward={ "chin_forward_pos" 141 "chin_forward_neg" 91 }
+ }
+	}
+	meta_real_date=126.3.6
+	dlcs={ "The Northern Lords" "Royal Court" }
+	game_rules={
+		settings={ normal_difficulty 1453_end_date }
+	}
+	can_get_achievements=no
+	ironman=no
+}
+ironman_manager={
+	ironman=no
+	date=867.1.1
+}
+date=1100.6.1
+bookmark_date=867.1.1
+first_start=no
+speed=0
+random_seed=424242
+random_count=1000
+variables={
+	data={ {
+			flag="some_flag"
+			data={
+			}
+		}
+ }
+}
+provinces={
+	1={
+		holding={ type="castle_holding" }
+	}
+}
+landed_titles={
+	dynamic_templates={ {
+			key="x_mc_0"
+			tier=duchy
+			dyn=yes
+		}
+ }
+	landed_titles={
+0={
+	key="k_testland"
+	holder=200
+	name="Kingdom of Testland"
+	adj="Testlandish"
+	date=1090.2.1
+	history={ 867.1.1=100 880.5.5=101 900.1.1={
+			type=destroyed
+		}
+ 950.3.3=102 1090.2.1=200 }
+	capital=1
+	coat_of_arms_id=1
+}
+1={
+	key="d_empty"
+	name="Empty Duchy"
+	date=9999.1.1
+	capital=1
+}
+2={
+	key="c_test"
+	holder=201
+	name="Test County"
+	history={ 1050.1.1=201 }
+	de_jure_liege=0
+}
+	}
+}
+dynasties={
+	dynasty_house={
+		500={
+			key="house_test"
+			name="dynn_Test"
+			dynasty=50
+		}
+	}
+	dynasties={
+		50={
+			key="dynasty_test"
+			name="dynn_Test"
+		}
+	}
+}
+deleted_characters={
+}
+living={
+	200={
+		first_name="Test"
+		birth=1060.1.1
+		culture=1
+		faith=1
+		dynasty_house=500
+		skill={ 5 7 4 4 2 9 }
+		traits={ 1 2 3 }
+		family_data={
+			spouse=202
+			child=203
+		}
+		alive_data={
+			gold=10.5
+			perk="a_perk"
+			perk="b_perk"
+		}
+	}
+	201={
+		first_name="Vassal"
+		birth=1020.4.4
+		dynasty_house=500
+		family_data={
+		}
+		alive_data={
+		}
+	}
+	202={
+		first_name="Spouse"
+		birth=1062.2.2
+		female=yes
+		family_data={
+			spouse=200
+		}
+	}
+	203={
+		first_name="Child"
+		birth=1085.3.3
+		family_data={
+			father=200
+			mother=202
+		}
+	}
+}
+dead_unprunable={
+	100={
+		first_name="Founder"
+		birth=830.1.1
+		dynasty_house=500
+		dead_data={
+			date=880.5.5
+			reason="death_natural_causes"
+		}
+	}
+	101={
+		first_name="Second"
+		birth=850.1.1
+		dynasty_house=500
+		dead_data={
+			date=900.1.1
+			reason="death_battle"
+		}
+	}
+	102={
+		first_name="Third"
+		birth=920.1.1
+		dynasty_house=500
+		dead_data={
+			date=1090.2.1
+			reason="death_old_age"
+		}
+	}
+	9001={
+		first_name="Filler"
+		birth=700.1.1
+		dead_data={
+			date=750.1.1
+			reason="death_natural_causes"
+		}
+	}
+	9002={
+		first_name="Filler"
+		birth=700.1.1
+		dead_data={
+			date=750.1.1
+			reason="death_natural_causes"
+		}
+	}
+}
+characters={
+	dead_prunable={
+		300={
+			first_name="Prunable"
+			birth=1000.1.1
+			dead_data={
+				date=1099.1.1
+				reason="death_natural_causes"
+			}
+		}
+	}
+}
+played_character={
+	name="tester"
+	character=200
+	player=1
+	legacy={ {
+			character=100
+			date=867.1.1
+			score=1
+		}
+ {
+			character=101
+			date=880.5.5
+			score=2
+		}
+ {
+			character=102
+			date=950.3.3
+			score=3
+		}
+ {
+			character=200
+			date=1090.2.1
+		}
+ }
+}
+currently_played_characters={ 200 }
