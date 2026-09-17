@@ -76,8 +76,11 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 
 ## Known gaps and gotchas
 
-- `version="1.6.1.2"` in all three saves but the DLC list contains DLCs newer
-  than that; the string is stored as-is and only used for a warning on change.
+- `version="1.6.1.2"` in all three saves while the DLC list contains DLCs
+  released well after 1.6. The player started this run on 1.6.1.2 and carried
+  it through later patches, so the field records the version at run start, not
+  at save time (unverified against a freshly started game). Stored as-is; only
+  used for a warning on change.
 - `meta_real_date` is the real-world save date as years since 1900
   (`126.3.6` = 2026-03-06). It is used for ordering and as a scumming check.
 - The middle 8 hex digits of the `SAV0102…` first line are not understood.
