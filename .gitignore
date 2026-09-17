@@ -1,0 +1,13 @@
+# Save files are never committed; they live on GitHub Releases.
+*.ck3
+gamestate
+runs.json
+
+.env
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.pytest_cache/

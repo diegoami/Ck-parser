@@ -319,14 +319,21 @@ Still open:
 
 ## 6. Milestones
 
-1. Phase 0 scaffold merged, CI green on fixtures.
+1. Phase 0 scaffold merged, CI green on fixtures. **Done** (scaffold pass).
 2. Phase 1 container reader handles the real file; fingerprint extractable in
-   under a second per file without full decompression.
+   under a second per file without full decompression. **Done**: tier-1 scan of
+   the three real saves takes 83 ms in total.
 3. Phase 2 parser streams the full 283 MB `gamestate` without errors and emits
-   the section index.
+   the section index. **Partly done**: the streaming parser reads
+   `landed_titles`, `living`, `dead_unprunable`, `characters.dead_prunable` and
+   `played_character` of the real saves without errors (about 25 s for a full
+   title trace); a whole-file pass and the section index are still open.
 4. Phase 4 `scan`/`verify` group a directory of saves; tests cover grouping,
-   ordering, prefix check, and divergence split.
+   ordering, prefix check, and divergence split. **Done**: `verify` on the three
+   real saves reports one clean run in about 11 s.
 5. Phase 3 + 5: one lineage from all snapshots of one run in Neo4j with
-   `Run`/`Snapshot` provenance.
+   `Run`/`Snapshot` provenance. **Started**: `Run`/`Snapshot`/`Title`/
+   `Character`/`HELD_BY` writes exist and are traced with `--dry-run`; the
+   immediate-vassal expansion and the multi-snapshot merge loop are open.
 6. Phase 6 full-save scale; Phase 7 narrative generation once the local LLM is
    chosen.
