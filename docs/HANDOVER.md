@@ -12,7 +12,7 @@ so a fresh session (any model) can continue without the conversation history.
 | Code | `src/ck3parser/`, `src/ck3graph/` (see README for the module map) |
 | Tests and fixture | `tests/`, `tests/fixtures/gamestate_sample.txt` |
 | Real saves | GitHub Releases 0.0.2 / 0.0.3 / 0.0.4; `scripts/fetch_saves.sh` downloads and checksums them into `./saves` |
-| Branch | `claude/ck3-save-grouping-plan-xnss2t` (no pull request opened yet) |
+| Branch | work lands on `main` through a PR per task |
 | CI | `.github/workflows/ci.yml`, runs `uv run pytest` on the fixture; has not run yet because no PR exists |
 
 ## What is done
@@ -36,7 +36,15 @@ so a fresh session (any model) can continue without the conversation history.
 - **Graph loader** (`ck3graph/loader.py`): env config, `DryRunSession`,
   `holder_intervals` (handles `date=holder` and `date={type=...}`),
   MERGE writers for Run / Snapshot / Title / Character / House / HELD_BY.
-- **Pipeline** (`pipeline.py`): one title end to end, `--dry-run` prints Cypher.
+- **Titles** (`titles.py`): streams `landed_titles` into a compact
+  `TitleIndex` (12 915 records, 107 328 history entries, 1.9 s on the sample),
+  resolves the numeric `de_facto_liege` / `de_jure_liege` pointers to keys,
+  derives tiers including dynamic `x_` titles, and answers
+  `immediate_vassals()` and `liege_chain()`. `normalize_history` turns a raw
+  history block into `(date, holder, reason)` tuples.
+- **Pipeline** (`pipeline.py`): a lineage (title plus its immediate de facto
+  vassals) end to end; `--no-vassals` narrows it to one title, `--dry-run`
+  prints Cypher.
 
 Measured on the three real saves (same run, 1358 / 1361 / 1364):
 
@@ -44,33 +52,32 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 |---|---|
 | `runs scan saves --no-hash` | one run, correct order, 83 ms |
 | `runs verify saves` | legacy 19 → 20 → 20, no warnings, ~11 s |
-| `pipeline … --title k_papal_state --dry-run` | 122 holders found, 4 sections streamed, ~25 s |
+| `pipeline … --title k_papal_state --dry-run` | 1 vassal, 139 characters, 0 missing |
+| `pipeline … --title e_germany --dry-run` | 51 vassals, 1 184 tenures, 100 vassal edges, 666 characters, ~33 s |
 
 ## What is not done, in the order I would do it
 
-1. **Immediate vassals of the target title** (PLAN.md Phase 3). `pipeline.py`
-   loads one title only. Titles carry `de_jure_liege` (a numeric index into
-   the `landed_titles` list, not a key) and `de_jure_vassals={ … }`; the real
-   save's vassal structure has not been inspected yet. Verify which field
-   expresses the *current* (not de jure) liege on a real save before coding.
-2. **Multi-snapshot merge loop** (Phase 5). `runs.json` gives the ordered
-   snapshots; loop oldest to newest calling `load_snapshot` + `load_title`.
-   Loader already sets `first_seen` / `last_seen`. Add the tier-3 content check
-   (title history and death dates of the earlier snapshot must appear in the
-   later one) as warnings, not aborts. The check logic exists in throwaway form
-   only; PLAN.md §5 lists the numbers it produced.
-3. **Whole-file parser pass and section index** (Phase 2 milestone 3). Stream
-   the entire 280 MB `gamestate` through `iter_top_level(only=set())` once and
+1. **Multi-snapshot merge loop** (PLAN.md Phase 5). `runs.json` gives the
+   ordered snapshots; loop oldest to newest calling `load_snapshot` +
+   `load_title`. The loader already sets `first_seen` / `last_seen` and every
+   write is a `MERGE`. Add the tier-3 content check (title history and death
+   dates of the earlier snapshot must appear in the later one) as warnings,
+   not aborts; the numbers it produced in throwaway form are in PLAN.md §5.
+2. **Whole-file parser pass and section index** (Phase 2 milestone 3). Stream
+   an entire 280 MB `gamestate` through `iter_top_level(only=set())` once and
    confirm it reaches EOF with balanced braces; record the top-level keys and
-   line numbers. Sections not yet touched by anything: `provinces`,
-   `dynasties`, `religion`, `culture_manager`, `wars`, `coat_of_arms`, and the
-   many `triggered_event` blocks (repeated top-level key).
-4. **Character lookup speed.** `pipeline.characters_by_id` streams each
-   character section fully once per title (~25 s). For many titles build an
-   id → section index once, or parse `living` / `dead_*` a single time and keep
-   only referenced ids.
-5. **Culture and faith names.** Characters carry numeric `culture` / `faith`
+   line numbers. Sections still untouched: `provinces`, `dynasties`,
+   `religion`, `culture_manager`, `wars`, `coat_of_arms`, and the many
+   `triggered_event` blocks (a repeated top-level key).
+3. **Character lookup speed.** A lineage load takes ~33 s, nearly all of it
+   three full passes over the character sections. Build an id -> section index
+   once per save, or parse the character sections a single time and keep only
+   referenced ids.
+4. **Culture and faith names.** Characters carry numeric `culture` / `faith`
    ids; resolve them through `culture_manager` and `religion` (not parsed yet).
+5. **Deeper lineages.** `immediate_vassals` is one level by design. A whole
+   realm needs a recursive walk with a depth limit, and a decision about
+   whether to store `VASSAL_OF` for every level or only the direct one.
 6. **Full-save scale** (Phase 6), then narrative generation (Phase 7, gated on
    choosing a local LLM; no SDK dependency until then).
 
@@ -90,12 +97,23 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
   run. A CLI override is planned, not built.
 - The parser assumes no `#` comments and no quoted string spanning lines. Both
   hold in the three saves; neither is enforced.
-- `holder_intervals` closes an interval at the next history entry of any kind
-  and treats an entry with a `holder` inside a typed block as a new holder.
-  Only `type=destroyed` blocks have been seen; other types are untested.
+- `holder_intervals` closes a tenure at the next history entry of any kind.
+  A typed entry opens a new tenure unless its type is in
+  `titles.TERMINAL_TYPES`, which holds `destroyed` alone. That list was derived
+  from the 16 reason types in the sample saves (PLAN.md §5); a save containing
+  a terminal type not in it would invent a tenure, so revisit the list if an
+  unknown reason shows up.
+- `Block` subclasses `list`, so anything accepting "a block or a list of
+  tuples" must test for `Block` first. `holder_intervals` does; new code
+  should too.
+- `immediate_vassals` follows `de_facto_liege` only. The explicit
+  `de_jure_vassals` list on some titles is parsed but unused.
 - `filter.is_filler` drops unreferenced characters without a `dynasty_house`.
-  On the Papacy trace nothing was dropped because every holder is referenced;
-  the filler rule has only been exercised on the fixture.
+  On the real traces nothing is dropped, because every character the pipeline
+  asks for is referenced by construction; the filler rule has only been
+  exercised on the fixture. `filter.filter_characters`, which expands the
+  referenced set through family links, is likewise unused by the pipeline and
+  waits for the pass that streams whole character sections.
 - Tests never touch Neo4j; `open_session` imports the driver lazily. A local
   Neo4j has not been used in this session at all, so the Cypher has been
   reviewed but not executed.
@@ -107,12 +125,12 @@ uv run pytest -q                                   # must stay green
 scripts/fetch_saves.sh                             # once
 uv run python -m ck3parser.runs verify saves       # one run, 19/20/20, exit 0
 uv run python -m ck3parser.pipeline saves/Fylkir_Asa_of_Immasonian_Fylkirate_1358_09_13.ck3 \
-    --title k_papal_state --dry-run 2>&1 >/dev/null | grep characters   # "found 122, kept 122"
+    --title e_germany --dry-run 2>&1 >/dev/null   # 51 vassals, 0 missing characters
 ```
 
 ## Conventions
 
-- Branch `claude/ck3-save-grouping-plan-xnss2t`; commit messages explain the
-  why and list what was checked against real saves.
+- One branch and PR per handover task, cut from the latest `main`; commit
+  messages explain the why and list what was checked against real saves.
 - Keep `docs/PLAN.md` §5 (verified facts) and §6 (milestone status) current.
 - No hardcoded absolute paths; saves live in a git-ignored `saves/` directory.

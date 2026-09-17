@@ -59,10 +59,16 @@ landed_titles={
 	name="Kingdom of Testland"
 	adj="Testlandish"
 	date=1090.2.1
+	de_jure_vassals={ 2 3 }
 	history={ 867.1.1=100 880.5.5=101 900.1.1={
 			type=destroyed
+			holder=101
 		}
- 950.3.3=102 1090.2.1=200 }
+ 950.3.3={
+			type=created
+			holder=102
+		}
+ 1090.2.1=200 }
 	capital=1
 	coat_of_arms_id=1
 }
@@ -70,14 +76,32 @@ landed_titles={
 	key="d_empty"
 	name="Empty Duchy"
 	date=9999.1.1
+	de_jure_liege=0
 	capital=1
 }
 2={
 	key="c_test"
 	holder=201
 	name="Test County"
+	date=1050.1.1
 	history={ 1050.1.1=201 }
 	de_jure_liege=0
+	de_facto_liege=0
+}
+3={
+	key="x_mc_0"
+	holder=201
+	name="Test Company"
+	date=1080.1.1
+	de_facto_liege=0
+}
+4={
+	key="c_far"
+	holder=202
+	name="Far County"
+	date=1060.1.1
+	de_jure_liege=1
+	de_facto_liege=2
 }
 	}
 }

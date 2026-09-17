@@ -64,8 +64,12 @@ file:
   - `landed_titles` is nested twice (`landed_titles={ dynamic_templates={…}
     landed_titles={ 0={…} 1={…} … } }`) and the numbered entries sit at column 0
     with no leading tab.
-  - `history={ … }` mixes two forms: `date=holder_id` and
-    `date={ type=destroyed }` (or other typed blocks).
+  - `history={ … }` mixes `date=holder_id` with `date={ type=… holder=… }`.
+    The type is the *reason* for the succession (`granted`, `revoked`,
+    `conquest`, `created`, `abdication`, …) and nearly all carry a holder who
+    takes over. The exception is `type=destroyed`, which ends the title: its
+    `holder`, when present, names the ruler whose tenure ends, so it must not
+    open a new one (verified, §5).
   - Lists of anonymous blocks look like `legacy={ { … }\n { … } }`.
   - Keys can be bare integers (`50544311={`), dates (`867.1.1=`), or identifiers.
   - Values can be quoted strings, bare tokens, numbers, dates, `yes`/`no`, and
@@ -84,10 +88,21 @@ file:
   mentions the first two; `dead_prunable` is the one the game deletes from over time
   (see Phase 5). Culture and faith are numeric ids that resolve through
   `culture_manager` / `religion`.
-- **Title names**: `landed_titles` entries carry `key`, `name`, `adj`, `holder`,
-  `date`, `history`, `capital`. The player's empire is stored by its display name
-  (`meta_title_name="Empire of Germania"`), so name lookups should go through
-  `name=` as well as `key=`.
+- **Title records**: `landed_titles` entries carry `key`, `name`, `adj`, `holder`,
+  `date`, `history`, `capital`, `de_jure_liege`, `de_facto_liege`, and sometimes
+  `de_jure_vassals`, `heir`, `claim`, `laws`. A player-renamed title keeps its
+  original `key` and gets a custom `name`: the sample's empire is `e_germany`
+  named "Germania", and the header's `meta_title_name="Empire of Germania"`
+  composes the tier with that name. Look titles up by `key`, and use `name` only
+  for display.
+- **Liege fields** (verified, §5): `de_facto_liege` is the title this one is
+  actually held under at save time and is what the vassal structure follows;
+  `de_jure_liege` is the map's nominal hierarchy. Both are the *numeric index*
+  of another entry in the same section, never a title key, so resolving them
+  needs the whole section indexed.
+- **Title tiers** come from the key prefix (`e_`/`k_`/`d_`/`c_`/`b_`), except for
+  dynamic `x_` titles, whose tier is in the `dynamic_templates` list at the head
+  of the section.
 
 Success criterion stays as in the prompt: fixture tests pass and one traced run on
 the fixture loads a handful of nodes into Neo4j.
@@ -307,6 +322,33 @@ three gamestates, on both consecutive intervals:
 Note that `meta_player_name` and `meta_main_portrait.id` change at a succession,
 so neither belongs in the `RunKey`; they are display data only.
 
+### Title structure (checked on save C, 1364.3.10)
+
+| Fact | Value |
+|---|---|
+| Title entries | 12 915, of which 10 399 currently held |
+| Titles with `de_facto_liege` | 11 779, **0** dangling, **0** self-referencing |
+| Explicit `de_jure_vassals` lists | present on some titles, e.g. `e_germany` |
+| Dynamic `x_` titles | 785, all covered by `dynamic_templates`: 726 `x_mc_` (mercenary), 32 `x_ho_` (holy order), 27 `x_x_` (custom) |
+| History entries | 79 305 plain `date=holder`, 28 023 typed |
+| Typed entries carrying a holder | all but 105, which are `type=destroyed` |
+| Distinct succession reasons | 16, led by `revoked` (5 588), `granted` (4 240), `conquest_claim` (3 473), `abdication` (2 873), `conquest` (2 796), `created` (2 266) |
+| Titles whose history ends `destroyed` | 262, of which **262** have no current holder |
+| `e_germany` (the player's empire) | 51 immediate de facto vassals: 10 kingdoms, 15 duchies, 26 counties |
+
+Two consequences for the loader, both now implemented:
+
+1. A `destroyed` entry **closes** a tenure and opens none. Its `holder` repeats
+   the outgoing ruler; treating it as a new holder would invent a tenure for a
+   title that no longer exists. Every one of the 262 titles ending that way is
+   unheld, which is what makes the reading safe.
+2. Every other typed entry opens a tenure, and its type is worth keeping as the
+   `reason` on the relationship.
+
+Character records also carry `landed_data.domain={ … }`, the list of title
+indices a character holds directly, which is a second route to the same
+structure and is not used yet.
+
 Still open:
 
 1. Whether newer CK3 versions add a `playthrough_id`; if so, use it as the
@@ -332,8 +374,10 @@ Still open:
    ordering, prefix check, and divergence split. **Done**: `verify` on the three
    real saves reports one clean run in about 11 s.
 5. Phase 3 + 5: one lineage from all snapshots of one run in Neo4j with
-   `Run`/`Snapshot` provenance. **Started**: `Run`/`Snapshot`/`Title`/
-   `Character`/`HELD_BY` writes exist and are traced with `--dry-run`; the
-   immediate-vassal expansion and the multi-snapshot merge loop are open.
+   `Run`/`Snapshot` provenance. **Phase 3 done**: a lineage is now a title plus
+   its immediate de facto vassals, written as `Run`/`Snapshot`/`Title`/
+   `Character`/`HELD_BY`/`VASSAL_OF`, traced with `--dry-run` (the sample's
+   empire: 51 vassals, 1 184 tenures, 100 vassal edges, 666 characters, 33 s).
+   The multi-snapshot merge loop is the remaining part of Phase 5.
 6. Phase 6 full-save scale; Phase 7 narrative generation once the local LLM is
    chosen.

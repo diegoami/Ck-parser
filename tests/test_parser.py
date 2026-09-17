@@ -27,10 +27,11 @@ def test_repeated_keys_kept():
 def test_history_mixed_forms_and_column_zero_entries():
     top = parse_text(fixture_text())
     titles = top["landed_titles"]["landed_titles"]
-    assert titles.keys() == ["0", "1", "2"]
+    assert titles.keys() == ["0", "1", "2", "3", "4"]
     hist = titles["0"]["history"]
     assert hist.keys() == ["867.1.1", "880.5.5", "900.1.1", "950.3.3", "1090.2.1"]
-    assert hist["900.1.1"]["type"] == "destroyed"
+    assert hist["900.1.1"]["type"] == "destroyed" and hist["900.1.1"]["holder"] == 101
+    assert hist["950.3.3"]["type"] == "created"
     assert hist["1090.2.1"] == 200
 
 
@@ -42,7 +43,7 @@ def test_iter_top_level_with_only_skips_others():
 def test_iter_children_streams_nested_section():
     lines = PushbackLines(fixture_text().splitlines(True))
     keys = [t["key"] for _, t in iter_children(lines, ("landed_titles", "landed_titles"))]
-    assert keys == ["k_testland", "d_empty", "c_test"]
+    assert keys == ["k_testland", "d_empty", "c_test", "x_mc_0", "c_far"]
 
 
 def test_iter_children_living_and_dead_prunable():
