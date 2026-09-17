@@ -42,9 +42,16 @@ so a fresh session (any model) can continue without the conversation history.
   derives tiers including dynamic `x_` titles, and answers
   `immediate_vassals()` and `liege_chain()`. `normalize_history` turns a raw
   history block into `(date, holder, reason)` tuples.
+- **Consistency** (`consistency.py`): tier-3 checks between two snapshots of
+  one run. Title history up to the earlier date must survive into the later
+  snapshot, and nobody may un-die or change death date. Pure functions over
+  parsed data. A record present early and absent later is pruning, not a
+  disagreement.
 - **Pipeline** (`pipeline.py`): a lineage (title plus its immediate de facto
-  vassals) end to end; `--no-vassals` narrows it to one title, `--dry-run`
-  prints Cypher.
+  vassals) end to end. Given a directory it loads every snapshot of that run
+  oldest first, checking consecutive pairs as it goes. `--no-vassals`,
+  `--no-check`, `--run <id>` and `--dry-run` flags. Exit 0 clean, 1 loaded with
+  disagreements, 2 bad arguments.
 
 Measured on the three real saves (same run, 1358 / 1361 / 1364):
 
@@ -54,31 +61,35 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 | `runs verify saves` | legacy 19 → 20 → 20, no warnings, ~11 s |
 | `pipeline … --title k_papal_state --dry-run` | 1 vassal, 139 characters, 0 missing |
 | `pipeline … --title e_germany --dry-run` | 51 vassals, 1 184 tenures, 100 vassal edges, 666 characters, ~33 s |
+| `pipeline saves/ --title e_germany --dry-run` | 3 snapshots oldest first, 2 324 tenures, 208 vassal edges, 0 disagreements, ~1 m 39 s |
 
 ## What is not done, in the order I would do it
 
-1. **Multi-snapshot merge loop** (PLAN.md Phase 5). `runs.json` gives the
-   ordered snapshots; loop oldest to newest calling `load_snapshot` +
-   `load_title`. The loader already sets `first_seen` / `last_seen` and every
-   write is a `MERGE`. Add the tier-3 content check (title history and death
-   dates of the earlier snapshot must appear in the later one) as warnings,
-   not aborts; the numbers it produced in throwaway form are in PLAN.md §5.
-2. **Whole-file parser pass and section index** (Phase 2 milestone 3). Stream
-   an entire 280 MB `gamestate` through `iter_top_level(only=set())` once and
-   confirm it reaches EOF with balanced braces; record the top-level keys and
-   line numbers. Sections still untouched: `provinces`, `dynasties`,
+1. **Run it against a live Neo4j.** Everything so far is `--dry-run`. No
+   session has ever executed the Cypher, so the schema, the `MERGE` semantics
+   and the driver plumbing are reviewed but unproven. Start Neo4j, apply
+   `schema.cypher`, load one lineage from one save, then load the whole run
+   over the top and confirm the second pass refines rather than duplicates.
+2. **Whole-file parser pass and section index** (PLAN.md Phase 2 milestone 3).
+   Stream an entire 280 MB `gamestate` through `iter_top_level(only=set())`
+   once and confirm it reaches EOF with balanced braces; record the top-level
+   keys and line numbers. Sections still untouched: `provinces`, `dynasties`,
    `religion`, `culture_manager`, `wars`, `coat_of_arms`, and the many
    `triggered_event` blocks (a repeated top-level key).
-3. **Character lookup speed.** A lineage load takes ~33 s, nearly all of it
-   three full passes over the character sections. Build an id -> section index
-   once per save, or parse the character sections a single time and keep only
+3. **Character lookup speed.** A single-snapshot lineage load takes ~33 s,
+   nearly all of it three full passes over the character sections, so a
+   three-snapshot run takes ~1 m 39 s. Build an id -> section index once per
+   save, or parse the character sections a single time and keep only
    referenced ids.
 4. **Culture and faith names.** Characters carry numeric `culture` / `faith`
    ids; resolve them through `culture_manager` and `religion` (not parsed yet).
 5. **Deeper lineages.** `immediate_vassals` is one level by design. A whole
    realm needs a recursive walk with a depth limit, and a decision about
    whether to store `VASSAL_OF` for every level or only the direct one.
-6. **Full-save scale** (Phase 6), then narrative generation (Phase 7, gated on
+6. **Vassalage as intervals.** `VASSAL_OF` is a snapshot fact carrying `as_of`,
+   so a title that changed liege between snapshots gets one edge per liege.
+   `HELD_BY` shows how intervals would be modelled instead.
+7. **Full-save scale** (Phase 6), then narrative generation (Phase 7, gated on
    choosing a local LLM; no SDK dependency until then).
 
 ## Known gaps and gotchas
@@ -108,6 +119,16 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
   should too.
 - `immediate_vassals` follows `de_facto_liege` only. The explicit
   `de_jure_vassals` list on some titles is parsed but unused.
+- The lineage changes shape across a succession: the sample empire has 37
+  immediate vassals in 1358, 19 in 1361 just after the 1360 succession, and 51
+  in 1364. That is game history, confirmed by title-level comparison (21 kept,
+  16 lost, 30 gained between the outer two), not a parsing artifact.
+- Tier-3 checks compare only the titles in the lineage being loaded, and only
+  the characters it fetched. A whole-save comparison would be a stronger
+  verification of the run grouping and is not wired up.
+- A default argument like `log=sys.stderr` binds at import time and escapes
+  pytest's capture. `gather` and `resolve_saves` resolve the stream at call
+  time instead.
 - `filter.is_filler` drops unreferenced characters without a `dynasty_house`.
   On the real traces nothing is dropped, because every character the pipeline
   asks for is referenced by construction; the filler rule has only been
@@ -124,8 +145,8 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 uv run pytest -q                                   # must stay green
 scripts/fetch_saves.sh                             # once
 uv run python -m ck3parser.runs verify saves       # one run, 19/20/20, exit 0
-uv run python -m ck3parser.pipeline saves/Fylkir_Asa_of_Immasonian_Fylkirate_1358_09_13.ck3 \
-    --title e_germany --dry-run 2>&1 >/dev/null   # 51 vassals, 0 missing characters
+uv run python -m ck3parser.pipeline saves --title e_germany --dry-run 2>&1 >/dev/null
+# 3 snapshots oldest first, 37/19/51 vassals, 0 missing characters, exit 0
 ```
 
 ## Conventions

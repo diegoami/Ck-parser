@@ -36,6 +36,7 @@ def make_save(
     legacy_trim: int = 0,
     player_account: str = "tester",
     version: str = '"1.6.1.2"',
+    edits: tuple[tuple[str, str], ...] = (),
 ) -> Path:
     text = fixture_text()
     text = set_scalar(text, "meta_date", date, "\t")
@@ -53,5 +54,8 @@ def make_save(
         entries = re.findall(r"\{\n(?:\t\t\t.*\n)+\t\t\}", block)
         kept = entries[: len(entries) - legacy_trim]
         text = text[:start] + "legacy={ " + "\n ".join(kept) + "\n }\n" + text[end:]
+    for old, new in edits:
+        assert text.count(old) == 1, f"edit {old!r} matches {text.count(old)} times"
+        text = text.replace(old, new)
     meta, gamestate = split_meta(text)
     return write_save(path, meta, gamestate)

@@ -19,7 +19,9 @@ src/ck3parser/
   filter.py       referenced-vs-filler character heuristic
   fingerprint.py  cheap per-save fingerprint (header + first KB of gamestate)
   runs.py         group saves into runs, order and verify them; CLI + runs.json
-  pipeline.py     traced extract -> parse -> filter -> load for one title
+  titles.py       title records, liege/vassal structure, history normalisation
+  consistency.py  tier-3 checks between two snapshots of one run
+  pipeline.py     load a lineage from one save or from a whole run
 src/ck3graph/
   loader.py       Neo4j writes (idempotent MERGEs), holder-interval builder
   schema.cypher   unique constraints per node type
@@ -73,13 +75,24 @@ Also check the played-ruler chain of each run (tier 2; streams each file):
 uv run python -m ck3parser.runs verify saves/ --json saves/runs.json
 ```
 
-Trace one title through the whole pipeline without a database:
+Trace a lineage (a title plus the titles held under it) without a database:
 
 ```
 uv run python -m ck3parser.pipeline saves/some_save.ck3 --title k_papal_state --dry-run
 ```
 
-Drop `--dry-run` to write to Neo4j using the `.env` settings.
+Point it at a directory instead to load every snapshot of that run, oldest
+first, which recovers history the later saves have pruned:
+
+```
+uv run python -m ck3parser.pipeline saves --title k_papal_state --dry-run
+```
+
+Consecutive snapshots are checked against each other as they load; the exit
+code is 0 when they agree and 1 when they do not. `--no-vassals` loads the
+title alone, `--no-check` skips the comparison, and `--run <id>` picks one run
+when a directory holds several. Drop `--dry-run` to write to Neo4j using the
+`.env` settings.
 
 Extract the raw `gamestate` to disk for inspection:
 
