@@ -8,14 +8,16 @@ belong to the same CK3 run (playthrough) saved at different in-game dates**, und
 the assumption that the player does not save-scum.
 
 Everything in the "Verified against the sample saves" section was checked against
-two release assets from the same run:
+three release assets from the same run:
 
-| Release | File | Size | sha256 |
-|---|---|---|---|
-| 0.0.3 | `Fylkir_Ludwig_of_Immasonian_Fylkirate_1361_01_17.ck3` | 73.1 MB | `a2b12bbb…a37b` |
-| 0.0.2 | `Fylkir_Ludwig_of_Immasonian_Fylkirate_1364_03_10.ck3` | 73.8 MB | `919ad2c7…946a` |
+| Label | Release | File | Size | sha256 |
+|---|---|---|---|---|
+| A | 0.0.4 | `Fylkir_Asa_of_Immasonian_Fylkirate_1358_09_13.ck3` | 72.8 MB | `69b78aae…8b57` |
+| B | 0.0.3 | `Fylkir_Ludwig_of_Immasonian_Fylkirate_1361_01_17.ck3` | 73.1 MB | `a2b12bbb…a37b` |
+| C | 0.0.2 | `Fylkir_Ludwig_of_Immasonian_Fylkirate_1364_03_10.ck3` | 73.8 MB | `919ad2c7…946a` |
 
-Below, "save A" is the earlier (1361) file and "save B" the later (1364) one.
+A succession (Åsa → Ludwig, 1360.6.8) falls between A and B, so the chain covers
+both a ruler change and a same-ruler interval.
 
 ---
 
@@ -50,7 +52,7 @@ file:
   header, then a plaintext `meta_data={ … }` block, then a zip archive whose only
   member is `gamestate`. The first line is `SAV0102` + 8 hex digits + 8 hex digits;
   the last 8 hex digits are the byte length of the `meta_data` text that follows
-  (checked on both saves: `0x6afb` = 27 387 and `0x6ae7` = 27 367), so the reader can
+  (checked on all three saves: `0x6b6f` = 27 503, `0x6ae7` = 27 367, `0x6afb` = 27 387), so the reader can
   slice the header exactly instead of searching for `PK\x03\x04`. The middle 8 hex
   digits differ between saves and are not yet understood. The zip starts right
   after the header, so the header is small enough to read fully before touching the
@@ -114,16 +116,16 @@ The usable signals, from cheapest to most expensive:
 
 | Signal | Where | Cost to read | Behaviour across snapshots of one run |
 |---|---|---|---|
-| `random_seed` | gamestate line ~419 | decompress first few KB of the zip member | Same for the whole run (verified: `576691683` in both saves, three in-game years apart). Different runs from the same bookmark get different seeds. This is the primary key. |
+| `random_seed` | gamestate line ~419 | decompress first few KB of the zip member | Same for the whole run (verified: `576691683` in all three saves, spanning six in-game years and a succession). Different runs from the same bookmark get different seeds. This is the primary key. |
 | `bookmark_date` | gamestate line ~416 | same | Constant. |
 | `game_rules`, `dlcs`, `version`, `ironman` | plaintext header | free | Constant in practice; `version` may change if the game was patched mid-run, so it is a warning, not a key. |
 | `played_character.name`, `player=1` | gamestate `played_character` block, far into the file | full stream | Constant (the Paradox account name). |
-| `played_character.legacy` | same block | full stream | Ordered list of `{character, date, …}` for every ruler the player controlled. Earlier snapshot's list is a **prefix** of the later one (verified on `(character, date)`; both saves list the same 20 rulers because no succession happened between them, so the strict-prefix case is still untested). The last entry is the ruler in play and has fewer fields; compare on `(character, date)` only. |
+| `played_character.legacy` | same block | full stream | Ordered list of `{character, date, …}` for every ruler the player controlled. Earlier snapshot's list is a **prefix** of the later one (verified on `(character, date)`: A lists 19 rulers, B and C list the same 19 plus Ludwig, so both the strict-prefix and the equal case are covered). The last entry is the ruler in play and has fewer fields than it will have once the ruler is succeeded; compare on `(character, date)` only. |
 | `meta_main_portrait.id` | header | free | Currently played character id; equals the last `legacy` entry's `character`. |
 | `date` / `meta_date` | gamestate line ~415 / header | free | Strictly increasing along the chain. |
-| `random_count` | gamestate line ~420 | first few KB | Strictly increasing along the chain (RNG draw counter; verified `52 761 528` → `53 241 628`). Tie-breaker when two snapshots share a date. |
-| `meta_real_date` | header | free | Real-world date the file was saved, as years since 1900: `126.2.26` = 2026-02-26 (save A), `126.3.6` = 2026-03-06 (save B). Must be non-decreasing along the chain; a later in-game date with an earlier real date is a scumming signature. Second tie-breaker. |
-| Title `history` blocks, character death dates | `landed_titles`, `dead_unprunable` | full parse | Earlier snapshot ⊆ later snapshot for all dates ≤ earlier `date` (verified: 12 907 titles, 0 history mismatches; 230 562 dead characters, 0 death-date changes). |
+| `random_count` | gamestate line ~420 | first few KB | Strictly increasing along the chain (RNG draw counter; verified `52 401 480` → `52 761 528` → `53 241 628`). Tie-breaker when two snapshots share a date. |
+| `meta_real_date` | header | free | Real-world date the file was saved, as years since 1900: `126.2.21`, `126.2.26`, `126.3.6` = 2026-02-21 / 02-26 / 03-06 for A, B, C. Must be non-decreasing along the chain; a later in-game date with an earlier real date is a scumming signature. Second tie-breaker. |
+| Title `history` blocks, character death dates | `landed_titles`, `dead_unprunable` | full parse | Earlier snapshot ⊆ later snapshot for all dates ≤ earlier `date` (verified on both intervals: 12 906 and 12 907 titles, 0 history mismatches; 229 250 and 230 562 dead characters, 0 death-date changes). |
 
 Character ids alone do **not** identify a run: two runs from the same bookmark
 share the same initial ids, and later ids are allocated from the same counters.
@@ -134,7 +136,9 @@ Three tiers, each cheaper than the next; most files stop at tier 1.
 
 **Tier 1 — fingerprint (no full parse).**
 For each `.ck3` file read the plaintext header, then open the zip and decompress
-only until `random_count=` has been seen (a few KB). Produce:
+only until `random_count=` has been seen. A prototype of this needed 32 KB of
+decompressed `gamestate` and about 3 ms per file on the sample saves, so scanning
+a directory of hundreds of saves is instant. Produce:
 
 ```
 Fingerprint = {
@@ -232,18 +236,18 @@ Fixture files are generated by a helper in `tests/` (header text + zipped
 ## 4. Phase 5: loading several snapshots of one run into the graph
 
 Why bother with older snapshots at all if the latest one is a superset: CK3
-**prunes** dead characters that nothing references any more. Measured between the
-two sample saves, three in-game years apart:
+**prunes** dead characters that nothing references any more. Measured between
+consecutive sample saves:
 
-| Movement between save A (1361) and save B (1364) | Count |
-|---|---|
-| `living` in A → `dead_prunable` in B | 1 486 |
-| `living` in A → `dead_unprunable` in B | 1 583 |
-| `dead_prunable` in A → `dead_unprunable` in B (became referenced) | 309 |
-| `dead_prunable` in A → **absent from B, zero mentions anywhere** | 1 545 |
-| New ids in B | 3 413 |
-| Ids in A missing from B for any other reason | 0 |
-| Dynamic titles (`x_x_*`) in A missing from B | 3 |
+| Movement | A → B (1358.9 → 1361.1) | B → C (1361.1 → 1364.3) |
+|---|---|---|
+| `dead_prunable` in earlier → **absent from later, zero mentions anywhere** | 1 060 | 1 545 |
+| `living` in earlier → `dead_prunable` in later | — | 1 486 |
+| `living` in earlier → `dead_unprunable` in later | — | 1 583 |
+| `dead_prunable` in earlier → `dead_unprunable` in later (became referenced) | — | 309 |
+| New ids in later | 2 404 | 3 413 |
+| Ids in earlier missing from later for any other reason | 0 | 0 |
+| Dynamic titles (`x_x_*`) in earlier missing from later | 6 | 3 |
 
 So roughly 500 characters a year vanish from the file, and the only source for
 them is an earlier snapshot. Destroyed dynamic titles vanish the same way. Older
@@ -267,47 +271,49 @@ Rules:
 
 ## 5. Verified against the sample saves
 
-| Fact | Save A (release 0.0.3) | Save B (release 0.0.2) |
+| Fact | Save A (0.0.4) | Save B (0.0.3) | Save C (0.0.2) |
+|---|---|---|---|
+| Header first line | `SAV01025353630600006b6f` | `SAV0102df33d85900006ae7` | `SAV01024cd93a6200006afb` |
+| `gamestate` uncompressed bytes | 279 463 917 | 280 027 292 | 282 981 318 |
+| `version` | `"1.6.1.2"` | same | same |
+| `meta_date` / `date` | `1358.9.13` | `1361.1.17` | `1364.3.10` |
+| `meta_real_date` | `126.2.21` | `126.2.26` | `126.3.6` |
+| `bookmark_date` | `867.1.1` | same | same |
+| `random_seed` | `576691683` | same | same |
+| `random_count` | `52401480` | `52761528` | `53241628` |
+| `first_start` / `ironman` | `no` / `no` | same | same |
+| `meta_player_name` | `"Fylkir Åsa the Scholar"` | `"Fylkir Ludwig Åsasson"` | same as B |
+| `meta_title_name` / `meta_house_name` | `"Empire of Germania"` / `"af Munsö"` | same | same |
+| `meta_main_portrait.id` | `33747696` | `50544311` | `50544311` |
+| `played_character.name` | `"diegoami"` | same | same |
+| `played_character.legacy` | 19 entries, last `(33747696, 1323.7.5)` | 20 entries, last `(50544311, 1360.6.8)` | same as B |
+| `landed_titles` entries | 12 912 | 12 910 | 12 915 |
+| `living` / `dead_unprunable` / `dead_prunable` | 40 377 / 229 250 / 9 077 | 40 356 / 230 562 / 9 130 | 40 449 / 232 458 / 9 009 |
+| `playthrough_id` | absent | absent | absent |
+| DLC and game-rule sets | identical across all three | | |
+
+Results of the checks the plan relies on, run with a throwaway script over the
+three gamestates, on both consecutive intervals:
+
+| Check | A → B | B → C |
 |---|---|---|
-| Header first line | `SAV0102df33d85900006ae7` | `SAV01024cd93a6200006afb` |
-| Zip starts at byte | 27 391 | 27 411 |
-| Zip members | `gamestate` only, 280 027 292 bytes | `gamestate` only, 282 981 318 bytes |
-| `version` | `"1.6.1.2"` | `"1.6.1.2"` |
-| `meta_date` / `date` | `1361.1.17` | `1364.3.10` |
-| `meta_real_date` | `126.2.26` | `126.3.6` |
-| `bookmark_date` | `867.1.1` | `867.1.1` |
-| `random_seed` | `576691683` | `576691683` |
-| `random_count` | `52761528` | `53241628` |
-| `first_start` / `ironman` | `no` / `no` | `no` / `no` |
-| `meta_player_name` | `"Fylkir Ludwig Åsasson"` | same |
-| `meta_title_name` / `meta_house_name` | `"Empire of Germania"` / `"af Munsö"` | same |
-| `meta_main_portrait.id` | `50544311` | `50544311` |
-| `played_character.name` | `"diegoami"` | `"diegoami"` |
-| `played_character.legacy` | 20 entries, `867.1.1` → `1360.6.8` | identical |
-| `landed_titles` entries | 12 910 | 12 915 |
-| `living` / `dead_unprunable` / `dead_prunable` | 40 356 / 230 562 / 9 130 | 40 449 / 232 458 / 9 009 |
-| `playthrough_id` | absent | absent |
+| Same `random_seed`, DLCs, rules | yes | yes |
+| `random_count` and `meta_real_date` increase with `date` | yes | yes |
+| `legacy` of earlier is a prefix of later | yes, strict (Ludwig appended) | yes, equal |
+| Title history of earlier ⊆ later for dates ≤ earlier `date` | 12 906 titles, 0 mismatches | 12 907 titles, 0 mismatches |
+| Every dead character in earlier is dead in later with the same date | 0 differences, 0 resurrections | 0 differences, 0 resurrections |
+| Characters present earlier but gone later | 1 060, all from `dead_prunable` | 1 545, all from `dead_prunable` |
 
-Results of the checks the plan relies on, run with a throwaway script over both
-gamestates:
-
-| Check | Result |
-|---|---|
-| Same `random_seed` | yes |
-| `random_count` and `meta_real_date` increase with `date` | yes |
-| `legacy` of A is a prefix of `legacy` of B | yes (identical lists; strict-prefix case untested) |
-| Title history of A ⊆ B for dates ≤ `1361.1.17` | 12 907 titles compared, 0 mismatches |
-| Every dead character in A dead in B with the same date | 230 562 compared, 0 differences, 0 resurrections |
-| Characters present in A but gone from B | 1 545, all from `dead_prunable`, none referenced anywhere in B |
+Note that `meta_player_name` and `meta_main_portrait.id` change at a succession,
+so neither belongs in the `RunKey`; they are display data only.
 
 Still open:
 
-1. The strict-prefix case for `legacy` (a succession between two snapshots) has
-   not been exercised. The check is a plain list-prefix comparison, so the risk is
-   low, but a third save after the next succession would close it.
-2. Whether newer CK3 versions add a `playthrough_id`; if so, use it as the
+1. Whether newer CK3 versions add a `playthrough_id`; if so, use it as the
    `RunKey` and keep the seed as a fallback.
-3. Meaning of the middle 8 hex digits of the `SAV0102…` header line.
+2. Meaning of the middle 8 hex digits of the `SAV0102…` header line.
+3. Behaviour of the `RunKey` when a DLC is enabled or disabled mid-run (the
+   `dlcs_hash` would split the run; the CLI needs an override for that case).
 
 ---
 
