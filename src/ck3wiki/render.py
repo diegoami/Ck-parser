@@ -15,7 +15,7 @@ from pathlib import Path
 from ck3parser.parser import date_key
 from ck3parser.portraits import IMAGE_DIR
 
-from .model import Image, Wiki, WikiCharacter, WikiHouse, WikiTitle
+from .model import Image, Vassalage, Wiki, WikiCharacter, WikiHouse, WikiTitle
 
 STYLE = """\
 :root {
@@ -141,6 +141,30 @@ def character_link(wiki: Wiki, cid: int, depth: int) -> str:
     return f'<a href="{up}characters/{cid}.html">{e(wiki.named(cid))}</a>'
 
 
+def person_link(wiki: Wiki, cid: int, depth: int) -> str:
+    """A relative as a link if they have a page, as a name if they only have a record.
+
+    Family reaches outside the lineage, so most of these people have no page.
+    Naming them is still worth more than an id, and a name that is not a link
+    says plainly that the wiki knows of them but not about them.
+    """
+    up = "../" * depth
+    if cid in wiki.characters:
+        return f'<a href="{up}characters/{cid}.html">{e(wiki.named(cid))}</a>'
+    known = wiki.relatives.get(cid)
+    if known is None or not known.name:
+        return f"<code>{cid}</code>"
+    span = f" <span class=\"sub\">({e(known.lifespan)})</span>" if known.lifespan else ""
+    return f"{e(known.name)}{span}"
+
+
+def people_row(wiki: Wiki, label: str, ids: list[int], depth: int) -> str:
+    if not ids:
+        return ""
+    links = ", ".join(person_link(wiki, cid, depth) for cid in ids)
+    return f"<tr><th>{e(label)}</th><td>{links}</td></tr>"
+
+
 def house_link(wiki: Wiki, house_id: int | None, depth: int) -> str:
     if house_id is None:
         return ""
@@ -173,6 +197,36 @@ def image_slot(
     )
 
 
+def liege_label(wiki: Wiki, key: str | None, depth: int) -> str:
+    """A liege as a link, or the honest word for having none.
+
+    A liege outside the lineage has no page, so it is shown as the bare key
+    rather than with the "not in this wiki" tag `title_link` uses: in this
+    column that tag is wider than the name it explains, and the section's
+    opening paragraph already accounts for it.
+    """
+    if key is None:
+        return '<span class="tag">independent</span>'
+    if key not in wiki.titles:
+        return f'<code title="not in this wiki">{e(key)}</code>'
+    return title_link(wiki, key, depth)
+
+
+def vassalage_rows(wiki: Wiki, stretches: list[Vassalage], depth: int) -> str:
+    """One row per stretch: who, which snapshots saw it, and how tight the bounds are."""
+    out = []
+    for stretch in stretches:
+        seen = stretch.first if stretch.first == stretch.last else f"{stretch.first} – {stretch.last}"
+        ended = f'<span class="tag">current</span>' if stretch.open else e(stretch.ended)
+        out.append(
+            f"<tr><td>{liege_label(wiki, stretch.liege, depth)}</td>"
+            f'<td class="num">{e(seen)}</td>'
+            f'<td class="num">{e(stretch.began)}</td><td class="num">{ended}</td></tr>'
+
+        )
+    return "".join(out)
+
+
 def tenure_rows(wiki: Wiki, title: WikiTitle, depth: int) -> str:
     out = []
     for tenure in title.tenures:
@@ -198,7 +252,10 @@ def render_title(wiki: Wiki, title: WikiTitle, top: bool = False) -> str:
             ("Liege", title_link(wiki, title.liege, 1) if title.liege else ""),
             ("De jure liege", title_link(wiki, title.de_jure_liege, 1) if title.de_jure_liege else ""),
             ("Rulers recorded", str(len(title.tenures))),
-            ("Seen in saves", f"{e(title.first_seen)} – {e(title.last_seen)}"),
+            # not "seen in saves": a title can be in a save without being in the
+            # lineage, and the vassalage table below says so
+            ("In the lineage", e(title.first_seen) if title.first_seen == title.last_seen
+             else f"{e(title.first_seen)} – {e(title.last_seen)}"),
         ]
     )
     body = [f'<div class="page"><aside class="infobox card"><table>{info}</table></aside>',
@@ -212,14 +269,59 @@ def render_title(wiki: Wiki, title: WikiTitle, top: bool = False) -> str:
     else:
         body.append("<p>No holders are recorded for this title.</p>")
 
+    stretches = title.vassalage(wiki.snapshots)
+    if stretches:
+        body.append("<h2>Vassalage</h2>")
+        body.append(
+            "<p>A save says who holds a title, but not who its liege has been over"
+            " time. These are the saves' own answers, so a range under <em>Began</em>"
+            " or <em>Ended</em> is a window the change happened somewhere inside —"
+            " never a date, because no save carries one.</p>"
+        )
+        body.append(
+            "<table><thead><tr><th>Under</th><th class='num'>Seen</th>"
+            "<th>Began</th><th>Ended</th></tr></thead>"
+            f"<tbody>{vassalage_rows(wiki, stretches, 1)}</tbody></table>"
+        )
+        missing = [d for d in wiki.snapshots if d not in title.lieges]
+        if missing:
+            body.append(
+                f'<p class="sub">Not in the save of {", ".join(e(d) for d in missing)}'
+                " — destroyed, or pruned; the save does not say which.</p>"
+            )
+
     if title.vassals:
         body.append("<h2>Vassals</h2>")
-        for date in sorted(title.vassals):
+        for date in sorted(title.vassals, key=date_key):
             keys = title.vassals[date]
             links = ", ".join(title_link(wiki, key, 1) for key in keys) or "none"
             body.append(f'<p><strong>{e(date)}</strong> — {len(keys)} held under it: {links}</p>')
+        body.append(movement_note(wiki, title))
     body.append("</div></div>")
     return page(heading, "\n".join(body), depth=1, subtitle=f"{len(title.tenures)} recorded rulers", top=top)
+
+
+def movement_note(wiki: Wiki, title: WikiTitle) -> str:
+    """What joined and left between consecutive snapshots of the subject."""
+    dates = sorted(title.vassals, key=date_key)
+    if len(dates) < 2:
+        return ""
+    out = []
+    for earlier, later in zip(dates, dates[1:]):
+        was, now = set(title.vassals[earlier]), set(title.vassals[later])
+        joined, left = sorted(now - was), sorted(was - now)
+        if not joined and not left:
+            continue
+        parts = []
+        if joined:
+            parts.append(f"{len(joined)} joined ({', '.join(title_link(wiki, k, 1) for k in joined[:6])}"
+                         f"{', …' if len(joined) > 6 else ''})")
+        if left:
+            parts.append(f"{len(left)} left ({', '.join(title_link(wiki, k, 1) for k in left[:6])}"
+                         f"{', …' if len(left) > 6 else ''})")
+        out.append(f"<li>Between <strong>{e(earlier)}</strong> and <strong>{e(later)}</strong>: "
+                   + "; ".join(parts) + "</li>")
+    return f'<ul class="plain">{"".join(out)}</ul>' if out else ""
 
 
 def render_character(wiki: Wiki, character: WikiCharacter, have: set[str], top: bool = False) -> str:
@@ -234,6 +336,7 @@ def render_character(wiki: Wiki, character: WikiCharacter, have: set[str], top: 
             ("Cause", e(character.death_reason.replace("death_", "").replace("_", " ")) if character.death_reason else ""),
             ("Sex", "female" if character.female else "male"),
             ("House", house_link(wiki, character.house, 1)),
+            ("Parents", ", ".join(person_link(wiki, p, 1) for p in character.parents)),
             ("Dynasty", e(house.dynasty.display_name) if house and house.dynasty else ""),
             ("Id", f"<code>{character.id}</code>"),
             ("In saves", ", ".join(e(d) for d in character.seen)),
@@ -265,6 +368,25 @@ def render_character(wiki: Wiki, character: WikiCharacter, have: set[str], top: 
         )
     else:
         body.append("<p>This character holds none of the titles in this wiki.</p>")
+
+    if character.has_family:
+        body.append("<h2>Family</h2>")
+        body.append(
+            "<table>"
+            + people_row(wiki, "Parents", character.parents, 1)
+            + people_row(wiki, "Siblings", character.siblings, 1)
+            + people_row(wiki, "Spouses", character.spouses, 1)
+            + people_row(wiki, "Former spouses", character.former_spouses, 1)
+            + people_row(wiki, "Children", character.children, 1)
+            + (people_row(wiki, "Real father", [character.real_father], 1)
+               if character.real_father is not None else "")
+            + "</table>"
+        )
+        body.append(
+            '<p class="sub">A save records children, never parents, so parents are'
+            " found by inverting: someone claimed this person as theirs. A name"
+            " without a link is someone the wiki knows of but has no page for.</p>"
+        )
 
     if len(shots) > 1:
         body.append("<h2>Portraits</h2>")

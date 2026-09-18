@@ -18,6 +18,13 @@ SUCCESSION_EDITS = (
     ("date=1090.2.1\n\tde_jure_vassals", "date=1110.5.5\n\tde_jure_vassals"),
 )
 
+#: Edits that move `x_mc_0` off the kingdom and under `c_test`. A save carries
+#: no vassalage history, so the only way this is ever visible is two snapshots
+#: disagreeing -- which is the point of the test.
+VASSAL_MOVE_EDITS = (
+    ("date=1080.1.1\n\tde_facto_liege=0", "date=1080.1.1\n\tde_facto_liege=2"),
+)
+
 
 def fixture_text() -> str:
     return FIXTURE.read_text(encoding="utf-8")

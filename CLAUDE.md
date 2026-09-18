@@ -7,7 +7,7 @@ Read `docs/HANDOVER.md` first (state of the project, next tasks), then
 
 ```
 uv sync --group dev              # install (the SessionStart hook does this on the web)
-uv run pytest -q                 # 133 tests, < 1 s, fixture only
+uv run pytest -q                 # 155 tests, < 1 s, fixture only
 scripts/fetch_saves.sh           # three real saves (~73 MB each) into ./saves, git-ignored
 uv run python -m ck3parser.runs verify saves --json saves/runs.json
 uv run python -m ck3parser.pipeline saves/<file>.ck3 --title e_germany --dry-run
@@ -16,6 +16,8 @@ uv run python -m ck3parser.sections saves/<file>.ck3 --verify           # top-le
 uv run python -m ck3parser.handoff saves --title e_germany --out handoff  # portrait harvester list
 uv run python -m ck3wiki.build saves --out site                          # the wikis themselves
 uv run python -m ck3wiki.build saves --out site --portraits harvested    # ... with images folded in
+uv run python -m ck3wiki.build saves --out site --no-family              # ... fast: skips the full character pass
+uv run python -m ck3wiki.build saves --out site --no-kin                 # ... title-holders only, no direct line
 ```
 
 ## Rules
@@ -32,6 +34,13 @@ uv run python -m ck3wiki.build saves --out site --portraits harvested    # ... w
 - `Block` subclasses `list`. Test for `Block` before `list` in any isinstance chain.
 - Title liege fields are numeric indices into `landed_titles`, not keys. Resolve
   them through `ck3parser.titles.TitleIndex`.
+- A save has **no vassalage history**: it says who a title's liege *is*, never
+  who it has been. A liege change is only ever known to have happened between
+  two snapshots, and must be shown as bounds ("between X and Y"), never as a
+  date. Never narrow it from the holder history: a title can change liege
+  without changing hands (PLAN.md §9).
+- A title absent from a save was destroyed or pruned, and the save does not say
+  which. Absence is never independence, and never bridges two stretches.
 - No LLM SDK dependency yet; narrative generation is deferred (PLAN.md Phase 7).
   The wiki `ck3wiki` builds today is factual, generated straight from save data.
 - Character names in saves are localization keys with diacritics marked by an
@@ -61,10 +70,26 @@ uv run python -m ck3wiki.build saves --out site --portraits harvested    # ... w
   own, and then that one wins. `ck3parser.dynasties.arms_id` decides, and
   `house_name` likewise: the wiki and the hand-off disagreeing means the image a
   page links is not the image the companion is asked for.
-- A `coat_of_arms_id` is an index inside one save, not a global id. Scope
-  anything derived from it by the save it was read from.
+- A `coat_of_arms_id` is an index inside one save, not a global id, and never
+  names an image. An arms image is named after a digest of the **recipe** the
+  game draws it from (`ck3parser.arms`), so the same picture is one file in
+  every run. Whether arms are fixed or generated cannot be told from the
+  dynasty: 57 of 60 game-keyed dynasties had different artwork between two
+  playthroughs (PLAN.md §11).
+- A coat-of-arms recipe keeps repeated keys and their order: `colored_emblem`
+  appears once per emblem and they are drawn in the order listed. Never put one
+  in a dict, and never sort it.
 - A character is harvestable only if they are in `living` AND have no
   `dead_data`; someone who died on the save's date satisfies only the first.
+  This binds the **wiki** as much as the hand-off: never link a portrait slot
+  for a character who was dead in that save. Getting it wrong once put 1 277
+  impossible images into the companion's queue.
+- A save stores parentage **downward only**: `family_data` lists `child`, never
+  `father` or `mother` (verified on all 281 916 characters of the 1364 save).
+  Parents are found by inverting every child list, which is a full pass with no
+  early exit — the one genuinely expensive thing a build does (PLAN.md §10).
+- `family_data` mixes shapes: `spouse` repeats as its own key while `child` is a
+  list. Use `Block.getall`, never `get`, or you will silently read one spouse.
 - A save's top-level key set varies between saves of one run. Never assume a
   section exists.
 - Facts labelled "verified" in PLAN.md were checked on three real saves. Anything

@@ -519,7 +519,7 @@ and nothing more."* So:
 |---|---|---|
 | A character-id list per save | `play <id>` only works on a **living** character, so a list is scoped to whoever was alive at that save's date | **built**, `ck3parser.handoff` |
 | Which characters are "interesting" | entirely this project's call | **defined** for v1, below |
-| Coat-of-arms definitions as data | *"Extracting them is tool 1's job"*; `coat_of_arms` is 11% of a save and titles carry `coat_of_arms_id` | **ids resolved**, `ck3parser.dynasties`; the definitions themselves are not parsed |
+| Coat-of-arms definitions as data | *"Extracting them is tool 1's job"*; `coat_of_arms` is 11% of a save | **built**, `ck3parser.arms`: every wanted recipe is in the manifest, so arms can be drawn rather than captured (§11) |
 | A name for every image it must deliver, and a list of which are missing | it has to know what to call a file without asking, and what is still wanted | **built**, `ck3parser.portraits` and `ck3wiki.manifest` |
 
 ### The hand-off, as built
@@ -564,7 +564,7 @@ Both projects have to arrive at the same file name for the same image without
 talking to each other, so the name is **derived**, never assigned:
 
     portrait:  sha256(save file's base name)[:12] + "_" + character id + ".png"
-    arms:      sha256(save file's base name)[:12] + "_arms_" + coat of arms id + ".png"
+    arms:      "arms_" + sha256(the coat of arms' own recipe)[:12] + ".png"
 
 The save's **name** is hashed, not its contents, so either side computes it
 without opening 70 MB; the companion only keeps a map from save file name to
@@ -573,9 +573,18 @@ anyone will publish, and keeps the name short and free of spaces.
 
 Keying on the save rather than the date is what gives one portrait **per save**:
 the same person at three dates is three images, which is their roadmap item 2.
-Scoping the arms by save matters for a different reason — a `coat_of_arms_id` is
-an index inside one run, so the same number means different arms in a parallel
-world.
+Arms are not keyed on the save at all, for the reasons in §11.
+
+**Only the living are asked for.** The companion harvests by switching to a
+character with `play <id>`, which the game refuses for the dead, so a slot for
+someone already buried is work nobody can do. This was got wrong at first and
+the numbers were stark: the Germania chronicle asked for 1 330 portraits of
+which **53 were capturable**. `dead_data` decides it, and on the real saves that
+matches `living_characters` exactly — 26 and 25 of the 1358 and 1364 lineages.
+Someone who died on the save's own date still sits in `living` carrying the
+block, and is not harvestable either.
+A `coat_of_arms_id` is an index inside one run, so it can never name an image
+across runs; §11 says what does.
 
 The wiki links every such name **whether or not the file exists yet**. A missing
 one renders a dashed placeholder marked *awaiting harvest*; the `src` is already
@@ -587,18 +596,24 @@ parse HTML. One sits at the root of the site listing the chronicles, and each
 chronicle has its own:
 
 ```json
-{ "schema": "ck3-images/1", "chronicle": "<seed>-<version>", "images": "portraits",
+{ "schema": "ck3-images/2", "chronicle": "<seed>-<version>", "images": "portraits",
   "saves":  [ {"file": "...ck3", "checksum": "5a86b836cd32", "date": "1364.3.10"} ],
   "wanted": 53, "missing": 53,
   "portraits": [
     {"file": "5a86b836cd32_50544311.png", "kind": "portrait", "save": "...ck3",
      "checksum": "5a86b836cd32", "save_date": "1364.3.10", "character": 50544311,
      "house": 12345, "page": "characters/50544311.html", "have": false},
-    {"file": "5a86b836cd32_arms_13996.png", "kind": "arms", "save": "...ck3",
+    {"file": "arms_4ec4589d5e8a.png", "kind": "arms", "save": "...ck3",
      "checksum": "5a86b836cd32", "house": 12345, "coat_of_arms_id": 13996,
-     "page": "houses/12345.html", "have": false}
+     "page": "houses/12345.html", "have": false,
+     "definition": [["pattern", "pattern_solid.dds"], ["color1", "red"],
+                    ["colored_emblem", [["texture", "ce_eagle.dds"]]]]}
   ] }
 ```
+
+`schema` is bumped when a key already there changes meaning. It went to `/2`
+when arms stopped being named after the save and id and started being named
+after their recipe (§11); portrait names did not change.
 
 `have` is this build's answer, not a promise: the companion should treat the
 absence of the file as the truth and the flag as a hint. `saves` repeats the
@@ -623,10 +638,12 @@ and name a parent dynasty in `dynasties.dynasties`, which is where
 
 Verified on the 1364 save: 49 891 houses, 48 099 dynasties. Of the dynasties,
 45 689 have a `coat_of_arms_id`, 41 128 a `name` key, 2 210 a plain
-`localized_name`, 6 320 a `prefix` key, and 4 761 a `key` — and that `key` is a
-bare number (`"2"`), not a readable name, so it is never used for display. A
-house may have no name of its own, and then the dynasty's name is the one to
-show. Houses the game shipped with are dated `9999.1.1`, a sentinel, not a
+`localized_name`, 6 320 a `prefix` key, and 4 761 a `key`. That `key` is the
+game's own identifier, not a display name: sometimes a number (`"2"`), sometimes
+a slug (`"welsh_ap_bleddri"`, `"bovisio"`), so it is never shown. An earlier note
+here said it was always a number, which was read off the first four records and
+was wrong. A house may have no name of its own, and then the dynasty's name is
+the one to show. Houses the game shipped with are dated `9999.1.1`, a sentinel, not a
 founding date.
 
 Houses go into the hand-off beside the characters, one `houses_<date>.csv` per
@@ -710,6 +727,10 @@ files, which this project deliberately does not read (§2). `clean_name` drops
 the marker and never invents a letter, so the wiki shows "Francois" rather than
 a wrong guess. 2 070 of 20 000 sampled living characters carry one.
 
+The marker follows the letter it modifies, **except on the first letter, where
+it comes in front**: `_Odgrim` is Ǫdgrim, found among Ludwig's siblings. A
+leading marker is dropped like any other.
+
 ### Portraits and houses
 
 Every character page carries a portrait slot per save the character appears in,
@@ -722,3 +743,238 @@ the links never depended on the file being there.
 Houses get pages of their own under `houses/`, listing their members, their
 dynasty, motto and founding date, and marking the dynasty head. Characters link
 to their house from the infobox and from the index.
+
+---
+
+## 9. Vassalage, and why it has bounds instead of dates
+
+A save records who **holds** a title and since when: `holder`, `date`, and a
+`history` of holders. It records who a title's **liege** is — `de_facto_liege`,
+`de_jure_liege` — but not who it has been. There is no vassalage history in the
+file. Verified on the three Germania saves.
+
+So vassalage cannot be read the way succession is read. All there is are the
+snapshots, and a change is only ever known to have happened *between* two of
+them. The wiki says exactly that and never invents a date:
+
+| Under | Seen | Began | Ended |
+|---|---|---|---|
+| d_optimatoi | 1358.9.13 – 1361.1.17 | by 1358.9.13 | 1361.1.17 – 1364.3.10 |
+| Germania | 1364.3.10 | 1361.1.17 – 1364.3.10 | *current* |
+
+A range under Began or Ended is a **window** the change happened somewhere
+inside, never a date. "by X" is the first snapshot, with nothing before it to
+bound against. Both are the tightest the saves allow.
+
+**Every title is asked, not just the lineage.** A title is in a snapshot's
+*lineage* only while it is a direct vassal of the subject, but it is in that
+snapshot's `landed_titles` as long as it exists at all. So a vassal that left is
+not lost: the save still says who took it. Before this, a non-subject title's
+liege was *asserted* to be the subject, because that is how it had been
+selected, which could never be wrong and never said anything.
+
+**Absence is not independence.** A title missing from a save was destroyed, or
+pruned (§4), and the file does not say which. It is never recorded as a liege,
+and it breaks a stretch rather than bridging a gap nothing was seen across.
+
+Measured on the three Germania saves, 68 titles:
+
+| | |
+|---|---|
+| one stretch (never changed liege) | 20 |
+| two stretches | 46 |
+| three stretches | 2 |
+| absent from at least one save | 0 |
+| the subject itself | independent throughout |
+
+The vassal count under Germania swings 37 → 19 → 51. The dip is real: right
+after the 1360 succession Ludwig held the lineage titles directly.
+
+**The bounds are often tighter than they look**, and the page already shows why.
+Bithynia's own succession table records Ludwig taking it by `conquest_holy_war`
+on 1363.1.24 and granting it away on 1363.1.25 — inside the inferred window of
+1361.1.17 to 1364.3.10. Narrowing a liege change automatically from the holder
+history is tempting and **not** done: a title can change liege without changing
+hands, so the two are correlated rather than equivalent, and a date inferred
+that way would be a guess wearing a fact's clothes. Leaving both on the page
+lets the reader draw the tighter conclusion.
+
+**In the graph**, `(:Title)-[:VASSAL_OF {kind, first_seen, last_seen, as_of}]->(:Title)`.
+The bracket moves only outward, so the result does not depend on the order
+snapshots load in, and they are observations rather than an interval for the
+same reason as above. Nothing is ever deleted, so an edge that stopped being
+true stays, bracketed by the dates that saw it.
+
+**Still one level deep.** `TitleIndex.vassals` holds the whole tree for a save,
+but `lineage()` takes the subject plus its immediate vassals, so a county under
+a vassal duchy is not loaded. Deepening it multiplies the character load (666 at
+one level in 1364) and is left for later.
+
+---
+
+## 10. Family, and why parents cost a full pass
+
+**Verified on the 1364 save, all 281 916 characters: not one carries a `father`
+or a `mother` key.** Parentage is stored *downward only*. A character's
+`family_data` lists:
+
+| Key | Shape | Carried by (of the 1364 lineage's 666) |
+|---|---|---|
+| `child` | a list | 566 |
+| `spouse` | **repeats as its own key** | 550 |
+| `former_spouses` | a list | 543 |
+| `primary_spouse` | a scalar | 438 |
+| `real_father` | a scalar | 12 |
+| `betrothed` | a scalar | 1 |
+| *no `family_data` at all* | | 27 |
+
+Two shapes in one block, so neither may be read with `get()` alone: `spouse`
+appears four times over for a character with four spouses, while `child` arrives
+as one list. `Block.getall` is the only correct reader.
+
+### Parents are an inversion
+
+To find someone's parents you must find whoever claimed them as a child, which
+means reading **every** character record: a parent may be alive, dead-unprunable
+or dead-prunable, and there is no early exit because the parent may be the last
+record in the last section. One pass, ~37 s on a 280 MB save, 201 498 children
+resolved.
+
+It buys what a cheaper version cannot:
+
+| | of the 666 |
+|---|---|
+| parents found by inverting the **lineage only** | 447 |
+| parents found by inverting the **whole save** | **590** |
+| of those, with both parents | 536 |
+| with one parent | 54 |
+
+The remaining 76 are founders, or have parents the save has pruned. Siblings
+come free: whenever a child list mentions someone wanted, the whole list is
+kept, so half-siblings through either parent are included.
+
+`real_father` is never merged into `parents`. The game keeps a bastard's true
+father apart from their legal one, and so does this.
+
+A marriage that ended appears under `spouse` in the older snapshot and
+`former_spouses` in the newer one, so the union must subtract: "former" is the
+later word on it, and listing the person under both names them twice.
+
+### Who gets a page
+
+Holding a title is what put the ever-holders in. The **direct line** — parents,
+spouses, former spouses and children — is in by blood or marriage, and gets the
+same page and the same portrait rule. Siblings do not: they are named wherever
+they appear, and promoting them would buy 689 more pages for the Germania
+chronicle that are mostly dead ends.
+
+Measured on the Germania chronicle, across its three saves:
+
+| | pages |
+|---|---|
+| ever-holders alone | 952 |
+| **+ the direct line** | **5 550** |
+| + siblings as well | 6 251 |
+
+The portrait queue moves with it, but only for the living: 53 → **1 389**,
+because a ruler's spouse and children are usually alive when the ruler is,
+while the ever-holders are mostly long dead. Every one of those is capturable,
+which is the difference from the 1 330 the wiki asked for before liveness was
+enforced.
+
+Anyone the family still reaches who has no page — siblings, and the kin of kin —
+is fetched once, from the newest save that still has them, and only far enough
+to be named. A name that is not a link is the honest rendering of someone the
+wiki knows of but not about.
+
+Promotion happens **before** houses are resolved, because it brings in
+characters whose houses must be looked up too. `--no-kin` turns it off.
+
+### One pass, not two
+
+Promoting needs the promoted characters' own parents and children, which would
+be a second full inversion if the first one were narrowed to what was asked for.
+It is not: `FamilyIndex` keeps the whole map, 201 498 children and 164 612
+parents, for about 80 MB. Their spouses come from the records fetched to promote
+them, which are needed anyway.
+
+### The cost, and the way out
+
+This is the most expensive thing a build does: one full character pass per
+snapshot, on top of the targeted passes the lineage already needs. `--no-family`
+skips it, which is what to use when iterating on anything else.
+
+The fixture was wrong about all of this until now: it gave the child a `father`
+and `mother`, a shape no save uses. It now claims children from both parents,
+as a real save does.
+
+---
+
+## 11. Coats of arms: named by what they look like
+
+A coat of arms is worth harvesting once and reusing, so the question is when two
+of them are the same. Neither id nor owner answers it.
+
+**The id cannot.** `coat_of_arms_id` is an index inside one save. Matching
+dynasties across two playthroughs by the game's own `key`, 2 of 4 497 shared
+keys had the same id.
+
+**Nor can the owner.** The intuition is that a dynasty's arms are fixed by the
+game while a house's are generated during play. Checked against the artwork
+itself, on dynasties present in two runs:
+
+| dynasty `key` | identical artwork | different |
+|---|---|---|
+| named (`welsh_ap_bleddri`, `bovisio`) | 3 | 57 |
+| numeric (`2`, `100009`) | 55 | 5 |
+
+The same result for Germania vs the HRE and Germania vs France. Named historical
+dynasties mostly get **different** arms per playthrough — CK3 generates one when
+the game files do not author it — so "is this dynasty game-defined?" does not
+predict "are its arms fixed?", and keying on the dynasty would tell the
+companion that two different pictures are the same file.
+
+**The recipe can.** `coat_of_arms.coat_of_arms_manager_database` maps an id to
+what the game draws:
+
+```
+{pattern=pattern_solid.dds, color1=red, color2=red, color3=white,
+ colored_emblem={color1=white, color2=white, texture=ce_eagle.dds,
+                 instance={scale=[0.9, 0.9]}}}
+```
+
+That **is** the picture's identity, so it is what names the image:
+`arms_<sha256(recipe)[:12]>.png`. Identical artwork gets one name in every run
+and every chronicle and is harvested once; different artwork gets different
+names. Nothing has to be classified as fixed or generated.
+
+**How much this actually saves, measured rather than guessed.** Across the three
+chronicles the manifests ask for 2 861 arms, which are 2 589 distinct images: a
+10% saving. An earlier estimate here said "roughly half", extrapolated from 58 of
+120 game-keyed dynasties present in two runs having identical artwork. That
+sample was the wrong population. The houses a chronicle wants belong mostly to
+the ruling families and their relatives, and those are **generated** houses whose
+arms are unique to the playthrough; the game-keyed dynasties that share artwork
+are largely ones no page links. The naming is still right — it can never merge
+two different pictures, and it costs nothing — but it is not where the win is.
+The win is the next section.
+
+Two things the canonical form must get right, both covered by tests:
+
+* `colored_emblem` **repeats as its own key**, once per emblem, so the recipe is
+  kept as ordered `[key, value]` pairs. A dict would keep one emblem of three
+  and collapse two different coats of arms into one name.
+* **Order is part of the recipe.** Emblems are drawn in the order listed, so two
+  definitions differing only in order are different pictures.
+
+A house whose recipe cannot be read gets no arms image at all. An id alone
+cannot identify a picture, and a name that does not identify one would ask for
+the same image twice under different names.
+
+### The companion need not capture them
+
+The recipe rides in the manifest under `definition`. Arms can therefore be
+composed offline from the game's texture files — which is what the companion's
+own roadmap wanted before portraits went the screenshot route — instead of being
+captured one at a time in-game. Portraits still have to be screenshotted; arms
+do not.

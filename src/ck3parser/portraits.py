@@ -6,7 +6,7 @@ companion project (`diegoami/ck_portrait_generator`) harvests the missing ones,
 so both sides have to derive the same name without talking to each other:
 
     portrait:  sha256(save file's base name)[:12] + "_" + character id + ".png"
-    arms:      sha256(save file's base name)[:12] + "_arms_" + coat of arms id + ".png"
+    arms:      "arms_" + sha256(the coat of arms' own recipe)[:12] + ".png"
 
 The **name** of the save file is hashed, not its contents, so either side can
 compute it without opening 70 MB, and the companion only has to keep a map from
@@ -15,9 +15,15 @@ the file names short and free of spaces and punctuation.
 
 Keying on the save rather than the date is what gives a character one portrait
 per save: the same person at three dates is three images, which is the point
-(docs/PLAN.md §7). Scoping arms by save matters for a different reason: a
-`coat_of_arms_id` is an index inside one run, so the same number means different
-arms in a different playthrough.
+(docs/PLAN.md §7).
+
+Arms are not keyed on the save at all, because they are not keyed on anything
+the save numbers. A `coat_of_arms_id` is an index inside one run, so it cannot
+name an image across runs, and whether a given coat of arms is fixed or
+generated cannot be told from the dynasty carrying it. What identifies the
+picture is the recipe the game draws it from, so that is what names it
+(:mod:`ck3parser.arms`). The same arms are then one file everywhere and are
+harvested once.
 """
 
 from __future__ import annotations
@@ -44,6 +50,10 @@ def portrait_name(save_file: str | Path, character_id: int) -> str:
     return f"{save_checksum(save_file)}_{character_id}.png"
 
 
-def arms_name(save_file: str | Path, coat_of_arms_id: int) -> str:
-    """The coat of arms of one house, as the save it was read from numbers it."""
-    return f"{save_checksum(save_file)}_arms_{coat_of_arms_id}.png"
+def arms_name(digest: str) -> str:
+    """One coat of arms, named after the recipe that draws it.
+
+    `digest` comes from :func:`ck3parser.arms.digest`, so identical artwork has
+    one name in every save and every chronicle.
+    """
+    return f"arms_{digest}.png"

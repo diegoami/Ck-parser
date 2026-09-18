@@ -6,7 +6,7 @@ from ck3parser.pipeline import gather
 from ck3parser.portraits import arms_name, portrait_name
 from ck3wiki.build import discover, main, subject_of
 from ck3wiki.manifest import chronicle_manifest
-from ck3wiki.model import Tenure, Wiki, WikiCharacter, build_wiki, clean_name
+from ck3wiki.model import Tenure, Wiki, WikiCharacter, _runs_of, build_wiki, clean_name
 from ck3wiki.render import (
     STYLE,
     e,
@@ -15,7 +15,7 @@ from ck3wiki.render import (
     render_landing,
     write_site,
 )
-from helpers import SUCCESSION_EDITS, make_save
+from helpers import SUCCESSION_EDITS, VASSAL_MOVE_EDITS, make_save
 
 
 def quiet():
@@ -47,6 +47,10 @@ def test_clean_name_drops_the_diacritic_marker_without_inventing_letters():
     assert clean_name("C_ilen") == "Cilen"  # leading letter keeps its case
     assert clean_name("SojA_") == "Soja"
     assert clean_name("Ludwig") == "Ludwig" and clean_name("") == ""
+    # the marker follows the letter it modifies, except on the first letter,
+    # where it comes in front: `_Odgrim` is Ǫdgrim
+    assert clean_name("_Odgrim") == "Odgrim"
+    assert clean_name("BuR_islav") == "Burislav"
 
 
 # ---------------------------------------------------------------- model
@@ -164,6 +168,25 @@ def test_a_portrait_is_linked_whether_or_not_it_has_been_harvested(tmp_path):
     assert not (out / "portraits" / "another-run.png").exists()
 
 
+def test_the_dead_are_never_asked_for(tmp_path):
+    # the companion harvests by switching to a character with `play <id>`, which
+    # the game refuses for the dead, so a portrait of someone already buried is
+    # work nobody can do. 1 277 of the Germania chronicle's 1 330 slots were
+    # exactly that before this was enforced.
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland")
+    founder = wiki.characters[100]
+    assert founder.death == "880.5.5" and founder.portraits == []
+    assert wiki.characters[200].portraits  # alive at 1100.6.1, so asked for
+
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    assert "<img" not in (out / "characters" / "100.html").read_text()
+    assert not any(p["character"] == 100 for p in
+                   chronicle_manifest(wiki, "s", have=set())["portraits"]
+                   if p["kind"] == "portrait")
+
+
 def test_a_character_gets_one_portrait_per_save_they_appear_in(tmp_path):
     early, late = two_snapshots(tmp_path)
     wiki = build_wiki(views(early, late), "k_testland")
@@ -196,12 +219,20 @@ def test_houses_are_read_from_the_save_and_get_a_page(tmp_path):
     assert 'href="houses/500.html"' in (out / "index.html").read_text()
 
 
-def test_a_houses_arms_are_wanted_too_and_scoped_to_the_save(tmp_path):
+def test_a_houses_arms_are_named_after_the_recipe_that_draws_them(tmp_path):
+    # the id indexes one save, so it cannot name a picture across runs; the
+    # recipe can, and the same arms are then one file everywhere
+    from ck3parser.arms import read_arms
+
     early, _ = two_snapshots(tmp_path)
     wiki = build_wiki(views(early), "k_testland")
     arms = wiki.houses[500].arms
-    assert arms is not None and arms.file == arms_name(str(early), 900)
+    recipe = read_arms(str(early), {900})[900]
+    assert arms is not None and arms.file == arms_name(recipe.digest)
+    assert "900" not in arms.file  # the id is not in the name
     assert arms.coat_of_arms_id == 900 and arms.house == 500
+    # and the recipe rides along, so a companion can draw it instead
+    assert ["pattern", "pattern_solid.dds"] in arms.definition
     out = tmp_path / "site"
     write_site(wiki, out)
     assert f'src="../portraits/{arms.file}"' in (out / "houses" / "500.html").read_text()
@@ -348,3 +379,181 @@ def test_the_infobox_is_a_grid_column_not_a_float(tmp_path):
     assert not re.search(r"float\s*:\s*(left|right)", STYLE)  # the declaration, not the prose
     page_html = (out / "titles" / "k_testland.html").read_text()
     assert '<div class="page">' in page_html and '<aside class="infobox card">' in page_html
+
+
+# ---------------------------------------------------------------- vassalage
+
+
+def test_stretches_collapse_and_carry_their_bounds():
+    snaps = ["1100.6.1", "1110.1.1", "1120.1.1"]
+    # same liege throughout: one stretch, open, and no lower bound to give
+    one = _runs_of({d: "k_testland" for d in snaps}, snaps)
+    assert len(one) == 1 and one[0].open
+    assert one[0].began == "by 1100.6.1" and one[0].ended == ""
+
+    # a change between the last two: the date is unknown, the bounds are not
+    two = _runs_of({"1100.6.1": "k_testland", "1110.1.1": "k_testland", "1120.1.1": "c_test"}, snaps)
+    assert [v.liege for v in two] == ["k_testland", "c_test"]
+    assert two[0].ended == "1110.1.1 – 1120.1.1" and not two[0].open
+    assert two[1].began == "1110.1.1 – 1120.1.1" and two[1].open
+
+
+def test_independence_is_a_liege_of_none_and_absence_is_not():
+    snaps = ["1100.6.1", "1110.1.1", "1120.1.1"]
+    free = _runs_of({d: None for d in snaps}, snaps)
+    assert len(free) == 1 and free[0].liege is None
+
+    # absent from the middle save: we did not see it under anyone, so the
+    # stretch breaks rather than bridging a gap we cannot see across
+    gap = _runs_of({"1100.6.1": "k_testland", "1120.1.1": "k_testland"}, snaps)
+    assert [v.liege for v in gap] == ["k_testland", "k_testland"]
+    assert gap[0].ended == "1100.6.1 – 1110.1.1"
+    assert gap[1].began == "1110.1.1 – 1120.1.1"
+
+
+def test_a_vassal_that_moves_is_seen_by_the_snapshots_disagreeing(tmp_path):
+    early = make_save(tmp_path / "a_1100.ck3", date="1100.6.1", seed=7, random_count=100)
+    late = make_save(
+        tmp_path / "b_1120.ck3", date="1120.1.1", seed=7, random_count=200, edits=VASSAL_MOVE_EDITS
+    )
+    wiki = build_wiki(views(early, late), "k_testland")
+    moved = wiki.titles["x_mc_0"].vassalage(wiki.snapshots)
+    assert [v.liege for v in moved] == ["k_testland", "c_test"]
+    assert moved[1].began == "1100.6.1 – 1120.1.1"
+    # and it is gone from the subject's vassals in the later snapshot
+    kingdom = wiki.titles["k_testland"]
+    assert "x_mc_0" in kingdom.vassals["1100.6.1"]
+    assert "x_mc_0" not in kingdom.vassals["1120.1.1"]
+
+
+def test_a_liege_outside_the_lineage_is_named_not_assumed(tmp_path):
+    # the old code asserted every non-subject title's liege to be the subject,
+    # because that is how it was selected; the save is asked instead
+    early = make_save(tmp_path / "a_1100.ck3", date="1100.6.1", seed=7, random_count=100)
+    late = make_save(
+        tmp_path / "b_1120.ck3", date="1120.1.1", seed=7, random_count=200, edits=VASSAL_MOVE_EDITS
+    )
+    wiki = build_wiki(views(early, late), "k_testland")
+    assert wiki.titles["x_mc_0"].liege == "c_test"  # its newest answer, not the subject
+    assert wiki.titles["k_testland"].liege is None  # the subject answers to nobody
+
+
+def test_the_subject_page_says_what_joined_and_left(tmp_path):
+    early = make_save(tmp_path / "a_1100.ck3", date="1100.6.1", seed=7, random_count=100)
+    late = make_save(
+        tmp_path / "b_1120.ck3", date="1120.1.1", seed=7, random_count=200, edits=VASSAL_MOVE_EDITS
+    )
+    wiki = build_wiki(views(early, late), "k_testland")
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    kingdom_page = (out / "titles" / "k_testland.html").read_text()
+    assert "<h2>Vassalage</h2>" in kingdom_page
+    assert "1 left" in kingdom_page and "Between <strong>1100.6.1</strong>" in kingdom_page
+
+    moved_page = (out / "titles" / "x_mc_0.html").read_text()
+    assert "1100.6.1 – 1120.1.1" in moved_page
+    assert '../titles/c_test.html' in moved_page
+
+
+def test_vassalage_never_claims_a_date_the_save_does_not_give(tmp_path):
+    # the whole point: a save says who holds a title and since when, but never
+    # who its liege has been, so no exact date may appear for a change
+    early = make_save(tmp_path / "a_1100.ck3", date="1100.6.1", seed=7, random_count=100)
+    late = make_save(
+        tmp_path / "b_1120.ck3", date="1120.1.1", seed=7, random_count=200, edits=VASSAL_MOVE_EDITS
+    )
+    wiki = build_wiki(views(early, late), "k_testland")
+    for stretch in wiki.titles["x_mc_0"].vassalage(wiki.snapshots):
+        for phrase in (stretch.began, stretch.ended):
+            if phrase:
+                # "by X" or a window "X – Y"; never a bare date claiming to be
+                # the day it happened
+                assert phrase.startswith("by ") or " – " in phrase, phrase
+
+
+# ---------------------------------------------------------------- family
+
+
+def test_family_reaches_the_character_pages(tmp_path):
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland")
+    parent = wiki.characters[200]
+    assert parent.children == [203, 204] and parent.spouses == [202]
+    assert parent.has_family
+
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    page_html = (out / "characters" / "200.html").read_text()
+    assert "<h2>Family</h2>" in page_html and "Children" in page_html
+    assert "Spouse" in page_html
+
+
+def test_the_direct_line_is_promoted_to_pages_of_its_own(tmp_path):
+    # holding a title is what puts the others in; these are here by blood or
+    # marriage. 202 is a spouse, 203 and 204 are children, and none of them
+    # hold anything in this lineage.
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland")
+    for cid in (202, 203, 204):
+        assert cid in wiki.characters, cid
+    assert wiki.characters[203].parents == [200, 202]
+    assert wiki.characters[203].siblings == [204]
+
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    assert (out / "characters" / "202.html").is_file()
+    assert '../characters/202.html' in (out / "characters" / "200.html").read_text()
+
+
+def test_a_sibling_of_nobody_in_the_line_stays_page_less(tmp_path):
+    # siblings are named but not promoted: for Germania that would be 689 more
+    # pages, mostly dead ends
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland")
+    from ck3wiki.model import direct_line
+
+    assert 204 not in direct_line(wiki.characters[203])  # a sibling, not the line
+    assert 200 in direct_line(wiki.characters[203]) and 202 in direct_line(wiki.characters[203])
+
+
+def test_a_promoted_characters_house_is_resolved_too(tmp_path):
+    # houses used to be read before the promotion, so everyone it brought in
+    # showed a bare house id tagged "not in this wiki"
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland")
+    for record in wiki.characters.values():
+        if record.house is not None:
+            assert record.house in wiki.houses, record.id
+
+
+def test_kin_can_be_left_out_and_are_then_only_named(tmp_path):
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland", with_kin=False)
+    assert 202 not in wiki.characters  # holds no title in this lineage
+    assert wiki.relatives[202].name == "Spouse" and wiki.relatives[202].birth == "1062.2.2"
+    assert wiki.named(202) == "Spouse"
+
+
+def test_family_can_be_skipped_because_it_costs_a_full_pass(tmp_path):
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland", with_family=False)
+    assert not wiki.characters[200].has_family and wiki.relatives == {}
+
+
+def test_a_marriage_that_ended_is_listed_once_as_former(tmp_path):
+    # the older save has them under `spouse`, the newer under `former_spouses`;
+    # unioning both would name the person twice on the page
+    from ck3wiki.model import WikiCharacter, _merge_family
+    from ck3parser.family import Family
+
+    record = WikiCharacter(id=1, spouses=[9])
+    _merge_family(record, Family(id=1, former_spouses=[9]))
+    assert record.spouses == [] and record.former_spouses == [9]
+
+
+def test_family_unions_across_snapshots(tmp_path):
+    # a later save knows of more children, never fewer, and an older one is the
+    # only source for anyone the newest has pruned
+    early, late = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early, late), "k_testland")
+    assert wiki.characters[200].children == [203, 204]

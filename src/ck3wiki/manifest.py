@@ -27,7 +27,11 @@ from ck3parser.portraits import IMAGE_DIR
 from .model import Wiki
 
 #: Bumped when the shape changes in a way a consumer has to notice.
-SCHEMA = "ck3-images/1"
+#:
+#: 2: an arms `file` is named after the coat of arms' recipe rather than the
+#:    save and id, so the same key means a different thing; `definition` added.
+#:    Portrait names are unchanged.
+SCHEMA = "ck3-images/2"
 
 #: The manifest's name, in each chronicle and at the root.
 MANIFEST = "portraits.json"
@@ -50,7 +54,12 @@ def wanted_images(wiki: Wiki, have: set[str]) -> list[dict]:
                 "have": portrait.file in have,
             }
         )
+    seen: set[str] = set()
     for arms in wiki.wanted_arms:
+        # the same picture is one image: two houses drawn the same way ask once
+        if arms.file in seen:
+            continue
+        seen.add(arms.file)
         out.append(
             {
                 "file": arms.file,
@@ -61,6 +70,9 @@ def wanted_images(wiki: Wiki, have: set[str]) -> list[dict]:
                 "coat_of_arms_id": arms.coat_of_arms_id,
                 "page": f"houses/{arms.house}.html",
                 "have": arms.file in have,
+                # the recipe the game draws from, so this need not be captured
+                # in-game at all: pattern, colours and emblem textures
+                "definition": arms.definition,
             }
         )
     return out

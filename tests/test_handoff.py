@@ -14,6 +14,7 @@ from ck3parser.handoff import (
     select,
     slug,
 )
+from ck3parser.arms import read_arms
 from ck3parser.dynasties import find_dynasties, find_houses
 from ck3parser.portraits import arms_name, portrait_name
 from ck3parser.parser import parse_text
@@ -83,7 +84,7 @@ def test_houses_are_handed_off_with_their_arms(tmp_path):
     assert house.dynasty_id == 50 and house.coat_of_arms_id == 900
     assert house.name == "of Test" and house.found_date == "1040.3.2"
     assert house.motto == "motto_x_under_y_king"
-    assert house.arms_file == arms_name(save, 900)
+    assert house.arms_file == arms_name(read_arms(save, {900})[900].digest)
     assert house.dynasty_name == "Test"
 
 
@@ -91,10 +92,13 @@ def test_a_handed_off_house_uses_its_own_arms_when_it_has_them(tmp_path):
     # house 502's own 901 beats dynasty 50's 900, exactly as the wiki page does
     save = str(make_save(tmp_path / "a.ck3"))
     house = find_houses(save, {502})[502]
-    described = describe_house(house, find_dynasties(save, {50})[50], "1100.6.1", save)
+    recipe = read_arms(save, {901})[901]
+    described = describe_house(house, find_dynasties(save, {50})[50], "1100.6.1", recipe)
     assert described.coat_of_arms_id == 901
-    assert described.arms_file == arms_name(save, 901)
+    assert described.arms_file == arms_name(recipe.digest)
     assert described.name == "Munso"
+    # 900 and 901 are drawn differently, so they are different files
+    assert read_arms(save, {900})[900].digest != recipe.digest
 
 
 def test_slug_makes_a_filename_safe_date():
@@ -131,7 +135,7 @@ def test_cli_writes_the_houses_beside_the_characters(tmp_path):
     rows = list(csv.DictReader((out / "houses_1100_6_1.csv").open()))
     assert list(rows[0]) == list(HOUSE_COLUMNS)
     assert rows[0]["house_id"] == "500" and rows[0]["coat_of_arms_id"] == "900"
-    assert rows[0]["arms_file"].endswith("_arms_900.png")
+    assert rows[0]["arms_file"].startswith("arms_") and rows[0]["arms_file"].endswith(".png")
 
 
 def test_the_list_changes_with_the_snapshot(tmp_path):

@@ -14,9 +14,10 @@ preferred when it is there.
 
 Verified on the 1364 save: of 48 099 dynasties, 45 689 have `coat_of_arms_id`,
 41 128 a `name`, 2 210 a `localized_name`, 6 320 a `prefix`, and only 4 761 a
-`key` — and a dynasty's `key` is a bare number (`"2"`), not a readable name, so
-it is never used for display. A **house**'s `key` is the opposite: `house_munso`
-is exactly the name, and is the fallback for a house with no `name` of its own.
+`key`. That `key` is the game's own identifier and is **not** a display name:
+sometimes a number (`"2"`), sometimes a slug (`"welsh_ap_bleddri"`, `"bovisio"`),
+so it is never shown. A **house**'s `key` is the opposite: `house_munso` is
+exactly the name, and is the fallback for a house with no `name` of its own.
 
 A house may carry its own `coat_of_arms_id`, and then that one wins; only a
 house without one inherits its dynasty's.
