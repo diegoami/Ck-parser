@@ -24,26 +24,34 @@ from __future__ import annotations
 
 import argparse
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ck3graph.loader import (
     DryRunSession,
     Neo4jConfig,
+    Titled,
     holder_intervals,
+    load_house,
+    load_people,
     load_snapshot,
     load_title,
-    load_vassal_edge,
+    load_vassalage,
     open_session,
 )
+from ck3graph.people import stream_people
 
+from .arms import read_arms
 from .consistency import check_snapshots
 from .container import open_gamestate_text
+from .dynasties import arms_id, find_dynasties, find_houses
 from .filter import is_filler
 from .fingerprint import Fingerprint, fingerprint
-from .parser import Block, PushbackLines, iter_children
+from .parser import Block, PushbackLines, date_key, iter_children
+from .portraits import arms_name
 from .runs import Run, scan
 from .titles import TitleIndex, TitleRecord, build_index
+from .vassalage import INDEPENDENT, stretches
 
 CHARACTER_SECTIONS = (("living",), ("dead_unprunable",), ("characters", "dead_prunable"))
 
@@ -120,7 +128,13 @@ def gather(save_path: str, title_key: str, with_vassals: bool = True, log=None) 
 
 
 def load_view(session, view: SnapshotView) -> None:
-    """Write one snapshot's lineage. Every statement is a ``MERGE``."""
+    """Write one snapshot's lineage. Every statement is a ``MERGE``.
+
+    Vassalage is *not* written here. A save has no vassalage history, so who a
+    title answered to is only known between snapshots and cannot be written
+    until all of them have been asked (docs/PLAN.md §9); that is
+    :class:`Observations`' job, at the end of the run.
+    """
     load_snapshot(session, view.fp)
     for record in view.titles:
         intervals = holder_intervals(
@@ -134,11 +148,101 @@ def load_view(session, view: SnapshotView) -> None:
             intervals,
             {cid: char for cid, char in view.characters.items() if cid in holders},
         )
-    for record in view.vassals:
-        load_vassal_edge(session, record, view.target, view.fp, kind="de_facto")
-        de_jure = view.index.resolve(record.de_jure_liege)
-        if de_jure is not None and de_jure.key != view.target.key:
-            load_vassal_edge(session, record, de_jure, view.fp, kind="de_jure")
+
+
+@dataclass
+class Observations:
+    """Who each title answered to, at every snapshot, until the run is done.
+
+    A save says who a title's liege **is** and never who it has been, so a
+    change of liege is only ever known to have happened between two snapshots
+    and a stretch cannot be written before the last one is read (docs/PLAN.md
+    §9).
+
+    What is kept is one liege key per title per date -- short strings -- and the
+    names needed to label an edge. The snapshot's `TitleIndex` is not kept: it
+    carries 107 328 history entries and is the expensive thing in a run, so it
+    is released with the view that built it.
+
+    Every title in the index is observed, not just the lineage, because a title
+    that leaves the lineage is not lost: the save still says who took it, which
+    is worth more than recording it under the subject because that is how it was
+    selected. Only the lineage's own titles get edges, which is decided at the
+    end, when the union across snapshots is known.
+    """
+
+    snapshots: list[str] = field(default_factory=list)
+    lineage: set[str] = field(default_factory=set)
+    names: dict[str, Titled] = field(default_factory=dict)
+    de_facto: dict[str, dict[str, str | None]] = field(default_factory=dict)
+    de_jure: dict[str, dict[str, str | None]] = field(default_factory=dict)
+
+    def add(self, view: SnapshotView) -> None:
+        date = view.fp.date
+        self.snapshots.append(date)
+        self.lineage.update(view.keys)
+        for record in view.index.by_key.values():
+            self.names[record.key] = Titled(record.key, record.display_name, record.tier)
+            for liege_idx, observed in (
+                (record.de_facto_liege, self.de_facto),
+                (record.de_jure_liege, self.de_jure),
+            ):
+                liege = view.index.resolve(liege_idx)
+                observed.setdefault(record.key, {})[date] = liege.key if liege else INDEPENDENT
+
+    def emit(self, session) -> int:
+        """Write one edge per stretch, for the lineage's titles. Returns the count."""
+        order = sorted(self.snapshots, key=date_key)
+        written = 0
+        for key in sorted(self.lineage):
+            vassal = self.names.get(key) or Titled(key)
+            for kind, observed in (("de_facto", self.de_facto), ("de_jure", self.de_jure)):
+                for stretch in stretches(observed.get(key, {}), order):
+                    # independence is the absence of an edge, never an edge to
+                    # nobody: a title that answered to no one has nothing to
+                    # point at, and the node's own first_seen/last_seen is what
+                    # tells that apart from a title we did not see
+                    if stretch.liege is None or stretch.liege == key:
+                        continue
+                    liege = self.names.get(stretch.liege) or Titled(stretch.liege)
+                    load_vassalage(session, vassal, liege, stretch, kind=kind)
+                    written += 1
+        return written
+
+
+def load_houses(session, saves: list[str], wanted: set[int], log=None) -> int:
+    """Resolve the houses the loaded characters belong to, newest save first.
+
+    Newest first, then older ones for whatever it could not resolve: a run
+    prunes, so a house every living member has left may only still be in an old
+    snapshot. The arms are named after the recipe that draws them, never after
+    the save's `coat_of_arms_id`, so the graph points at the same image file the
+    wiki links (docs/PLAN.md §11).
+    """
+    log = sys.stderr if log is None else log
+    found: set[int] = set()
+    for save_file in reversed(saves):
+        missing = wanted - found
+        if not missing:
+            break
+        houses = find_houses(save_file, missing)
+        dynasties = find_dynasties(
+            save_file, {h.dynasty for h in houses.values() if h.dynasty is not None}
+        )
+        coats = {
+            house_id: (house, dynasties.get(house.dynasty) if house.dynasty is not None else None)
+            for house_id, house in houses.items()
+        }
+        recipes = read_arms(save_file, {c for c in (arms_id(h, d) for h, d in coats.values()) if c})
+        for house_id, (house, dynasty) in coats.items():
+            coat = arms_id(house, dynasty)
+            recipe = recipes.get(coat) if coat is not None else None
+            # no recipe, no name: a coat_of_arms_id indexes one save and names
+            # no picture, so an id alone cannot say which image is wanted
+            load_house(session, house, dynasty, arms_name(recipe.digest) if recipe else None)
+            found.add(house_id)
+    print(f"  houses: {len(wanted)} wanted, {len(found)} resolved", file=log)
+    return len(found)
 
 
 def resolve_saves(path: str, run_id: str | None = None, log=None) -> list[str]:
@@ -172,6 +276,7 @@ def run(
     with_vassals: bool = True,
     run_id: str | None = None,
     check: bool = True,
+    with_people: bool = False,
 ) -> int:
     try:
         saves = resolve_saves(save_path, run_id)
@@ -183,6 +288,8 @@ def run(
     session = DryRunSession() if dry_run else open_session(Neo4jConfig.from_env())
     with session:
         previous: SnapshotView | None = None
+        observed = Observations()
+        houses: set[int] = set()
         loaded = 0
         for path in saves:
             try:
@@ -205,8 +312,28 @@ def run(
                     print(f"  disagreement: {warning}", file=sys.stderr)
                 warnings += found
             load_view(session, view)
+            observed.add(view)
+            houses.update(
+                house for char in view.characters.values()
+                if isinstance(house := char.get("dynasty_house"), int)
+            )
+            if with_people:
+                counts = load_people(session, view.fp, stream_people(view.fp.file))
+                print(
+                    "  everyone: "
+                    + ", ".join(f"{n} {what}" for what, n in counts.items() if n)
+                    + " (rows; a marriage is named by both records and merges into one edge)",
+                    file=sys.stderr,
+                )
             loaded += 1
             previous = view
+
+        if loaded:
+            # both need every snapshot read first: a vassalage stretch is only
+            # known between two of them, and a house may survive only in an old
+            # one
+            print(f"  vassalage: {observed.emit(session)} stretch(es)", file=sys.stderr)
+            load_houses(session, saves, houses)
 
     if not loaded:
         print(f"title {title_key!r} not found in any of the {len(saves)} save(s)", file=sys.stderr)
@@ -225,6 +352,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-vassals", action="store_true", help="load the title alone, without its vassals")
     ap.add_argument("--run", dest="run_id", help="which run to load when a directory holds several")
     ap.add_argument("--no-check", action="store_true", help="skip the checks between consecutive snapshots")
+    ap.add_argument(
+        "--people",
+        action="store_true",
+        help="also load every character in the save and their family edges (a full pass per snapshot)",
+    )
     args = ap.parse_args(argv)
     return run(
         args.save,
@@ -233,6 +365,7 @@ def main(argv: list[str] | None = None) -> int:
         with_vassals=not args.no_vassals,
         run_id=args.run_id,
         check=not args.no_check,
+        with_people=args.people,
     )
 
 

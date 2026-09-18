@@ -14,8 +14,9 @@ from pathlib import Path
 
 from ck3parser.parser import date_key
 from ck3parser.portraits import IMAGE_DIR
+from ck3parser.vassalage import Vassalage
 
-from .model import Image, Vassalage, Wiki, WikiCharacter, WikiHouse, WikiTitle
+from .model import Image, Wiki, WikiCharacter, WikiHouse, WikiTitle
 
 STYLE = """\
 :root {

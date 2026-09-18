@@ -6,7 +6,7 @@ from ck3parser.pipeline import gather
 from ck3parser.portraits import arms_name, portrait_name
 from ck3wiki.build import discover, main, subject_of
 from ck3wiki.manifest import chronicle_manifest
-from ck3wiki.model import Tenure, Wiki, WikiCharacter, _runs_of, build_wiki, clean_name
+from ck3wiki.model import Tenure, Wiki, WikiCharacter, build_wiki, clean_name
 from ck3wiki.render import (
     STYLE,
     e,
@@ -385,33 +385,6 @@ def test_the_infobox_is_a_grid_column_not_a_float(tmp_path):
 
 
 # ---------------------------------------------------------------- vassalage
-
-
-def test_stretches_collapse_and_carry_their_bounds():
-    snaps = ["1100.6.1", "1110.1.1", "1120.1.1"]
-    # same liege throughout: one stretch, open, and no lower bound to give
-    one = _runs_of({d: "k_testland" for d in snaps}, snaps)
-    assert len(one) == 1 and one[0].open
-    assert one[0].began == "by 1100.6.1" and one[0].ended == ""
-
-    # a change between the last two: the date is unknown, the bounds are not
-    two = _runs_of({"1100.6.1": "k_testland", "1110.1.1": "k_testland", "1120.1.1": "c_test"}, snaps)
-    assert [v.liege for v in two] == ["k_testland", "c_test"]
-    assert two[0].ended == "1110.1.1 – 1120.1.1" and not two[0].open
-    assert two[1].began == "1110.1.1 – 1120.1.1" and two[1].open
-
-
-def test_independence_is_a_liege_of_none_and_absence_is_not():
-    snaps = ["1100.6.1", "1110.1.1", "1120.1.1"]
-    free = _runs_of({d: None for d in snaps}, snaps)
-    assert len(free) == 1 and free[0].liege is None
-
-    # absent from the middle save: we did not see it under anyone, so the
-    # stretch breaks rather than bridging a gap we cannot see across
-    gap = _runs_of({"1100.6.1": "k_testland", "1120.1.1": "k_testland"}, snaps)
-    assert [v.liege for v in gap] == ["k_testland", "k_testland"]
-    assert gap[0].ended == "1100.6.1 – 1110.1.1"
-    assert gap[1].began == "1110.1.1 – 1120.1.1"
 
 
 def test_a_vassal_that_moves_is_seen_by_the_snapshots_disagreeing(tmp_path):
