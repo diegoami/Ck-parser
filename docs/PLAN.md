@@ -994,10 +994,26 @@ Every one of the 1364 save's **12 915 titles** carries a `coat_of_arms_id`,
 which the title parser used to drop. They are resolved the same way and shown in
 the title page's infobox.
 
-Because the name comes from the recipe rather than from who bears it, **a title
-and the house holding it share one file** whenever they are drawn alike — which
-is common, since a realm usually flies its ruling house's arms. The manifest
-collapses them into one request and lists every bearer under `borne_by`:
+Because the name comes from the recipe rather than from who bears it, a title
+and the house holding it **share one file** whenever they are drawn alike. That
+turns out to be the exception rather than the rule. Measured on the Germania
+chronicle, 924 arms images with 944 bearers between them:
+
+| Shared between | Images |
+|---|---|
+| two houses | 13 |
+| a title and a house | **4** |
+| two titles | 1 |
+| borne by one thing only | 906 |
+
+So only 4 of the 68 titles fly a house's arms — the guess that a realm usually
+flies its ruling house's was wrong, and adding titles added 63 genuinely new
+images rather than mostly duplicates. The collapsing is still right and still
+free; it is simply worth less than it looks, as with the cross-run dedup in the
+section above.
+
+The manifest collapses shared images into one request and lists every bearer
+under `borne_by`:
 
 ```json
 { "file": "arms_750fc7e0a608.png", "kind": "arms", "title": "c_test",
