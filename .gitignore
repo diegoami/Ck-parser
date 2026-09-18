@@ -2,6 +2,7 @@
 *.ck3
 gamestate
 runs.json
+handoff/
 
 .env
 .venv/
