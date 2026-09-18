@@ -632,10 +632,12 @@ and name a parent dynasty in `dynasties.dynasties`, which is where
 
 Verified on the 1364 save: 49 891 houses, 48 099 dynasties. Of the dynasties,
 45 689 have a `coat_of_arms_id`, 41 128 a `name` key, 2 210 a plain
-`localized_name`, 6 320 a `prefix` key, and 4 761 a `key` — and that `key` is a
-bare number (`"2"`), not a readable name, so it is never used for display. A
-house may have no name of its own, and then the dynasty's name is the one to
-show. Houses the game shipped with are dated `9999.1.1`, a sentinel, not a
+`localized_name`, 6 320 a `prefix` key, and 4 761 a `key`. That `key` is the
+game's own identifier, not a display name: sometimes a number (`"2"`), sometimes
+a slug (`"welsh_ap_bleddri"`, `"bovisio"`), so it is never shown. An earlier note
+here said it was always a number, which was read off the first four records and
+was wrong. A house may have no name of its own, and then the dynasty's name is
+the one to show. Houses the game shipped with are dated `9999.1.1`, a sentinel, not a
 founding date.
 
 Houses go into the hand-off beside the characters, one `houses_<date>.csv` per
