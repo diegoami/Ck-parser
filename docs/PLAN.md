@@ -988,6 +988,26 @@ A house whose recipe cannot be read gets no arms image at all. An id alone
 cannot identify a picture, and a name that does not identify one would ask for
 the same image twice under different names.
 
+### Titles bear arms too
+
+Every one of the 1364 save's **12 915 titles** carries a `coat_of_arms_id`,
+which the title parser used to drop. They are resolved the same way and shown in
+the title page's infobox.
+
+Because the name comes from the recipe rather than from who bears it, **a title
+and the house holding it share one file** whenever they are drawn alike — which
+is common, since a realm usually flies its ruling house's arms. The manifest
+collapses them into one request and lists every bearer under `borne_by`:
+
+```json
+{ "file": "arms_750fc7e0a608.png", "kind": "arms", "title": "c_test",
+  "page": "titles/c_test.html",
+  "borne_by": ["titles/c_test.html", "houses/500.html"], ... }
+```
+
+An entry carries `title` or `house`, never both, naming whichever bearer the
+manifest saw first; `borne_by` is the full list.
+
 ### The companion need not capture them
 
 The recipe rides in the manifest under `definition`. Arms can therefore be

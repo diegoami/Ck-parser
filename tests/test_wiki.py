@@ -239,7 +239,10 @@ def test_a_houses_arms_are_named_after_the_recipe_that_draws_them(tmp_path):
     entry = next(
         p for p in chronicle_manifest(wiki, "s", have=set())["portraits"] if p["file"] == arms.file
     )
-    assert entry["kind"] == "arms" and entry["page"] == "houses/500.html" and not entry["have"]
+    # c_test bears the same arms, so the two collapse to one request that names
+    # both bearers rather than two requests for the same picture
+    assert entry["kind"] == "arms" and not entry["have"]
+    assert set(entry["borne_by"]) == {"titles/c_test.html", "houses/500.html"}
 
 
 def test_the_manifest_lists_every_wanted_image_and_what_is_missing(tmp_path):
@@ -601,3 +604,46 @@ def test_a_directory_with_no_release_index_says_nothing_about_releases(tmp_path)
     main([str(tmp_path), "--title", "k_testland", "--out", str(out)])
     chronicle = json.loads((out / "7-1-6-1-2" / "portraits.json").read_text())
     assert all("release" not in s for s in chronicle["saves"])
+
+
+def test_a_title_bears_arms_of_its_own(tmp_path):
+    # all 12 915 titles of the 1364 save carry a coat_of_arms_id, and the title
+    # parser used to drop it
+    from ck3parser.arms import read_arms
+
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland")
+    arms = wiki.titles["k_testland"].arms
+    recipe = read_arms(str(early), {902})[902]
+    assert arms is not None and arms.file == arms_name(recipe.digest)
+    assert arms.title == "k_testland" and arms.house == 0
+    assert arms.page == "titles/k_testland.html"
+    assert ["pattern", "pattern_checkers_01.dds"] in arms.definition
+
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    assert f'src="../portraits/{arms.file}"' in (out / "titles" / "k_testland.html").read_text()
+
+
+def test_a_title_and_a_house_drawn_alike_share_one_file(tmp_path):
+    # c_test and house 500 both use recipe 900, so they are one image: the name
+    # comes from the recipe, never from who bears it
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland")
+    county = wiki.titles["c_test"].arms
+    house = wiki.houses[500].arms
+    assert county is not None and house is not None
+    assert county.file == house.file
+    assert county.title == "c_test" and house.house == 500
+
+    wanted = [a.file for a in wiki.wanted_arms]
+    entries = [p for p in chronicle_manifest(wiki, "s", have=set())["portraits"]
+               if p["kind"] == "arms"]
+    assert wanted.count(county.file) == 2  # two bearers
+    assert [e["file"] for e in entries].count(county.file) == 1  # one request
+
+
+def test_title_arms_are_a_different_picture_from_the_houses(tmp_path):
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland")
+    assert wiki.titles["k_testland"].arms.file != wiki.houses[500].arms.file

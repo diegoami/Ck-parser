@@ -83,6 +83,10 @@ uv run python -m ck3wiki.build saves --out site --no-kin                 # ... t
 - A coat-of-arms recipe keeps repeated keys and their order: `colored_emblem`
   appears once per emblem and they are drawn in the order listed. Never put one
   in a dict, and never sort it.
+- Titles carry a `coat_of_arms_id` as well as houses — all 12 915 of them in the
+  1364 save. A title and the house holding it usually bear the same arms and
+  then share one image, because the name comes from the recipe and not from the
+  bearer. `Arms.title` or `Arms.house` is set, never both (PLAN.md §11).
 - A character is harvestable only if they are in `living` AND have no
   `dead_data`; someone who died on the save's date satisfies only the first.
   This binds the **wiki** as much as the hand-off: never link a portrait slot

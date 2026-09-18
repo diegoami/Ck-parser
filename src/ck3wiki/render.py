@@ -242,7 +242,7 @@ def tenure_rows(wiki: Wiki, title: WikiTitle, depth: int) -> str:
     return "".join(out)
 
 
-def render_title(wiki: Wiki, title: WikiTitle, top: bool = False) -> str:
+def render_title(wiki: Wiki, title: WikiTitle, have: set[str], top: bool = False) -> str:
     heading = f'{TIER_WORD.get(title.tier or "", "Title")} of {title.name}'
     info = rows(
         [
@@ -251,6 +251,7 @@ def render_title(wiki: Wiki, title: WikiTitle, top: bool = False) -> str:
             ("Current holder", character_link(wiki, title.holder, 1) if title.holder else ""),
             ("Liege", title_link(wiki, title.liege, 1) if title.liege else ""),
             ("De jure liege", title_link(wiki, title.de_jure_liege, 1) if title.de_jure_liege else ""),
+            ("Arms id", f"<code>{title.arms.coat_of_arms_id}</code>" if title.arms else ""),
             ("Rulers recorded", str(len(title.tenures))),
             # not "seen in saves": a title can be in a save without being in the
             # lineage, and the vassalage table below says so
@@ -258,7 +259,8 @@ def render_title(wiki: Wiki, title: WikiTitle, top: bool = False) -> str:
              else f"{e(title.first_seen)} – {e(title.last_seen)}"),
         ]
     )
-    body = [f'<div class="page"><aside class="infobox card"><table>{info}</table></aside>',
+    arms = image_slot(title.arms, 1, f"Arms of {title.name}", "coat of arms", have, kind="arms")
+    body = [f'<div class="page"><aside class="infobox card">{arms}<table>{info}</table></aside>',
             '<div class="content">']
     body.append("<h2>Succession</h2>")
     if title.tenures:
@@ -534,7 +536,9 @@ def write_site(wiki: Wiki, out: Path, portraits: Path | None = None, top: bool =
     pages = 1
     (out / "index.html").write_text(render_index(wiki, have, top), encoding="utf-8")
     for title in wiki.titles.values():
-        (out / "titles" / f"{title.key}.html").write_text(render_title(wiki, title, top), encoding="utf-8")
+        (out / "titles" / f"{title.key}.html").write_text(
+            render_title(wiki, title, have, top), encoding="utf-8"
+        )
         pages += 1
     for character in wiki.characters.values():
         (out / "characters" / f"{character.id}.html").write_text(

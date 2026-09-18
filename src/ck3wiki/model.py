@@ -85,7 +85,12 @@ class Portrait(Image):
 
 @dataclass
 class Arms(Image):
-    """A house's coat of arms, named after the recipe that draws it.
+    """A coat of arms, named after the recipe that draws it.
+
+    It belongs to a **house** or a **title**, never both: a house sets `house`
+    and a title sets `title`. The two can still share a file, because the name
+    comes from the recipe rather than the owner, and a title often bears the
+    arms of the house that holds it.
 
     `save` and `checksum` say where the recipe was read from, which is what
     `coat_of_arms_id` indexes; the file name does not depend on either, because
@@ -93,9 +98,15 @@ class Arms(Image):
     """
 
     coat_of_arms_id: int = 0
-    house: int = 0
+    house: int = 0  #: 0 when a title bears these arms
+    title: str = ""  #: empty when a house bears these arms
     #: the recipe itself, so a companion can draw the arms instead of capturing
     definition: object = None
+
+    @property
+    def page(self) -> str:
+        """The page that shows them, which is what the manifest points at."""
+        return f"titles/{self.title}.html" if self.title else f"houses/{self.house}.html"
 
 
 @dataclass
@@ -235,6 +246,7 @@ class WikiTitle:
     de_jure_liege: str | None = None
     vassals: dict[str, list[str]] = field(default_factory=dict)  #: snapshot date -> vassal keys
     lieges: dict[str, str | None] = field(default_factory=dict)  #: snapshot date -> liege key
+    arms: Arms | None = None
     first_seen: str | None = None
     last_seen: str | None = None
 
@@ -303,10 +315,10 @@ class Wiki:
 
     @property
     def wanted_arms(self) -> list[Arms]:
-        """Every coat of arms the wiki links, in house order."""
-        return [
-            self.houses[h].arms for h in sorted(self.houses) if self.houses[h].arms is not None
-        ]
+        """Every coat of arms the wiki links: the titles' first, then the houses'."""
+        titled = [self.titles[k].arms for k in sorted(self.titles) if self.titles[k].arms]
+        housed = [self.houses[h].arms for h in sorted(self.houses) if self.houses[h].arms]
+        return [*titled, *housed]
 
 
     @property
@@ -433,7 +445,41 @@ def build_wiki(
     # after the family, never before it: promoting the direct line brings in
     # characters of its own, and their houses have to be resolved too
     _load_houses(wiki, views)
+    _load_title_arms(wiki, views)
     return wiki
+
+
+def _load_title_arms(wiki: Wiki, views: list[SnapshotView]) -> None:
+    """Every title bears arms too -- all 12 915 of the 1364 save carry an id.
+
+    Newest save first, as for houses, because a title the newest save has
+    destroyed is still in an older one. A title and the house holding it often
+    bear the same arms, and then they share a file: the name comes from the
+    recipe, not from who bears it.
+    """
+    for view in reversed(views):
+        missing = {key for key, title in wiki.titles.items() if title.arms is None}
+        if not missing:
+            return
+        save_file = view.fp.file
+        coats: dict[str, int] = {}
+        for key in missing:
+            record = view.index.get(key)
+            if record is not None and record.coat_of_arms_id is not None:
+                coats[key] = record.coat_of_arms_id
+        recipes = read_arms(save_file, set(coats.values()))
+        for key, coat in coats.items():
+            recipe = recipes.get(coat)
+            if recipe is None:
+                continue
+            wiki.titles[key].arms = Arms(
+                file=arms_name(recipe.digest),
+                save=Path(save_file).name,
+                checksum=save_checksum(save_file),
+                coat_of_arms_id=coat,
+                title=key,
+                definition=recipe.definition,
+            )
 
 
 def _merge_family(record: WikiCharacter, family: Family) -> None:
