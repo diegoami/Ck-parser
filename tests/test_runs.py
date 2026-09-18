@@ -30,13 +30,24 @@ def test_tier1_splits_on_backwards_counter(tmp_path):
     assert len(runs) == 2 and "random_count decreases" in runs[0].warnings[0]
 
 
-def test_tier1_flags_duplicate_and_version_change(tmp_path):
+def test_tier1_flags_a_duplicate(tmp_path):
     make_save(tmp_path / "a.ck3", date="1050.1.1", seed=1, random_count=500)
-    make_save(tmp_path / "b.ck3", date="1050.1.1", seed=1, random_count=500, version='"1.7.0.0"')
+    make_save(tmp_path / "b.ck3", date="1050.1.1", seed=1, random_count=500)
     runs = scan(tmp_path)
     assert len(runs) == 1 and len(runs[0].snapshots) == 2
     assert any("duplicates" in w for w in runs[0].warnings)
-    assert any("version changed" in w for w in runs[0].warnings)
+
+
+def test_a_different_game_version_is_a_different_run(tmp_path):
+    # `version` is the version the run was STARTED on, so it cannot drift
+    # mid-run: two saves that disagree about it are two playthroughs
+    make_save(tmp_path / "a.ck3", date="1050.1.1", seed=1, random_count=500)
+    make_save(tmp_path / "b.ck3", date="1060.1.1", seed=1, random_count=600, version='"1.7.0.0"')
+    runs = scan(tmp_path)
+    assert len(runs) == 2
+    assert {r.version for r in runs} == {"1.6.1.2", "1.7.0.0"}
+    assert {r.slug for r in runs} == {"1-1-6-1-2", "1-1-7-0-0"}
+    assert all(not r.warnings for r in runs)
 
 
 def test_read_legacy_and_prefix(tmp_path):
@@ -63,7 +74,7 @@ def test_manifest_roundtrip_and_cli(tmp_path, capsys):
     rc = main(["verify", str(d), "--json", str(manifest)])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "run 1-867.1.1" in out and "legacy=3" in out
+    assert "run 1-1.6.1.2-867.1.1" in out and "legacy=3" in out
     data = json.loads(manifest.read_text())
     assert [len(r["snapshots"]) for r in data["runs"]] == [3, 1]
     assert data["runs"][0]["player_account"] == "tester"

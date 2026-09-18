@@ -58,13 +58,17 @@ class Run:
     run_id: str
     random_seed: int | None
     bookmark_date: str | None
+    version: str | None = None
+    slug: str = ""
     snapshots: list[Snapshot] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
     def to_json(self) -> dict:
         return {
             "run_id": self.run_id,
+            "slug": self.slug,
             "random_seed": self.random_seed,
+            "version": self.version,
             "bookmark_date": self.bookmark_date,
             "player_account": next((s.player_account for s in self.snapshots if s.player_account), None),
             "snapshots": [
@@ -101,7 +105,13 @@ def group_snapshots(snapshots: Iterable[Snapshot]) -> list[Run]:
     for key, group in buckets.items():
         group.sort(key=Snapshot.sort_key)
         first = group[0].fp
-        run = Run(run_id=first.run_id, random_seed=first.random_seed, bookmark_date=first.bookmark_date)
+        run = Run(
+            run_id=first.run_id,
+            random_seed=first.random_seed,
+            bookmark_date=first.bookmark_date,
+            version=first.version,
+            slug=first.run_slug,
+        )
         runs.extend(_split_on_tier1_failures(run, group))
     runs.sort(key=lambda r: (r.random_seed or 0, r.snapshots[0].sort_key()))
     return runs
@@ -117,12 +127,16 @@ def _split_on_tier1_failures(run: Run, ordered: list[Snapshot]) -> list[Run]:
             problem = _tier1_pair_problem(prev, s)
             if problem:
                 cur.warnings.append(f"divergent chain after {prev.label}: {problem}; split")
-                cur = Run(run_id=f"{run.run_id}-{len(out) + 1}", random_seed=run.random_seed, bookmark_date=run.bookmark_date)
+                cur = Run(
+                    run_id=f"{run.run_id}-{len(out) + 1}",
+                    random_seed=run.random_seed,
+                    bookmark_date=run.bookmark_date,
+                    version=run.version,
+                    slug=f"{run.slug}-{len(out) + 1}",
+                )
                 out.append(cur)
             elif prev.fp.random_count == s.fp.random_count and prev.fp.date == s.fp.date:
                 cur.warnings.append(f"{s.label} duplicates {prev.label} (same date and random_count)")
-            if prev.fp.version != s.fp.version:
-                cur.warnings.append(f"game version changed {prev.fp.version} -> {s.fp.version} between {prev.label} and {s.label}")
         cur.snapshots.append(s)
         prev = s
     return out
@@ -165,7 +179,7 @@ def verify_runs(runs: list[Run]) -> list[Run]:
         for s in run.snapshots:
             if s.legacy is None:
                 s.player_account, s.legacy = read_legacy(s.fp.file)
-        cur = Run(run.run_id, run.random_seed, run.bookmark_date, warnings=list(run.warnings))
+        cur = Run(run.run_id, run.random_seed, run.bookmark_date, run.version, run.slug, warnings=list(run.warnings))
         out.append(cur)
         prev: Snapshot | None = None
         for s in run.snapshots:
@@ -177,7 +191,10 @@ def verify_runs(runs: list[Run]) -> list[Run]:
                     problem = "played_character.legacy is not a prefix"
                 if problem:
                     cur.warnings.append(f"divergent chain after {prev.label}: {problem}; split")
-                    cur = Run(f"{run.run_id}-{len(out) + 1}", run.random_seed, run.bookmark_date)
+                    cur = Run(
+                        f"{run.run_id}-{len(out) + 1}", run.random_seed, run.bookmark_date,
+                        run.version, f"{run.slug}-{len(out) + 1}",
+                    )
                     out.append(cur)
             cur.snapshots.append(s)
             prev = s

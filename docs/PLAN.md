@@ -135,7 +135,7 @@ The usable signals, from cheapest to most expensive:
 |---|---|---|---|
 | `random_seed` | gamestate line ~419 | decompress first few KB of the zip member | Same for the whole run (verified: `576691683` in all three saves, spanning six in-game years and a succession). Different runs from the same bookmark get different seeds. This is the primary key. |
 | `bookmark_date` | gamestate line ~416 | same | Constant. |
-| `game_rules`, `dlcs`, `version`, `ironman` | plaintext header | free | Constant in practice. `version` (`"1.6.1.2"` in all three saves) appears to be the game version at the **start** of the run, not at save time: the player reports the run was started long ago and carried through later patches, and the DLC list contains DLCs released well after 1.6. Not yet checked against a save from a freshly started game. Kept as a warning, not a key. |
+| `game_rules`, `dlcs`, `version`, `ironman` | plaintext header | free | Constant within a run. `version` is the game version at the **start** of the run, not at save time: the player reports this run was started long ago and carried through later patches, and the DLC list contains DLCs released well after 1.6. It is **part of the RunKey**: three real playthroughs on hand carry 1.6.1.2, 1.4.4 and 1.3.1. |
 | `played_character.name`, `player=1` | gamestate `played_character` block, far into the file | full stream | Constant (the Paradox account name). |
 | `played_character.legacy` | same block | full stream | Ordered list of `{character, date, …}` for every ruler the player controlled. Earlier snapshot's list is a **prefix** of the later one (verified on `(character, date)`: A lists 19 rulers, B and C list the same 19 plus Ludwig, so both the strict-prefix and the equal case are covered). The last entry is the ruler in play and has fewer fields than it will have once the ruler is succeeded; compare on `(character, date)` only. |
 | `meta_main_portrait.id` | header | free | Currently played character id; equals the last `legacy` entry's `character`. |
@@ -165,8 +165,14 @@ Fingerprint = {
   played_character_id (meta_main_portrait.id),
   game_rules_hash, dlcs_hash, ironman,
 }
-RunKey = (random_seed, bookmark_date, game_rules_hash, dlcs_hash)
+RunKey = (random_seed, version, bookmark_date, game_rules_hash, dlcs_hash)
 ```
+
+The **seed and the version** are what tell one playthrough from another, and
+they are what the wiki names a chronicle by (§8). `version` belongs in the key
+rather than being a warning beside it, because it is the version the run was
+*started* on (§5) and so cannot drift mid-run: two saves that disagree about it
+are two games, not one game that was patched.
 
 Group files by `RunKey`. Inside a group, order by `date`, then `random_count`,
 then file mtime.
@@ -562,3 +568,74 @@ contributes whoever was alive then. Their manifest has to be keyed on
 `(character, save date)` for the same reason this project's graph is.
 
 They stay decoupled: plain data files both ways, no imported code.
+
+---
+
+## 8. The wiki itself
+
+Everything up to here prepares data. `ck3wiki` is the first part that produces
+the deliverable:
+
+```
+python -m ck3wiki.build saves --title e_germany --out site
+```
+
+It reads every snapshot of a run, merges them the way the graph loader does,
+and writes a static site: an index, a page per title with its succession table
+and its vassals per snapshot, and a page per character with their reigns.
+
+**It is a factual wiki, not a narrative one.** Every page is generated from the
+save data directly. Phase 7's LLM-written prose is still gated on choosing a
+small local model, and nothing here depends on that choice: the prose, when it
+arrives, has a page to live on.
+
+**Why it is built from saves rather than from Neo4j.** Both derive from the same
+parsed data, and reading saves directly keeps the site buildable by anyone with
+the save files and by CI, with no database to stand up. The graph remains the
+place for queries the site does not answer.
+
+### One chronicle per playthrough
+
+Saves are grouped into runs and each run becomes its own chronicle under
+`site/<seed>-<version>/`, with a landing page listing them. Nothing is
+configured: attaching a save from a different game to a Release adds a
+chronicle. Each chronicle's subject is the played character's **primary
+title**, which is the first entry of their `landed_data.domain` — checked
+across the sample run's succession, where all three snapshots give `e_germany`
+even though the ruler changed.
+
+Built from the five saves currently on the Releases, which are three parallel
+playthroughs:
+
+| Chronicle | Seed | Version | Saves | Titles | Characters |
+|---|---|---|---|---|---|
+| Germania | 576691683 | 1.6.1.2 | 3 | 68 | 952 |
+| Holy Roman Empire | 633048653 | 1.4.4 | 1 | 84 | 1 495 |
+| France | 1370892195 | 1.3.1 | 1 | 109 | 1 701 |
+
+4 412 pages in 2 m 34 s. France's subject is `x_x_5822`, a custom empire, so
+dynamic titles work as subjects too.
+
+### What building it found
+
+Rendering the pages and looking at them exposed a merge bug that the graph's own
+Cypher had right and the model did not. When two snapshots both see a reign
+still open, the **later** snapshot has the better end date, because an open reign
+runs to whenever we last looked. Keeping the first one froze the current ruler's
+reign at an old save's date: Ludwig's reign read "1360.6.8 – 1361.1.17" on a
+wiki whose newest save is 1364.
+
+### Names are an approximation
+
+A save stores `first_name` as a localization *key*, not display text, and marks
+diacritics with an underscore: `FranC_ois` is François, `O_zgul` is Özgül,
+`Is_mail` is Ismāʿīl. Decoding that properly needs the game's localization
+files, which this project deliberately does not read (§2). `clean_name` drops
+the marker and never invents a letter, so the wiki shows "Francois" rather than
+a wrong guess. 2 070 of 20 000 sampled living characters carry one.
+
+### Portraits
+
+`--portraits DIR` folds in images harvested by the companion project, matched by
+the `<id>_<date>.png` names it writes (§7). Without it the pages simply have no
+portrait, so the two projects can progress independently.

@@ -3,6 +3,8 @@
 gamestate
 runs.json
 handoff/
+site/
+saves/
 
 .env
 .venv/

@@ -10,7 +10,8 @@ def test_fingerprint_fields(tmp_path):
     assert fp.played_character == 200 and fp.player_name == "King Test of Testland"
     assert fp.ironman is False and fp.version == "1.6.1.2"
     assert len(fp.sha256) == 64 and fp.size == p.stat().st_size
-    assert fp.run_key == (7, "867.1.1", fp.rules_hash, fp.dlcs_hash)
+    assert fp.run_key == (7, "1.6.1.2", "867.1.1", fp.rules_hash, fp.dlcs_hash)
+    assert fp.run_slug == "7-1-6-1-2"  # seed and version: what tells runs apart
 
 
 def test_hashes_are_stable_and_order_independent(tmp_path):

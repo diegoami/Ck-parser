@@ -15,6 +15,8 @@ saves.
 ```
 src/ck3parser/
   container.py    .ck3 container: plaintext header + zipped gamestate (streamed)
+  characters.py   targeted character lookup
+  player.py       who was played, and that run's primary title
   parser.py       streaming Clausewitz-script tokenizer/parser
   filter.py       referenced-vs-filler character heuristic
   fingerprint.py  cheap per-save fingerprint (header + first KB of gamestate)
@@ -27,6 +29,10 @@ src/ck3parser/
 src/ck3graph/
   loader.py       Neo4j writes (idempotent MERGEs), holder-interval builder
   schema.cypher   unique constraints per node type
+src/ck3wiki/
+  model.py        one run's history, merged from all its snapshots
+  render.py       static HTML
+  build.py        `python -m ck3wiki.build` — the wikis themselves
 tests/            pytest suite over a small hand-written gamestate fixture
 docs/PLAN.md      the plan
 ```
@@ -105,6 +111,25 @@ code is 0 when they agree and 1 when they do not. `--no-vassals` loads the
 title alone, `--no-check` skips the comparison, and `--run <id>` picks one run
 when a directory holds several. Drop `--dry-run` to write to Neo4j using the
 `.env` settings.
+
+Build the wikis, which is what all of this is for:
+
+```
+scripts/fetch_saves.sh            # every save on the Releases
+uv run python -m ck3wiki.build saves --out site
+```
+
+Saves are grouped into playthroughs, and **each playthrough gets its own
+chronicle** under `site/<seed>-<version>/`, with a landing page listing them.
+A chronicle has an index, a page per title with its succession table, and a page
+per character with their reigns, merged across every save of that run so it
+includes history the newest one has pruned.
+
+Nothing needs configuring: attaching a save from a different game to a Release
+adds a chronicle. Each chronicle is about its played character's primary title
+unless `--title` says otherwise. Open `site/index.html`, or let the `Wiki`
+workflow publish to GitHub Pages. Pass `--portraits DIR` to fold in images
+harvested by the companion project.
 
 Write the character list for the companion portrait harvester, one file per
 snapshot of the run:
