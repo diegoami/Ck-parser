@@ -942,9 +942,18 @@ what the game draws:
 That **is** the picture's identity, so it is what names the image:
 `arms_<sha256(recipe)[:12]>.png`. Identical artwork gets one name in every run
 and every chronicle and is harvested once; different artwork gets different
-names. Nothing has to be classified as fixed or generated. Of 120 dynasties
-present in two runs, 58 had byte-identical artwork, so roughly half the arms
-collapse across runs before counting duplicates within one.
+names. Nothing has to be classified as fixed or generated.
+
+**How much this actually saves, measured rather than guessed.** Across the three
+chronicles the manifests ask for 2 861 arms, which are 2 589 distinct images: a
+10% saving. An earlier estimate here said "roughly half", extrapolated from 58 of
+120 game-keyed dynasties present in two runs having identical artwork. That
+sample was the wrong population. The houses a chronicle wants belong mostly to
+the ruling families and their relatives, and those are **generated** houses whose
+arms are unique to the playthrough; the game-keyed dynasties that share artwork
+are largely ones no page links. The naming is still right — it can never merge
+two different pictures, and it costs nothing — but it is not where the win is.
+The win is the next section.
 
 Two things the canonical form must get right, both covered by tests:
 

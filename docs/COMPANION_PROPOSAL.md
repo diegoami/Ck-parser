@@ -140,11 +140,14 @@ carries it under `definition`:
 Two consequences for you:
 
 1. **Identical artwork is one file.** The same arms in three chronicles ask once.
-   Of 120 dynasties present in two of our playthroughs, 58 were byte-identical.
-2. **You can draw them instead of capturing them.** Composing arms offline from
-   the game's texture files is what your roadmap wanted before portraits went the
-   screenshot route. Everything needed is in `definition`, so ~3 000 in-game
-   captures become a rendering job. Portraits still need the game; arms do not.
+   Measured across our three: 2 861 requests, 2 589 distinct images. Only 10%,
+   because the houses a chronicle links are mostly generated ones whose arms are
+   unique to that playthrough — worth having, but not the reason to do this.
+2. **You can draw them instead of capturing them.** This is the reason to do
+   this. Composing arms offline from the game's texture files is what your
+   roadmap wanted before portraits went the screenshot route. Everything needed
+   is in `definition`, so **2 589 in-game captures become a rendering job**.
+   Portraits still need the game; arms do not.
 
 Why not key on the dynasty, given that the game ships many coats of arms? We
 checked: of 60 dynasties carrying the game's own named key and present in two
