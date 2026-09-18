@@ -77,6 +77,7 @@ figure.shot.awaited figcaption::after { content: " · awaiting harvest"; }
    own, so it holds the shape a portrait will have */
 .infobox figure.shot img { aspect-ratio: auto; }
 .infobox figure.shot.awaited img { aspect-ratio: 3 / 4; }
+figure.shot.arms.awaited img { aspect-ratio: 1 / 1; }
 .current { color: var(--accent); font-weight: bold; }
 ul.plain { list-style: none; padding: 0; }
 ul.plain li { padding: .2rem 0; border-bottom: 1px solid var(--rule); }
@@ -150,7 +151,9 @@ def house_link(wiki: Wiki, house_id: int | None, depth: int) -> str:
     return f'<a href="{up}houses/{house_id}.html">{e(known.name)}</a>'
 
 
-def image_slot(image: Image | None, depth: int, alt: str, caption: str, have: set[str]) -> str:
+def image_slot(
+    image: Image | None, depth: int, alt: str, caption: str, have: set[str], kind: str = "portrait"
+) -> str:
     """One image the companion is expected to harvest, linked whether it is here.
 
     The `src` always points at the derived name, so nothing has to be rebuilt
@@ -164,7 +167,7 @@ def image_slot(image: Image | None, depth: int, alt: str, caption: str, have: se
     # only renders as a broken-image label, and the caption already says so
     state = "" if here else " awaited"
     return (
-        f'<figure class="shot{state}" data-image="{e(image.file)}">'
+        f'<figure class="shot {kind}{state}" data-image="{e(image.file)}">'
         f'<img src="{up}{IMAGE_DIR}/{e(image.file)}" alt="{e(alt) if here else ""}" loading="lazy">'
         f"<figcaption>{e(caption)}</figcaption></figure>"
     )
@@ -298,7 +301,7 @@ def render_house(wiki: Wiki, house: WikiHouse, have: set[str], top: bool = False
             ("Members here", str(len(members))),
         ]
     )
-    arms = image_slot(house.arms, 1, f"Arms of {house.name}", "coat of arms", have)
+    arms = image_slot(house.arms, 1, f"Arms of {house.name}", "coat of arms", have, kind="arms")
     body = [f'<div class="page"><aside class="infobox card">{arms}<table>{info}</table></aside>',
             '<div class="content">']
     body.append("<h2>Members</h2>")
@@ -440,7 +443,7 @@ def render_landing(entries: list[dict]) -> str:
         "<h2>Chronicles</h2><table><thead><tr><th>Chronicle</th><th>Seed</th>"
         "<th>Version</th><th class='num'>Saves</th><th class='num'>Titles</th>"
         "<th class='num'>Characters</th><th class='num'>Houses</th>"
-        "<th class='num'>Images wanted</th></tr></thead><tbody>"
+        "<th class='num'>Images</th></tr></thead><tbody>"
     )
     for entry in entries:
         images = entry.get("images") or {}
@@ -459,11 +462,12 @@ def render_landing(entries: list[dict]) -> str:
         )
     body.append("</tbody></table>")
     body.append(
-        '<p class="sub">Portraits and coats of arms are harvested from the running'
-        " game by <a href=\"https://github.com/diegoami/ck_portrait_generator\">"
-        "ck_portrait_generator</a>. Every image the wiki wants is listed, missing"
-        ' ones included, in <a href="portraits.json"><code>portraits.json</code></a>'
-        " and in each chronicle's own copy.</p>"
+        '<p class="sub">Images counts what has been harvested of what the wiki asks'
+        " for. Portraits and coats of arms are captured from the running game by"
+        ' <a href="https://github.com/diegoami/ck_portrait_generator">'
+        "ck_portrait_generator</a>; every image wanted, the missing ones included, is"
+        ' listed in <a href="portraits.json"><code>portraits.json</code></a> and in'
+        " each chronicle's own copy.</p>"
     )
     return page("CK3 Chronicles", "\n".join(body), depth=0,
                 subtitle=f"{len(entries)} playthrough{'s' if len(entries) != 1 else ''}")

@@ -185,9 +185,6 @@ class Wiki:
             self.houses[h].arms for h in sorted(self.houses) if self.houses[h].arms is not None
         ]
 
-    def house_of(self, character_id: int) -> WikiHouse | None:
-        character = self.characters.get(character_id)
-        return self.houses.get(character.house) if character and character.house else None
 
     @property
     def root(self) -> WikiTitle | None:
