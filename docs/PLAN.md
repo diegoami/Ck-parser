@@ -710,6 +710,10 @@ files, which this project deliberately does not read (§2). `clean_name` drops
 the marker and never invents a letter, so the wiki shows "Francois" rather than
 a wrong guess. 2 070 of 20 000 sampled living characters carry one.
 
+The marker follows the letter it modifies, **except on the first letter, where
+it comes in front**: `_Odgrim` is Ǫdgrim, found among Ludwig's siblings. A
+leading marker is dropped like any other.
+
 ### Portraits and houses
 
 Every character page carries a portrait slot per save the character appears in,
@@ -788,3 +792,70 @@ true stays, bracketed by the dates that saw it.
 but `lineage()` takes the subject plus its immediate vassals, so a county under
 a vassal duchy is not loaded. Deepening it multiplies the character load (666 at
 one level in 1364) and is left for later.
+
+---
+
+## 10. Family, and why parents cost a full pass
+
+**Verified on the 1364 save, all 281 916 characters: not one carries a `father`
+or a `mother` key.** Parentage is stored *downward only*. A character's
+`family_data` lists:
+
+| Key | Shape | Carried by (of the 1364 lineage's 666) |
+|---|---|---|
+| `child` | a list | 566 |
+| `spouse` | **repeats as its own key** | 550 |
+| `former_spouses` | a list | 543 |
+| `primary_spouse` | a scalar | 438 |
+| `real_father` | a scalar | 12 |
+| `betrothed` | a scalar | 1 |
+| *no `family_data` at all* | | 27 |
+
+Two shapes in one block, so neither may be read with `get()` alone: `spouse`
+appears four times over for a character with four spouses, while `child` arrives
+as one list. `Block.getall` is the only correct reader.
+
+### Parents are an inversion
+
+To find someone's parents you must find whoever claimed them as a child, which
+means reading **every** character record: a parent may be alive, dead-unprunable
+or dead-prunable, and there is no early exit because the parent may be the last
+record in the last section. One pass, ~37 s on a 280 MB save, 201 498 children
+resolved.
+
+It buys what a cheaper version cannot:
+
+| | of the 666 |
+|---|---|
+| parents found by inverting the **lineage only** | 447 |
+| parents found by inverting the **whole save** | **590** |
+| of those, with both parents | 536 |
+| with one parent | 54 |
+
+The remaining 76 are founders, or have parents the save has pruned. Siblings
+come free: whenever a child list mentions someone wanted, the whole list is
+kept, so half-siblings through either parent are included.
+
+`real_father` is never merged into `parents`. The game keeps a bastard's true
+father apart from their legal one, and so does this.
+
+A marriage that ended appears under `spouse` in the older snapshot and
+`former_spouses` in the newer one, so the union must subtract: "former" is the
+later word on it, and listing the person under both names them twice.
+
+### Family reaches outside the lineage
+
+The 1364 lineage's 666 characters are related to 3 235 people, of whom **2 784
+hold none of its titles** and so have no page. They are fetched once, from the
+newest save that still has them, and only far enough to be named. A name that is
+not a link is the honest rendering of someone the wiki knows of but not about.
+
+### The cost, and the way out
+
+This is the most expensive thing a build does: one full character pass per
+snapshot, on top of the targeted passes the lineage already needs. `--no-family`
+skips it, which is what to use when iterating on anything else.
+
+The fixture was wrong about all of this until now: it gave the child a `father`
+and `mother`, a shape no save uses. It now claims children from both parents,
+as a real save does.

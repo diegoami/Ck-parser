@@ -47,6 +47,10 @@ def test_clean_name_drops_the_diacritic_marker_without_inventing_letters():
     assert clean_name("C_ilen") == "Cilen"  # leading letter keeps its case
     assert clean_name("SojA_") == "Soja"
     assert clean_name("Ludwig") == "Ludwig" and clean_name("") == ""
+    # the marker follows the letter it modifies, except on the first letter,
+    # where it comes in front: `_Odgrim` is Ǫdgrim
+    assert clean_name("_Odgrim") == "Odgrim"
+    assert clean_name("BuR_islav") == "Burislav"
 
 
 # ---------------------------------------------------------------- model
@@ -438,3 +442,57 @@ def test_vassalage_never_claims_a_date_the_save_does_not_give(tmp_path):
                 # "by X" or a window "X – Y"; never a bare date claiming to be
                 # the day it happened
                 assert phrase.startswith("by ") or " – " in phrase, phrase
+
+
+# ---------------------------------------------------------------- family
+
+
+def test_family_reaches_the_character_pages(tmp_path):
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland")
+    child = wiki.characters[203] if 203 in wiki.characters else None
+    parent = wiki.characters[200]
+    assert parent.children == [203, 204] and parent.spouses == [202]
+    assert parent.has_family
+
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    page_html = (out / "characters" / "200.html").read_text()
+    assert "<h2>Family</h2>" in page_html and "Children" in page_html
+    # 202, 203 and 204 hold none of the lineage's titles, so they have no page;
+    # they are still named rather than shown as bare ids
+    assert "Spouse" in page_html and 'characters/202.html' not in page_html
+    assert child is None
+
+
+def test_a_relative_without_a_page_is_named_not_numbered(tmp_path):
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland")
+    assert 202 not in wiki.characters  # holds no title in this lineage
+    assert wiki.relatives[202].name == "Spouse" and wiki.relatives[202].birth == "1062.2.2"
+    assert wiki.named(202) == "Spouse"
+
+
+def test_family_can_be_skipped_because_it_costs_a_full_pass(tmp_path):
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland", with_family=False)
+    assert not wiki.characters[200].has_family and wiki.relatives == {}
+
+
+def test_a_marriage_that_ended_is_listed_once_as_former(tmp_path):
+    # the older save has them under `spouse`, the newer under `former_spouses`;
+    # unioning both would name the person twice on the page
+    from ck3wiki.model import WikiCharacter, _merge_family
+    from ck3parser.family import Family
+
+    record = WikiCharacter(id=1, spouses=[9])
+    _merge_family(record, Family(id=1, former_spouses=[9]))
+    assert record.spouses == [] and record.former_spouses == [9]
+
+
+def test_family_unions_across_snapshots(tmp_path):
+    # a later save knows of more children, never fewer, and an older one is the
+    # only source for anyone the newest has pruned
+    early, late = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early, late), "k_testland")
+    assert wiki.characters[200].children == [203, 204]

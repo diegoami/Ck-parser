@@ -67,7 +67,10 @@ def subject_of(run: Run, override: str | None, log) -> str | None:
     return key
 
 
-def build_one(run: Run, subject: str, with_vassals: bool, out: Path, portraits: Path | None, log) -> dict | None:
+def build_one(
+    run: Run, subject: str, with_vassals: bool, out: Path, portraits: Path | None,
+    log, with_family: bool = True,
+) -> dict | None:
     views = []
     for snapshot in run.snapshots:
         try:
@@ -77,7 +80,7 @@ def build_one(run: Run, subject: str, with_vassals: bool, out: Path, portraits: 
     if not views:
         print(f"warning: nothing to build for run {run.slug}", file=log)
         return None
-    wiki = build_wiki(views, subject)
+    wiki = build_wiki(views, subject, with_family=with_family)
     pages = write_site(wiki, out / run.slug, portraits, top=True)
     images = write_chronicle_manifest(out / run.slug, wiki, run.slug, harvested(portraits))
     root = wiki.root
@@ -106,6 +109,7 @@ def run_build(
     with_vassals: bool = True,
     run_id: str | None = None,
     portraits: str | None = None,
+    with_family: bool = True,
     log=None,
 ) -> int:
     log = sys.stderr if log is None else log
@@ -123,7 +127,7 @@ def run_build(
         subject = subject_of(run, title, log)
         if subject is None:
             continue
-        entry = build_one(run, subject, with_vassals, out, shots, log)
+        entry = build_one(run, subject, with_vassals, out, shots, log, with_family)
         if entry is not None:
             entries.append(entry)
 
@@ -147,6 +151,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-vassals", action="store_true", help="the title alone, without its vassals")
     ap.add_argument("--run", dest="run_id", help="build only this run (its id or slug)")
     ap.add_argument("--portraits", help="directory of harvested portrait images to include")
+    ap.add_argument(
+        "--no-family",
+        action="store_true",
+        help="skip family; parents exist only as other people's child lists, so"
+             " finding them costs a full pass over every character in every save",
+    )
     args = ap.parse_args(argv)
     return run_build(
         args.save,
@@ -155,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
         with_vassals=not args.no_vassals,
         run_id=args.run_id,
         portraits=args.portraits,
+        with_family=not args.no_family,
     )
 
 

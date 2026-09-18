@@ -20,7 +20,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ck3graph.loader import holder_intervals
+from ck3parser.characters import find_characters
 from ck3parser.dynasties import Dynasty, House, arms_id, find_dynasties, find_houses, house_name
+from ck3parser.family import Family, read_family
 from ck3parser.parser import Block, date_key
 from ck3parser.pipeline import SnapshotView
 from ck3parser.portraits import arms_name, portrait_name, save_checksum
@@ -30,7 +32,12 @@ _DIACRITIC = re.compile(r"([A-Za-z])_")
 
 
 def clean_name(raw: str) -> str:
-    """``FranC_ois`` -> ``Francois``. Drops the diacritic marker, never guesses."""
+    """``FranC_ois`` -> ``Francois``. Drops the diacritic marker, never guesses.
+
+    The marker usually follows the letter it modifies (`BuR_islav` is Burislav),
+    but a name whose *first* letter is modified carries it in front instead:
+    `_Odgrim` is Ǫdgrim. Both are dropped and neither letter is guessed.
+    """
     if not raw:
         return ""
 
@@ -38,7 +45,7 @@ def clean_name(raw: str) -> str:
         letter = match.group(1)
         return letter if match.start() == 0 else letter.lower()
 
-    return _DIACRITIC.sub(fix, raw)
+    return _DIACRITIC.sub(fix, raw.lstrip("_"))
 
 
 @dataclass
@@ -84,6 +91,27 @@ class Arms(Image):
 
 
 @dataclass
+class Relative:
+    """Someone a character is related to who has no page of their own.
+
+    Family reaches well outside a lineage -- 2 784 of the 3 235 people the 1364
+    lineage is related to hold none of its titles -- so they are fetched just
+    far enough to be named, and nothing more.
+    """
+
+    id: int
+    name: str = ""
+    birth: str | None = None
+    death: str | None = None
+
+    @property
+    def lifespan(self) -> str:
+        if self.birth and self.death:
+            return f"{self.birth} – {self.death}"
+        return f"b. {self.birth}" if self.birth else ""
+
+
+@dataclass
 class WikiCharacter:
     id: int
     name: str = ""
@@ -94,6 +122,19 @@ class WikiCharacter:
     house: int | None = None
     seen: list[str] = field(default_factory=list)  #: snapshot dates this record came from
     portraits: list[Portrait] = field(default_factory=list)
+    parents: list[int] = field(default_factory=list)
+    siblings: list[int] = field(default_factory=list)
+    spouses: list[int] = field(default_factory=list)
+    former_spouses: list[int] = field(default_factory=list)
+    children: list[int] = field(default_factory=list)
+    real_father: int | None = None
+
+    @property
+    def has_family(self) -> bool:
+        return bool(
+            self.parents or self.siblings or self.spouses
+            or self.former_spouses or self.children
+        )
 
     @property
     def alive_at_last_sight(self) -> bool:
@@ -234,7 +275,11 @@ class Wiki:
     titles: dict[str, WikiTitle] = field(default_factory=dict)
     characters: dict[int, WikiCharacter] = field(default_factory=dict)
     houses: dict[int, WikiHouse] = field(default_factory=dict)
+    relatives: dict[int, Relative] = field(default_factory=dict)  #: named, but no page
     saves: list[dict] = field(default_factory=list)  #: {file, checksum, date} per snapshot
+
+    def person(self, character_id: int) -> WikiCharacter | Relative | None:
+        return self.characters.get(character_id) or self.relatives.get(character_id)
 
     def members_of(self, house_id: int) -> list[WikiCharacter]:
         """The house's members, eldest first. Dates sort as dates, not as text."""
@@ -272,8 +317,8 @@ class Wiki:
         return out
 
     def named(self, character_id: int) -> str:
-        character = self.characters.get(character_id)
-        return character.name if character and character.name else f"Character {character_id}"
+        person = self.person(character_id)
+        return person.name if person and person.name else f"Character {character_id}"
 
 
 def _merge_character(wiki: Wiki, cid: int, char: Block, date: str, save_file: str = "") -> None:
@@ -345,7 +390,7 @@ def _merge_title(wiki: Wiki, record: TitleRecord, view: SnapshotView) -> WikiTit
     return title
 
 
-def build_wiki(views: list[SnapshotView], title_key: str) -> Wiki:
+def build_wiki(views: list[SnapshotView], title_key: str, with_family: bool = True) -> Wiki:
     """Merge snapshots, oldest first, into one picture of the lineage."""
     views = sorted(views, key=lambda v: date_key(v.fp.date))
     wiki = Wiki(run_id=views[0].fp.run_id if views else "", title_key=title_key)
@@ -365,7 +410,64 @@ def build_wiki(views: list[SnapshotView], title_key: str) -> Wiki:
         )
     _load_vassalage(wiki, views)
     _load_houses(wiki, views)
+    if with_family:
+        _load_family(wiki, views)
     return wiki
+
+
+def _merge_family(record: WikiCharacter, family: Family) -> None:
+    """Union across snapshots: a later save knows of more children, never fewer.
+
+    Nothing is ever dropped, for the same reason the rest of the wiki unions:
+    an older snapshot is the only source for a child the newest one has pruned.
+    """
+    for field_name in ("parents", "siblings", "spouses", "former_spouses", "children"):
+        merged = dict.fromkeys([*getattr(record, field_name), *getattr(family, field_name)])
+        setattr(record, field_name, sorted(merged))
+    # a marriage that ended is in `spouse` in the older save and
+    # `former_spouses` in the newer one; unioning both would list the person
+    # twice, and "former" is the later word on it
+    record.spouses = [s for s in record.spouses if s not in set(record.former_spouses)]
+    record.real_father = family.real_father or record.real_father
+
+
+def _load_family(wiki: Wiki, views: list[SnapshotView]) -> None:
+    """Read each snapshot's family, then name everyone it reaches.
+
+    This is the expensive part of a build: parents exist in the save only as
+    other people's child lists, so finding them means reading every character
+    record, with no early exit (:mod:`ck3parser.family`). One pass per snapshot.
+    """
+    wanted = set(wiki.characters)
+    if not wanted:
+        return
+    for view in views:
+        for cid, family in read_family(view.fp.file, wanted).items():
+            _merge_family(wiki.characters[cid], family)
+
+    # everyone the family reaches who has no page: fetched once, from the
+    # newest save that still has them, and only to be named
+    outside: set[int] = set()
+    for record in wiki.characters.values():
+        outside.update(
+            record.parents, record.siblings, record.spouses,
+            record.former_spouses, record.children,
+        )
+        if record.real_father is not None:
+            outside.add(record.real_father)
+    outside -= wiki.characters.keys()
+    for view in reversed(views):
+        missing = outside - wiki.relatives.keys()
+        if not missing:
+            break
+        for cid, char in find_characters(view.fp.file, missing).items():
+            dead = char.get("dead_data")
+            wiki.relatives[cid] = Relative(
+                id=cid,
+                name=clean_name(str(char.get("first_name") or "")),
+                birth=str(char["birth"]) if char.get("birth") is not None else None,
+                death=str(dead["date"]) if isinstance(dead, Block) and dead.get("date") else None,
+            )
 
 
 def _load_vassalage(wiki: Wiki, views: list[SnapshotView]) -> None:

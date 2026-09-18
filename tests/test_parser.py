@@ -48,7 +48,7 @@ def test_iter_children_streams_nested_section():
 
 def test_iter_children_living_and_dead_prunable():
     ids = [int(k) for k, _ in iter_children(fixture_text().splitlines(True), ("living",))]
-    assert ids == [200, 201, 202, 203]
+    assert ids == [200, 201, 202, 203, 204]
     ids = [int(k) for k, _ in iter_children(fixture_text().splitlines(True), ("characters", "dead_prunable"))]
     assert ids == [300]
 

@@ -157,7 +157,7 @@ living={
 		traits={ 1 2 3 }
 		family_data={
 			spouse=202
-			child=203
+			child={ 203 204 }
 		}
 		alive_data={
 			gold=10.5
@@ -185,14 +185,20 @@ living={
 		female=yes
 		family_data={
 			spouse=200
+			child={ 203 204 }
 		}
 	}
 	203={
 		first_name="Child"
 		birth=1085.3.3
 		family_data={
-			father=200
-			mother=202
+		}
+	}
+	204={
+		first_name="Sibling"
+		birth=1087.4.4
+		female=yes
+		family_data={
 		}
 	}
 }

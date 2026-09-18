@@ -72,6 +72,12 @@ uv run python -m ck3wiki.build saves --out site --portraits harvested    # ... w
   anything derived from it by the save it was read from.
 - A character is harvestable only if they are in `living` AND have no
   `dead_data`; someone who died on the save's date satisfies only the first.
+- A save stores parentage **downward only**: `family_data` lists `child`, never
+  `father` or `mother` (verified on all 281 916 characters of the 1364 save).
+  Parents are found by inverting every child list, which is a full pass with no
+  early exit — the one genuinely expensive thing a build does (PLAN.md §10).
+- `family_data` mixes shapes: `spouse` repeats as its own key while `child` is a
+  list. Use `Block.getall`, never `get`, or you will silently read one spouse.
 - A save's top-level key set varies between saves of one run. Never assume a
   section exists.
 - Facts labelled "verified" in PLAN.md were checked on three real saves. Anything

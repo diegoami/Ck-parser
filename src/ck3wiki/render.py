@@ -141,6 +141,30 @@ def character_link(wiki: Wiki, cid: int, depth: int) -> str:
     return f'<a href="{up}characters/{cid}.html">{e(wiki.named(cid))}</a>'
 
 
+def person_link(wiki: Wiki, cid: int, depth: int) -> str:
+    """A relative as a link if they have a page, as a name if they only have a record.
+
+    Family reaches outside the lineage, so most of these people have no page.
+    Naming them is still worth more than an id, and a name that is not a link
+    says plainly that the wiki knows of them but not about them.
+    """
+    up = "../" * depth
+    if cid in wiki.characters:
+        return f'<a href="{up}characters/{cid}.html">{e(wiki.named(cid))}</a>'
+    known = wiki.relatives.get(cid)
+    if known is None or not known.name:
+        return f"<code>{cid}</code>"
+    span = f" <span class=\"sub\">({e(known.lifespan)})</span>" if known.lifespan else ""
+    return f"{e(known.name)}{span}"
+
+
+def people_row(wiki: Wiki, label: str, ids: list[int], depth: int) -> str:
+    if not ids:
+        return ""
+    links = ", ".join(person_link(wiki, cid, depth) for cid in ids)
+    return f"<tr><th>{e(label)}</th><td>{links}</td></tr>"
+
+
 def house_link(wiki: Wiki, house_id: int | None, depth: int) -> str:
     if house_id is None:
         return ""
@@ -312,6 +336,7 @@ def render_character(wiki: Wiki, character: WikiCharacter, have: set[str], top: 
             ("Cause", e(character.death_reason.replace("death_", "").replace("_", " ")) if character.death_reason else ""),
             ("Sex", "female" if character.female else "male"),
             ("House", house_link(wiki, character.house, 1)),
+            ("Parents", ", ".join(person_link(wiki, p, 1) for p in character.parents)),
             ("Dynasty", e(house.dynasty.display_name) if house and house.dynasty else ""),
             ("Id", f"<code>{character.id}</code>"),
             ("In saves", ", ".join(e(d) for d in character.seen)),
@@ -343,6 +368,25 @@ def render_character(wiki: Wiki, character: WikiCharacter, have: set[str], top: 
         )
     else:
         body.append("<p>This character holds none of the titles in this wiki.</p>")
+
+    if character.has_family:
+        body.append("<h2>Family</h2>")
+        body.append(
+            "<table>"
+            + people_row(wiki, "Parents", character.parents, 1)
+            + people_row(wiki, "Siblings", character.siblings, 1)
+            + people_row(wiki, "Spouses", character.spouses, 1)
+            + people_row(wiki, "Former spouses", character.former_spouses, 1)
+            + people_row(wiki, "Children", character.children, 1)
+            + (people_row(wiki, "Real father", [character.real_father], 1)
+               if character.real_father is not None else "")
+            + "</table>"
+        )
+        body.append(
+            '<p class="sub">A save records children, never parents, so parents are'
+            " found by inverting: someone claimed this person as theirs. A name"
+            " without a link is someone the wiki knows of but has no page for.</p>"
+        )
 
     if len(shots) > 1:
         body.append("<h2>Portraits</h2>")
