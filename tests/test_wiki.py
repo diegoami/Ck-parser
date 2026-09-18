@@ -557,3 +557,47 @@ def test_family_unions_across_snapshots(tmp_path):
     early, late = two_snapshots(tmp_path)
     wiki = build_wiki(views(early, late), "k_testland")
     assert wiki.characters[200].children == [203, 204]
+
+
+# ---------------------------------------------------------------- releases
+
+
+def test_a_release_tags_a_save_but_never_decides_its_run(tmp_path):
+    # a release is the batch a save was published in. One run already spans
+    # three of them, so grouping still comes from the fingerprint alone.
+    from ck3wiki.manifest import with_releases
+
+    saves = [{"file": "a_1100.ck3", "date": "1100.6.1"}, {"file": "b_1120.ck3", "date": "1120.1.1"}]
+    tagged = with_releases(saves, {"a_1100.ck3": "0.0.2", "b_1120.ck3": "0.0.3"})
+    assert [s["release"] for s in tagged] == ["0.0.2", "0.0.3"]
+    # a save the index does not mention gets an empty tag, not a guess
+    assert with_releases(saves, {"a_1100.ck3": "0.0.2"})[1]["release"] == ""
+    # and with no index at all the key is absent rather than empty
+    assert "release" not in with_releases(saves, None)[0]
+
+
+def test_two_releases_still_build_one_chronicle(tmp_path):
+    # the two snapshots share a run key, so they are one chronicle however many
+    # releases they arrived in
+    early, late = two_snapshots(tmp_path)
+    (tmp_path / "releases.json").write_text(
+        json.dumps({"a_1100.ck3": "0.0.2", "b_1120.ck3": "0.0.3"}), encoding="utf-8"
+    )
+    out = tmp_path / "site"
+    assert main([str(tmp_path), "--title", "k_testland", "--out", str(out)]) == 0
+    root = json.loads((out / "portraits.json").read_text())
+    assert len(root["chronicles"]) == 1
+    assert root["chronicles"][0]["releases"] == ["0.0.2", "0.0.3"]
+    chronicle = json.loads((out / "7-1-6-1-2" / "portraits.json").read_text())
+    assert [s["release"] for s in chronicle["saves"]] == ["0.0.2", "0.0.3"]
+
+
+def test_a_directory_with_no_release_index_says_nothing_about_releases(tmp_path):
+    from ck3wiki.build import read_releases
+
+    two_snapshots(tmp_path)
+    assert read_releases(str(tmp_path)) == {}
+    out = tmp_path / "site"
+    main([str(tmp_path), "--title", "k_testland", "--out", str(out)])
+    chronicle = json.loads((out / "7-1-6-1-2" / "portraits.json").read_text())
+    assert all("release" not in s for s in chronicle["saves"])

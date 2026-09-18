@@ -20,7 +20,11 @@ mkdir -p "$dest"
 auth=()
 [ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
 
-# name<TAB>sha256<TAB>url, one per save, deduplicated by checksum.
+# name<TAB>sha256<TAB>url<TAB>release tag, one per save, deduplicated by checksum.
+# The release a save was published in is recorded because it is the batch the
+# owner grouped it into, and because it is where the harvested images for that
+# save belong. It is NOT how runs are grouped -- runs are decided by the save's
+# own fingerprint, and one run already spans three releases.
 assets=$(
   curl -sS --retry 3 "${auth[@]}" \
     "https://api.github.com/repos/$repo/releases?per_page=100" |
@@ -38,7 +42,8 @@ for release in json.load(sys.stdin):
         if key in seen:
             continue
         seen.add(key)
-        print(asset["name"], digest, asset["browser_download_url"], sep="\t")
+        print(asset["name"], digest, asset["browser_download_url"],
+              release.get("tag_name") or "", sep="\t")
 '
 )
 
@@ -48,17 +53,31 @@ if [ -z "$assets" ]; then
 fi
 
 count=0
-while IFS=$'\t' read -r name digest url; do
+tags=""
+while IFS=$'\t' read -r name digest url tag; do
   [ -z "$name" ] && continue
   out="$dest/$name"
   if [ -f "$out" ] && [ -n "$digest" ] && echo "$digest  $out" | sha256sum -c --quiet 2>/dev/null; then
-    echo "ok       $name"
+    echo "ok       $name  [$tag]"
   else
-    echo "fetching $name"
+    echo "fetching $name  [$tag]"
     curl -L --retry 3 --fail -o "$out" "$url"
     [ -n "$digest" ] && echo "$digest  $out" | sha256sum -c --quiet
   fi
+  tags="$tags$name\t$tag\n"
   count=$((count + 1))
 done <<< "$assets"
 
-echo "$count save(s) in $dest/"
+# Which release each save came from, for the manifest to pass on. Written even
+# when empty, so a build can tell "no release information" from "not fetched".
+printf '%b' "$tags" | python3 -c '
+import json, sys
+mapping = {}
+for line in sys.stdin:
+    name, _, tag = line.rstrip("\n").partition("\t")
+    if name:
+        mapping[name] = tag
+print(json.dumps(mapping, indent=2, sort_keys=True))
+' > "$dest/releases.json"
+
+echo "$count save(s) in $dest/, release tags in $dest/releases.json"

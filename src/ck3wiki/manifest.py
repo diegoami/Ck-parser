@@ -78,7 +78,22 @@ def wanted_images(wiki: Wiki, have: set[str]) -> list[dict]:
     return out
 
 
-def chronicle_manifest(wiki: Wiki, slug: str, have: set[str]) -> dict:
+def with_releases(saves: list[dict], releases: dict[str, str] | None) -> list[dict]:
+    """Tag each save with the release it was published in, when that is known.
+
+    A release is a **batch**, not a run. One run already spans three of them
+    (0.0.2, 0.0.3 and 0.0.4 each hold one Germania save), so this is here to say
+    where a save came from and where its harvested images belong, never to
+    decide which chronicle it joins — the fingerprint does that (docs/PLAN.md §3).
+    """
+    if not releases:
+        return saves
+    return [{**save, "release": releases.get(save["file"], "")} for save in saves]
+
+
+def chronicle_manifest(
+    wiki: Wiki, slug: str, have: set[str], releases: dict[str, str] | None = None
+) -> dict:
     images = wanted_images(wiki, have)
     return {
         "schema": SCHEMA,
@@ -86,7 +101,7 @@ def chronicle_manifest(wiki: Wiki, slug: str, have: set[str]) -> dict:
         "run_id": wiki.run_id,
         "title": wiki.title_key,
         "images": IMAGE_DIR,
-        "saves": wiki.saves,
+        "saves": with_releases(wiki.saves, releases),
         "wanted": len(images),
         "missing": sum(1 for image in images if not image["have"]),
         "portraits": images,
@@ -98,15 +113,19 @@ def write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
 
 
-def write_chronicle_manifest(out: Path, wiki: Wiki, slug: str, have: set[str]) -> dict:
+def write_chronicle_manifest(
+    out: Path, wiki: Wiki, slug: str, have: set[str], releases: dict[str, str] | None = None
+) -> dict:
     """Write ``<chronicle>/portraits.json`` and return what the root needs of it."""
-    payload = chronicle_manifest(wiki, slug, have)
+    payload = chronicle_manifest(wiki, slug, have, releases)
     write_json(out / MANIFEST, payload)
     return {
         "slug": slug,
         "manifest": f"{slug}/{MANIFEST}",
         "wanted": payload["wanted"],
         "missing": payload["missing"],
+        # the batches this chronicle's saves arrived in; a run may span several
+        "releases": sorted({s["release"] for s in payload["saves"] if s.get("release")}),
     }
 
 
