@@ -22,7 +22,9 @@ from pathlib import Path
 from ck3graph.loader import holder_intervals
 from ck3parser.arms import read_arms
 from ck3parser.characters import find_characters
+from ck3parser.cultures import Culture, find_cultures
 from ck3parser.dynasties import Dynasty, House, arms_id, find_dynasties, find_houses, house_name
+from ck3parser.faiths import Faith, find_faiths
 from ck3parser.family import Family, own_family, read_index
 from ck3parser.parser import Block, date_key
 from ck3parser.pipeline import SnapshotView
@@ -140,6 +142,9 @@ class WikiCharacter:
     death_reason: str | None = None
     female: bool = False
     house: int | None = None
+    #: indices into this save's own culture and faith tables, resolved later
+    culture: int | None = None
+    faith: int | None = None
     seen: list[str] = field(default_factory=list)  #: snapshot dates this record came from
     portraits: list[Portrait] = field(default_factory=list)
     parents: list[int] = field(default_factory=list)
@@ -229,6 +234,8 @@ class Wiki:
     titles: dict[str, WikiTitle] = field(default_factory=dict)
     characters: dict[int, WikiCharacter] = field(default_factory=dict)
     houses: dict[int, WikiHouse] = field(default_factory=dict)
+    cultures: dict[int, Culture] = field(default_factory=dict)
+    faiths: dict[int, Faith] = field(default_factory=dict)
     relatives: dict[int, Relative] = field(default_factory=dict)  #: named, but no page
     saves: list[dict] = field(default_factory=list)  #: {file, checksum, date} per snapshot
 
@@ -284,6 +291,12 @@ def _merge_character(wiki: Wiki, cid: int, char: Block, date: str, save_file: st
     record.female = bool(char.get("female", record.female))
     house = char.get("dynasty_house")
     record.house = house if isinstance(house, int) else record.house
+    # a character can convert or assimilate, so the newest save's answer wins,
+    # exactly as the newest save's house does
+    for attr in ("culture", "faith"):
+        value = char.get(attr)
+        if isinstance(value, int):
+            setattr(record, attr, value)
     if isinstance(dead, Block) and dead.get("date") is not None:
         record.death = str(dead["date"])
         reason = dead.get("reason")
@@ -380,6 +393,7 @@ def build_wiki(
     # characters of its own, and their houses have to be resolved too
     _load_houses(wiki, views)
     _load_title_arms(wiki, views)
+    _load_cultures_and_faiths(wiki, views)
     return wiki
 
 
@@ -584,3 +598,55 @@ def _load_houses(wiki: Wiki, views: list[SnapshotView]) -> None:
                 )
             houses[house_id] = WikiHouse(house=house, dynasty=dynasty, arms=arms)
     wiki.houses = dict(sorted(houses.items()))
+
+
+def _load_cultures_and_faiths(wiki: Wiki, views: list[SnapshotView]) -> None:
+    """Resolve the cultures and faiths the wiki's characters hold.
+
+    Newest save first, then older ones for whatever is left, the same way houses
+    are resolved: both are indexed **per save**, so a culture or faith the newest
+    snapshot never mentions can still be read out of an older one.
+
+    Run after the family pass, never before it: promoting the direct line brings
+    in characters of its own, and they have a culture and a faith too.
+
+    A faith's founder and a culture's head are ordinary character ids, so they
+    are named like anyone else the wiki reaches but does not give a page.
+    """
+    wanted_cultures = {c.culture for c in wiki.characters.values() if c.culture is not None}
+    wanted_faiths = {c.faith for c in wiki.characters.values() if c.faith is not None}
+    if not views or not (wanted_cultures or wanted_faiths):
+        return
+    for view in reversed(views):
+        missing_cultures = wanted_cultures - wiki.cultures.keys()
+        missing_faiths = wanted_faiths - wiki.faiths.keys()
+        if not (missing_cultures or missing_faiths):
+            break
+        wiki.cultures.update(find_cultures(view.fp.file, missing_cultures))
+        wiki.faiths.update(find_faiths(view.fp.file, missing_faiths))
+    _name_the_founders(wiki, views)
+
+
+def _name_the_founders(wiki: Wiki, views: list[SnapshotView]) -> None:
+    """Whoever founded a faith or heads a culture, named but given no page.
+
+    A faith founded during the run carries its founder's id, and on the Germania
+    run that is the played dynasty's own Folmar, who founded the faith the realm
+    is named after. Saying so needs nothing but his name.
+    """
+    outside = {f.founder for f in wiki.faiths.values() if f.founder is not None}
+    outside |= {c.head for c in wiki.cultures.values() if c.head is not None}
+    outside -= wiki.characters.keys()
+    outside -= wiki.relatives.keys()
+    for view in reversed(views):
+        missing = outside - wiki.relatives.keys()
+        if not missing:
+            break
+        for cid, char in find_characters(view.fp.file, missing).items():
+            dead = char.get("dead_data")
+            wiki.relatives[cid] = Relative(
+                id=cid,
+                name=clean_name(str(char.get("first_name") or "")),
+                birth=str(char["birth"]) if char.get("birth") is not None else None,
+                death=str(dead["date"]) if isinstance(dead, Block) and dead.get("date") else None,
+            )

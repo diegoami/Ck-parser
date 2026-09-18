@@ -150,9 +150,11 @@ and in a first pass it outranks everything the graph could answer.
 1. **Narrative prose.** The wiki is factual; Phase 7's LLM-written text is still
    gated on choosing a small local model. Everything it would need now exists:
    succession, vassalage with honest bounds, family, houses and arms.
-2. **Culture and faith names.** Numeric ids resolved through `culture_manager`
-   and `religion`. Both the hand-off and the wiki omit culture until then, and
-   it is the most visible blank left on a character page.
+2. **Widen further, or stop here.** The direct line — parents, spouses,
+   children — has pages and portraits (PLAN.md §10). Siblings are still
+   named-only; promoting them would add 689 pages to Germania. Beyond that lies
+   the second hop (a spouse's parents), which needs no new pass but does need a
+   decision about where a chronicle stops.
 3. **Character lookup speed, and incremental builds.** A lineage load is ~34 s
    per snapshot and the family inversion another ~37 s, all of it full passes
    over the character sections. The full three-chronicle build takes ~8 minutes
@@ -160,18 +162,13 @@ and in a first pass it outranks everything the graph could answer.
    separable fixes: an id -> offset index within the character sections (the
    section index already gives line ranges), and caching a built chronicle so
    only new saves are read.
-4. **Widen further, or stop here.** The direct line — parents, spouses,
-   children — has pages and portraits (PLAN.md §10). Siblings are still
-   named-only; promoting them would add 689 pages to Germania. Beyond that lies
-   the second hop (a spouse's parents), which needs no new pass but does need a
-   decision about where a chronicle stops.
-5. **Deeper lineages**, then **full-save scale** (PLAN.md Phase 6). Vassalage
+4. **Deeper lineages**, then **full-save scale** (PLAN.md Phase 6). Vassalage
    has bounded stretches (§9) but still only one level down: a county under a
    vassal duchy is not loaded.
-6. **Move the saves to ck_wiki's Releases.** They are still on this
+5. **Move the saves to ck_wiki's Releases.** They are still on this
    repository's. `fetch_saves.sh` already reads `SAVES_REPO`, so it is an upload
    plus one environment variable in ck_wiki's workflow — no code change.
-7. **The graph, once the wiki is where it should be.** It now holds what the
+6. **The graph, once the wiki is where it should be.** It now holds what the
    wiki knows and more (PLAN.md §12), so the remaining work is the *query* side,
    not the loading side: pairing it with a local LM and seeing whether Cypher it
    composes actually answers *how many cousins has X*, *how closely are X and Y
@@ -200,6 +197,15 @@ and in a first pass it outranks everything the graph could answer.
    | asked unpredictably, in words | graph + LM |
 
 ### Done since this list was last written
+
+- **Cultures and faiths are resolved and have pages** (`ck3parser/cultures.py`,
+  `ck3parser/faiths.py`). Every character page names both, the index lists them,
+  and each gets a page with who holds it. A faith founded during the run names
+  its founder, which is how the Germania chronicle can finally say that its own
+  Folmar founded the faith the Immasonian Fylkirate is named after. 63 cultures
+  and 21 faiths on that run, 84 pages. A culture's name is a key when it has a
+  template and the game's own text when it has none, and a template says nothing
+  about *when* the culture began (PLAN.md §13).
 
 - **The graph has caught up with the wiki.** It was writing what it wrote before
   family and vassalage existed. It now holds `PARENT_OF`, `REAL_FATHER_OF`,

@@ -15,7 +15,8 @@ def test_iter_sections_finds_top_level_keys_only():
     assert names == [
         "meta_data", "ironman_manager", "date", "bookmark_date", "first_start", "speed",
         "random_seed", "random_count", "variables", "provinces", "landed_titles", "dynasties",
-        "coat_of_arms", "deleted_characters", "living", "dead_unprunable", "characters",
+        "coat_of_arms", "culture_manager", "religion", "deleted_characters", "living",
+        "dead_unprunable", "characters",
         "played_character",
         "currently_played_characters",
     ]

@@ -89,7 +89,7 @@ file:
   `dead_data={ date reason liege … }` instead of `alive_data`. The setup prompt only
   mentions the first two; `dead_prunable` is the one the game deletes from over time
   (see Phase 5). Culture and faith are numeric ids that resolve through
-  `culture_manager` / `religion`.
+  `culture_manager.cultures` / `religion.faiths` (§13).
 - **Title records**: `landed_titles` entries carry `key`, `name`, `adj`, `holder`,
   `date`, `history`, `capital`, `de_jure_liege`, `de_facto_liege`, and sometimes
   `de_jure_vassals`, `heir`, `claim`, `laws`. A player-renamed title keeps its
@@ -575,9 +575,13 @@ Across the run that is **48 distinct characters in 53 rows**, and 5 of them
 appear in more than one snapshot. Those 5 are the ones who get a portrait at
 several ages, which is the feature their roadmap item 2 is about.
 
-Names are never written. Their loader drops `name` on principle, and `culture`
-is omitted too, because in the save it is a numeric id this project cannot yet
-resolve and emitting the raw number under that name would be wrong. `dynasty_house`
+Names are never written. Their loader drops `name` on principle. `culture` was
+omitted for the same sort of reason — in the save it is a numeric id, and
+emitting the raw number under that name would be wrong — but that reason has
+**expired**: §13 resolves it, and a culture's name is available whenever the
+companion wants a column for it. It is not being added unasked, because the
+hand-off is a contract and widening it is their call, not this project's.
+`dynasty_house`
 is named for what it actually is, a house id, not the dynasty id their optional
 `dynasty_id` column means.
 
@@ -1141,3 +1145,63 @@ snapshots, ~2 m 22 s:
 | ... seen under more than one liege | 48 |
 | stretches a later snapshot closed | 50 |
 | houses wanted / resolved | 276 / 276 |
+
+
+---
+
+## 13. Cultures and faiths
+
+A character carries a numeric `culture` and `faith`. They index
+`culture_manager.cultures` (301 entries, 122 126 lines, the third largest thing
+in a gamestate) and `religion.faiths` (112 entries, 5 640 lines). Both are
+looked up by id and streamed, never read whole, the same as houses.
+
+### What the save names, and what it only keys
+
+The rule is the same shape for both, and it is about **who wrote the string**.
+
+**Cultures.** Of 301, **190 carry a `culture_template`, and for all 190 `name`
+is exactly that template** — `welayta` — so it is a localization key and is
+transcribed, words capitalised, nothing guessed. The other **111 carry no
+template, and for all 111 `name` is real text** with a capital or a hyphen in
+it: `Malinke-Soninke`, `Perso-Bedouin`. Those are the hybrid cultures made
+during the run, which the game must name because it has nothing on file.
+
+**Faiths.** Of 112, **9 carry a `name`** and it is real text — `Ásatrú`,
+`Bidaism`, `Immason`. The other 103 carry only `template` and `tag`, which are
+keys (`norse_pagan`). Five of the nine are faiths **founded during the run**:
+their `tag` is `dynamic_faith_<id>` rather than the template they were reformed
+out of, and they carry a `founder` character id. The remaining four are the
+originals the game renamed `Old Ásatrú` and so on when the reformed faith took
+the name.
+
+### A template is not a shipping date
+
+Tempting and wrong. `culture_template` answers *is the name a key*; `created`
+answers *when did it come into being*. Measured on the 1364 save:
+
+| | `created` = `1.1.1` | before the 867 bookmark | during this run |
+|---|---|---|---|
+| with a `culture_template` | 156 | 24 | **10** |
+| without one | 0 | 0 | 111 |
+
+Ten templated cultures were created during this very run, because CK3 ships
+templates for the cultures it expects to diverge: Swedish came out of Norse on
+950.5.2 in the Germania run. So the code has `templated` and `founded` as two
+separate questions and neither is derived from the other. `1.1.1` is a sentinel
+meaning *there from the start*, the same kind as a house's `9999.1.1`, and is
+never shown as a date.
+
+### Why this is worth a page and not just a line
+
+The faith founders are the reason. On the Germania run the played dynasty's own
+Folmar founded `Immason` — which is the faith the realm, the **Immasonian
+Fylkirate**, is named after — and Ingvar of the same house founded `Ásatrú`
+before him. A chronicle that cannot say where its own name came from is missing
+its best fact. So a faith's page names its founder and the faith it was reformed
+out of, and a culture's page names the cultures it came from and who heads it.
+Founders and heads are ordinary character ids, named the same way any relative
+outside the lineage is.
+
+Measured on the Germania run: 63 cultures and 21 faiths across the three saves,
+adding 84 pages to the chronicle's 1 297.

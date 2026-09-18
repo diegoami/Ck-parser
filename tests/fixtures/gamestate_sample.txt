@@ -181,6 +181,55 @@ coat_of_arms={
 	}
 	next_id=902
 }
+culture_manager={
+	cultures={
+		0={
+			culture_template="testish"
+			name="testish"
+			heritage="heritage_test_north"
+			language="language_testic"
+			ethos="ethos_stoic"
+			martial_custom="martial_custom_male_only"
+			created=1.1.1
+			head=100
+		}
+		1={
+			name="Testish-Farrish"
+			heritage="heritage_test_north"
+			language="language_testic"
+			ethos="ethos_bellicose"
+			martial_custom="martial_custom_equal"
+			created=1050.4.4
+			head=200
+			parents={ 0 }
+		}
+	}
+}
+religion={
+	religions={
+		0={
+			template="test_religion"
+			tag="test_religion"
+			faiths={ 0 1 }
+		}
+	}
+	faiths={
+		0={
+			template="test_pagan"
+			tag="test_pagan"
+			religion=0
+		}
+		1={
+			template="test_pagan"
+			tag="dynamic_faith_1"
+			name="Testarianism"
+			adjective="Testarian"
+			adherent="Testarian"
+			religion=0
+			founder=102
+		}
+	}
+}
 deleted_characters={
 }
 living={
@@ -243,6 +292,8 @@ dead_unprunable={
 	100={
 		first_name="Founder"
 		birth=830.1.1
+		culture=0
+		faith=0
 		dynasty_house=500
 		dead_data={
 			date=880.5.5
