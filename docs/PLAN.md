@@ -738,11 +738,12 @@ them. The wiki says exactly that and never invents a date:
 
 | Under | Seen | Began | Ended |
 |---|---|---|---|
-| d_optimatoi | 1358.9.13 – 1361.1.17 | by 1358.9.13 | between 1361.1.17 and 1364.3.10 |
-| Germania | 1364.3.10 | between 1361.1.17 and 1364.3.10 | *current* |
+| d_optimatoi | 1358.9.13 – 1361.1.17 | by 1358.9.13 | 1361.1.17 – 1364.3.10 |
+| Germania | 1364.3.10 | 1361.1.17 – 1364.3.10 | *current* |
 
-"by X" is the first snapshot, with nothing before it to bound against; "between
-X and Y" is a real change with the tightest bounds the saves allow.
+A range under Began or Ended is a **window** the change happened somewhere
+inside, never a date. "by X" is the first snapshot, with nothing before it to
+bound against. Both are the tightest the saves allow.
 
 **Every title is asked, not just the lineage.** A title is in a snapshot's
 *lineage* only while it is a direct vassal of the subject, but it is in that

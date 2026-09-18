@@ -174,9 +174,17 @@ def image_slot(
 
 
 def liege_label(wiki: Wiki, key: str | None, depth: int) -> str:
-    """A liege as a link, or the honest word for having none."""
+    """A liege as a link, or the honest word for having none.
+
+    A liege outside the lineage has no page, so it is shown as the bare key
+    rather than with the "not in this wiki" tag `title_link` uses: in this
+    column that tag is wider than the name it explains, and the section's
+    opening paragraph already accounts for it.
+    """
     if key is None:
         return '<span class="tag">independent</span>'
+    if key not in wiki.titles:
+        return f'<code title="not in this wiki">{e(key)}</code>'
     return title_link(wiki, key, depth)
 
 
@@ -189,7 +197,8 @@ def vassalage_rows(wiki: Wiki, stretches: list[Vassalage], depth: int) -> str:
         out.append(
             f"<tr><td>{liege_label(wiki, stretch.liege, depth)}</td>"
             f'<td class="num">{e(seen)}</td>'
-            f"<td>{e(stretch.began)}</td><td>{ended}</td></tr>"
+            f'<td class="num">{e(stretch.began)}</td><td class="num">{ended}</td></tr>'
+
         )
     return "".join(out)
 
@@ -241,8 +250,9 @@ def render_title(wiki: Wiki, title: WikiTitle, top: bool = False) -> str:
         body.append("<h2>Vassalage</h2>")
         body.append(
             "<p>A save says who holds a title, but not who its liege has been over"
-            " time. These are the saves' answers, so a change is only ever known to"
-            " have happened <em>between</em> two of them.</p>"
+            " time. These are the saves' own answers, so a range under <em>Began</em>"
+            " or <em>Ended</em> is a window the change happened somewhere inside —"
+            " never a date, because no save carries one.</p>"
         )
         body.append(
             "<table><thead><tr><th>Under</th><th class='num'>Seen</th>"

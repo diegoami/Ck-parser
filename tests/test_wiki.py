@@ -363,8 +363,8 @@ def test_stretches_collapse_and_carry_their_bounds():
     # a change between the last two: the date is unknown, the bounds are not
     two = _runs_of({"1100.6.1": "k_testland", "1110.1.1": "k_testland", "1120.1.1": "c_test"}, snaps)
     assert [v.liege for v in two] == ["k_testland", "c_test"]
-    assert two[0].ended == "between 1110.1.1 and 1120.1.1" and not two[0].open
-    assert two[1].began == "between 1110.1.1 and 1120.1.1" and two[1].open
+    assert two[0].ended == "1110.1.1 – 1120.1.1" and not two[0].open
+    assert two[1].began == "1110.1.1 – 1120.1.1" and two[1].open
 
 
 def test_independence_is_a_liege_of_none_and_absence_is_not():
@@ -376,8 +376,8 @@ def test_independence_is_a_liege_of_none_and_absence_is_not():
     # stretch breaks rather than bridging a gap we cannot see across
     gap = _runs_of({"1100.6.1": "k_testland", "1120.1.1": "k_testland"}, snaps)
     assert [v.liege for v in gap] == ["k_testland", "k_testland"]
-    assert gap[0].ended == "between 1100.6.1 and 1110.1.1"
-    assert gap[1].began == "between 1110.1.1 and 1120.1.1"
+    assert gap[0].ended == "1100.6.1 – 1110.1.1"
+    assert gap[1].began == "1110.1.1 – 1120.1.1"
 
 
 def test_a_vassal_that_moves_is_seen_by_the_snapshots_disagreeing(tmp_path):
@@ -388,7 +388,7 @@ def test_a_vassal_that_moves_is_seen_by_the_snapshots_disagreeing(tmp_path):
     wiki = build_wiki(views(early, late), "k_testland")
     moved = wiki.titles["x_mc_0"].vassalage(wiki.snapshots)
     assert [v.liege for v in moved] == ["k_testland", "c_test"]
-    assert moved[1].began == "between 1100.6.1 and 1120.1.1"
+    assert moved[1].began == "1100.6.1 – 1120.1.1"
     # and it is gone from the subject's vassals in the later snapshot
     kingdom = wiki.titles["k_testland"]
     assert "x_mc_0" in kingdom.vassals["1100.6.1"]
@@ -420,7 +420,7 @@ def test_the_subject_page_says_what_joined_and_left(tmp_path):
     assert "1 left" in kingdom_page and "Between <strong>1100.6.1</strong>" in kingdom_page
 
     moved_page = (out / "titles" / "x_mc_0.html").read_text()
-    assert "between 1100.6.1 and 1120.1.1" in moved_page
+    assert "1100.6.1 – 1120.1.1" in moved_page
     assert '../titles/c_test.html' in moved_page
 
 
@@ -435,4 +435,6 @@ def test_vassalage_never_claims_a_date_the_save_does_not_give(tmp_path):
     for stretch in wiki.titles["x_mc_0"].vassalage(wiki.snapshots):
         for phrase in (stretch.began, stretch.ended):
             if phrase:
-                assert phrase.startswith(("by ", "between ")), phrase
+                # "by X" or a window "X – Y"; never a bare date claiming to be
+                # the day it happened
+                assert phrase.startswith("by ") or " – " in phrase, phrase

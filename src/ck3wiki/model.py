@@ -136,11 +136,13 @@ class Vassalage:
 
     @property
     def began(self) -> str:
-        return f"between {self.after} and {self.first}" if self.after else f"by {self.first}"
+        """The window the link began in, or `by X` when nothing bounds it below."""
+        return f"{self.after} – {self.first}" if self.after else f"by {self.first}"
 
     @property
     def ended(self) -> str:
-        return f"between {self.last} and {self.before}" if self.before else ""
+        """The window the link ended in; empty while it is still open."""
+        return f"{self.last} – {self.before}" if self.before else ""
 
 
 def _runs_of(observed: dict[str, str | None], order: list[str]) -> list[Vassalage]:
