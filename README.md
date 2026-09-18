@@ -131,9 +131,13 @@ includes history the newest one has pruned.
 
 Nothing needs configuring: attaching a save from a different game to a Release
 adds a chronicle. Each chronicle is about its played character's primary title
-unless `--title` says otherwise. Open `site/index.html`, or let the `Wiki`
-workflow publish to GitHub Pages. Pass `--portraits DIR` to fold in images
-harvested by the companion project.
+unless `--title` says otherwise. Open `site/index.html` to read it locally.
+
+Publishing happens in [`diegoami/ck_wiki`](https://github.com/diegoami/ck_wiki),
+not here: its workflow clones this repository, fetches the saves from these
+Releases, builds and deploys to Pages. That repository is also where
+`diegoami/ck_portrait_generator` commits the harvested portraits and coats of
+arms, which is what `--portraits DIR` folds in.
 
 Write the character list for the companion portrait harvester, one file per
 snapshot of the run:

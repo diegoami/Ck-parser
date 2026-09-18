@@ -604,10 +604,16 @@ chronicle has its own:
 absence of the file as the truth and the flag as a hint. `saves` repeats the
 checksum map so the two sides can be checked against each other.
 
-Delivery runs the same way the saves do: the companion attaches images to a
-Release, `scripts/fetch_portraits.sh` collects them (loose `.png` or a `.zip`,
-flattened), and the Pages build passes them to `--portraits`. A chronicle copies
-only the images it links, so one directory can serve every run.
+Delivery is a git push. `diegoami/ck_wiki` is where the two projects meet: the
+companion commits images to its flat `images/` directory, that push triggers the
+build, and `--portraits` folds them in. A chronicle copies only the images it
+links, so one flat directory serves every run — the names already carry the
+save, so nothing collides.
+
+`ck_wiki` is also where the manifests live in git, committed back by the build,
+so the companion reads its queue without going through Pages or parsing HTML.
+The pages themselves are never committed: they are rebuilt from this repository
+and the saves on its Releases, and published as a Pages artifact.
 
 ### Houses and dynasties
 

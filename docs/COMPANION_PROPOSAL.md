@@ -53,8 +53,10 @@ and no other state to keep in sync.
 
 ## Where the work list lives
 
-The wiki publishes `portraits.json` at the root of the site and again in each
-chronicle. It names every image the wiki links, including the ones nobody has
+`portraits.json` is committed to `diegoami/ck_wiki`, at the root and again in
+each chronicle's directory, and published at the same paths on the site. Read
+it from whichever is easier — git means no HTML, no Pages, and no waiting for a
+deploy. It names every image the wiki links, including the ones nobody has
 captured yet.
 
 Root:
@@ -111,12 +113,12 @@ write them.
 3. **Name.** Write each capture to the `file` the manifest gives, verbatim.
    Deriving it yourself with the function above must give the same answer —
    worth asserting once, in a test.
-4. **Upload.** Attach the images to a Release of `diegoami/Ck-parser`, loose as
-   `.png` or bundled in a `.zip` — `scripts/fetch_portraits.sh` collects both,
-   and the Pages build folds whatever is there into the site. The file names are
-   the only thing that has to be right; any directory structure inside a bundle
-   is flattened away. (A `portraits/` directory beside the build works the same
-   way locally: `ck3wiki.build saves --out site --portraits portraits`.)
+4. **Upload.** Commit the images to `images/` in
+   [`diegoami/ck_wiki`](https://github.com/diegoami/ck_wiki). That directory is
+   flat and shared across chronicles — the names already carry the save, so
+   nothing collides — and the push triggers the build. The file names are the
+   only thing that has to be right. (Locally the same thing is
+   `ck3wiki.build saves --out site --portraits images`.)
 
 That last step is all there is to publishing. The wiki already links every one
 of those names, whether or not the file exists: a missing image renders as a
@@ -146,4 +148,5 @@ direction — this stays plain data files both ways, as it has been.
 
 `ck3parser/portraits.py` in `diegoami/Ck-parser` is the one place the naming
 rule is written down, and `ck3wiki/manifest.py` produces the files above.
-`docs/PLAN.md` §7 carries the reasoning.
+`docs/PLAN.md` §7 carries the reasoning, and `diegoami/ck_wiki`'s README states
+the same contract from the delivery side.

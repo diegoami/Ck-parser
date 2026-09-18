@@ -11,7 +11,10 @@
 set -euo pipefail
 
 dest="${1:-saves}"
-repo="${GITHUB_REPOSITORY:-diegoami/Ck-parser}"
+# Never inferred from GITHUB_REPOSITORY: the wiki is built from another
+# repository's workflow, where that variable names *that* repository and the
+# saves are not there. Override with SAVES_REPO if they ever move.
+repo="${SAVES_REPO:-diegoami/Ck-parser}"
 mkdir -p "$dest"
 
 auth=()

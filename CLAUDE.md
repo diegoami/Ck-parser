@@ -41,6 +41,12 @@ uv run python -m ck3wiki.build saves --out site --portraits harvested    # ... w
 - `diegoami/ck_portrait_generator` is the companion tool. It consumes plain data
   files from here and imports no code; see PLAN.md §7 for what it needs. Read its
   `docs/DECISIONS.md` before assuming anything about portraits.
+- `diegoami/ck_wiki` is where the wiki is published and where the companion
+  commits its images. This repository builds the pages; it does not publish them
+  and has no Pages workflow. Generated pages are never committed anywhere.
+- `scripts/fetch_saves.sh` must never infer the repository from
+  `GITHUB_REPOSITORY`: it runs inside ck_wiki's workflow, where that names
+  ck_wiki and the saves are not there.
 - Never write character names into the hand-off: the companion drops them on
   principle. Only emit fields this project can resolve correctly. A house's name
   is not a person's name; the house list keeps it.
