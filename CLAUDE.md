@@ -72,6 +72,9 @@ uv run python -m ck3wiki.build saves --out site --portraits harvested    # ... w
   anything derived from it by the save it was read from.
 - A character is harvestable only if they are in `living` AND have no
   `dead_data`; someone who died on the save's date satisfies only the first.
+  This binds the **wiki** as much as the hand-off: never link a portrait slot
+  for a character who was dead in that save. Getting it wrong once put 1 277
+  impossible images into the companion's queue.
 - A save stores parentage **downward only**: `family_data` lists `child`, never
   `father` or `mother` (verified on all 281 916 characters of the 1364 save).
   Parents are found by inverting every child list, which is a full pass with no

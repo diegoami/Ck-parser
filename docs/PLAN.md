@@ -573,6 +573,15 @@ anyone will publish, and keeps the name short and free of spaces.
 
 Keying on the save rather than the date is what gives one portrait **per save**:
 the same person at three dates is three images, which is their roadmap item 2.
+
+**Only the living are asked for.** The companion harvests by switching to a
+character with `play <id>`, which the game refuses for the dead, so a slot for
+someone already buried is work nobody can do. This was got wrong at first and
+the numbers were stark: the Germania chronicle asked for 1 330 portraits of
+which **53 were capturable**. `dead_data` decides it, and on the real saves that
+matches `living_characters` exactly — 26 and 25 of the 1358 and 1364 lineages.
+Someone who died on the save's own date still sits in `living` carrying the
+block, and is not harvestable either.
 Scoping the arms by save matters for a different reason — a `coat_of_arms_id` is
 an index inside one run, so the same number means different arms in a parallel
 world.

@@ -337,9 +337,15 @@ def _merge_character(wiki: Wiki, cid: int, char: Block, date: str, save_file: st
     if date not in record.seen:
         record.seen.append(date)
     name = Path(save_file).name
-    if name and not any(p.save == name for p in record.portraits):
-        # one portrait per save the character appears in: the same person at
-        # three dates is three images, which is the point (docs/PLAN.md §7)
+    # Only the living can be harvested: the companion switches to a character
+    # with `play <id>`, which the game refuses for the dead, so asking for a
+    # portrait of someone already buried is work nobody can do. `dead_data`
+    # decides it, and matches `living_characters` exactly on the real saves --
+    # someone who died on the save's own date still sits in `living` carrying
+    # the block, and is not harvestable either (docs/PLAN.md §7).
+    if name and dead is None and not any(p.save == name for p in record.portraits):
+        # one portrait per save the character was alive in: the same person at
+        # three dates is three images, which is the point
         record.portraits.append(
             Portrait(
                 file=portrait_name(save_file, cid),

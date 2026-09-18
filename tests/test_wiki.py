@@ -168,6 +168,25 @@ def test_a_portrait_is_linked_whether_or_not_it_has_been_harvested(tmp_path):
     assert not (out / "portraits" / "another-run.png").exists()
 
 
+def test_the_dead_are_never_asked_for(tmp_path):
+    # the companion harvests by switching to a character with `play <id>`, which
+    # the game refuses for the dead, so a portrait of someone already buried is
+    # work nobody can do. 1 277 of the Germania chronicle's 1 330 slots were
+    # exactly that before this was enforced.
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland")
+    founder = wiki.characters[100]
+    assert founder.death == "880.5.5" and founder.portraits == []
+    assert wiki.characters[200].portraits  # alive at 1100.6.1, so asked for
+
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    assert "<img" not in (out / "characters" / "100.html").read_text()
+    assert not any(p["character"] == 100 for p in
+                   chronicle_manifest(wiki, "s", have=set())["portraits"]
+                   if p["kind"] == "portrait")
+
+
 def test_a_character_gets_one_portrait_per_save_they_appear_in(tmp_path):
     early, late = two_snapshots(tmp_path)
     wiki = build_wiki(views(early, late), "k_testland")
