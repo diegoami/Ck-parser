@@ -138,6 +138,43 @@ Chronicle:
 No names, here as in the hand-off. You drop them on principle and we do not
 write them.
 
+## The deliverable: a release in `ck_wiki`
+
+A finished batch of work is a **GitHub release on `diegoami/ck_wiki`** holding
+both halves of it:
+
+* the **save files** the batch covers, and
+* the **images harvested from them** — portraits captured in-game, arms rendered
+  or captured.
+
+That makes a release self-contained: someone with only the release can rebuild
+the chronicle and see it fully illustrated, without hunting for which save a
+portrait came from. Each save in the manifest carries the release it was
+published in:
+
+```json
+"saves": [ { "file": "Fylkir_Ludwig_of_Immasonian_Fylkirate_1364_03_10.ck3",
+             "checksum": "5a86b836cd32", "date": "1364.3.10",
+             "release": "0.0.4" } ]
+```
+
+and the root listing gives the releases a chronicle draws on, which may be
+several.
+
+**Images still go to `images/` as well**, committed, because that is what the
+site serves and what triggers a rebuild. The release is the archive; the
+directory is the live copy. Putting a file in both is deliberate.
+
+### One thing a release is *not*
+
+It is not a run. Do not group by it, and do not assume the saves in one release
+belong together. Ours do not: the Germania chronicle's three saves are on
+releases **0.0.2, 0.0.3 and 0.0.4**, one save each, and grouping by release
+would split one playthrough into three single-snapshot chronicles. Which saves
+belong to which run is decided by their fingerprint — seed, game version,
+bookmark date — and the manifest has already done it for you. The `chronicle`
+a manifest belongs to is the answer; `release` is just where the file came from.
+
 ## What we ask you to build
 
 1. **Scan.** Fetch the root `portraits.json`, follow each chronicle's manifest,
@@ -154,6 +191,10 @@ write them.
    nothing collides — and the push triggers the build. The file names are the
    only thing that has to be right. (Locally the same thing is
    `ck3wiki.build saves --out site --portraits images`.)
+
+5. **Archive.** Attach the batch's saves and images to a release on `ck_wiki`,
+   so the release stands on its own. The commit in step 4 is what publishes;
+   this is what makes the work reproducible later.
 
 That last step is all there is to publishing. The wiki already links every one
 of those names, whether or not the file exists: a missing image renders as a

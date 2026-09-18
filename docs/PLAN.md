@@ -619,6 +619,23 @@ after their recipe (§11); portrait names did not change.
 absence of the file as the truth and the flag as a hint. `saves` repeats the
 checksum map so the two sides can be checked against each other.
 
+### A release is a batch, not a run
+
+`scripts/fetch_saves.sh` records which release each save was published in, and
+that tag rides in the manifest's `saves` entries and in the root listing's
+`releases`. It says **where a save came from and where its harvested images
+belong**. It never decides which chronicle a save joins.
+
+It cannot, and the published data already shows why: the Germania run's three
+saves are on releases **0.0.2, 0.0.3 and 0.0.4**, one save each. Treating a
+release as a run would split that chronicle into three, each with a single
+snapshot, losing every succession the run recorded between them. Runs are
+decided by the fingerprint (§3) and nothing else.
+
+The inverse is a useful convention rather than a rule: keeping one run's saves
+out of another run's release makes a release a clean delivery unit. Nothing
+enforces it, and nothing breaks if it is ignored.
+
 Delivery is a git push. `diegoami/ck_wiki` is where the two projects meet: the
 companion commits images to its flat `images/` directory, that push triggers the
 build, and `--portraits` folds them in. A chronicle copies only the images it

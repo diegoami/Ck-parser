@@ -16,6 +16,7 @@ which is what the playthrough was about.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -27,6 +28,21 @@ from ck3parser.runs import Run, Snapshot, scan
 from .manifest import write_chronicle_manifest, write_root_manifest
 from .model import build_wiki
 from .render import harvested, write_landing, write_site
+
+
+def read_releases(save_path: str) -> dict[str, str]:
+    """Save file name -> the release it was published in, if `fetch_saves.sh` said.
+
+    Optional: a directory of saves someone assembled by hand has no releases,
+    and the build says nothing about them rather than guessing.
+    """
+    path = Path(save_path)
+    index = (path if path.is_dir() else path.parent) / "releases.json"
+    try:
+        loaded = json.loads(index.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in loaded.items() if isinstance(v, str)} if isinstance(loaded, dict) else {}
 
 
 def discover(save_path: str, run_id: str | None = None) -> list[Run]:
@@ -70,6 +86,7 @@ def subject_of(run: Run, override: str | None, log) -> str | None:
 def build_one(
     run: Run, subject: str, with_vassals: bool, out: Path, portraits: Path | None,
     log, with_family: bool = True, with_kin: bool = True,
+    releases: dict[str, str] | None = None,
 ) -> dict | None:
     views = []
     for snapshot in run.snapshots:
@@ -82,7 +99,9 @@ def build_one(
         return None
     wiki = build_wiki(views, subject, with_family=with_family, with_kin=with_kin)
     pages = write_site(wiki, out / run.slug, portraits, top=True)
-    images = write_chronicle_manifest(out / run.slug, wiki, run.slug, harvested(portraits))
+    images = write_chronicle_manifest(
+        out / run.slug, wiki, run.slug, harvested(portraits), releases
+    )
     root = wiki.root
     print(
         f"  {run.slug}: {pages} pages, {images['missing']} of {images['wanted']}"
@@ -122,13 +141,16 @@ def run_build(
 
     out = Path(out_dir)
     shots = Path(portraits) if portraits else None
+    releases = read_releases(save_path)
     print(f"{len(runs)} run(s) to build", file=log)
     entries = []
     for run in runs:
         subject = subject_of(run, title, log)
         if subject is None:
             continue
-        entry = build_one(run, subject, with_vassals, out, shots, log, with_family, with_kin)
+        entry = build_one(
+            run, subject, with_vassals, out, shots, log, with_family, with_kin, releases
+        )
         if entry is not None:
             entries.append(entry)
 

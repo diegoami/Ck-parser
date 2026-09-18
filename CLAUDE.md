@@ -7,7 +7,7 @@ Read `docs/HANDOVER.md` first (state of the project, next tasks), then
 
 ```
 uv sync --group dev              # install (the SessionStart hook does this on the web)
-uv run pytest -q                 # 155 tests, < 1 s, fixture only
+uv run pytest -q                 # 161 tests, < 1 s, fixture only
 scripts/fetch_saves.sh           # three real saves (~73 MB each) into ./saves, git-ignored
 uv run python -m ck3parser.runs verify saves --json saves/runs.json
 uv run python -m ck3parser.pipeline saves/<file>.ck3 --title e_germany --dry-run
@@ -47,6 +47,10 @@ uv run python -m ck3wiki.build saves --out site --no-kin                 # ... t
   underscore. Drop the marker, never guess the letter (PLAN.md §8).
 - One wiki per playthrough. What separates them is the run, identified by seed
   and game version, never the title the wiki is about.
+- A GitHub release is a **batch**, not a run. The Germania run's saves sit on
+  releases 0.0.2, 0.0.3 and 0.0.4, so grouping by release would split one
+  chronicle into three. The release tag is carried for delivery only: it says
+  where a save came from and where its images belong (PLAN.md §7).
 - `diegoami/ck_portrait_generator` is the companion tool. It consumes plain data
   files from here and imports no code; see PLAN.md §7 for what it needs. Read its
   `docs/DECISIONS.md` before assuming anything about portraits.
