@@ -39,7 +39,6 @@ import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from .characters import living_characters
 from .arms import CoatOfArms, read_arms
 from .dynasties import Dynasty, House, arms_id, find_dynasties, find_houses, house_name
 from .parser import Block
@@ -156,12 +155,14 @@ def interesting_ids(titles: list[TitleRecord]) -> set[int]:
     return ids
 
 
-def select(save_path: str, title_key: str, with_vassals: bool = True, log=None) -> list[HandoffCharacter]:
+def select(
+    save_path: str, title_key: str, with_vassals: bool = True, log=None, cache_dir=None
+) -> list[HandoffCharacter]:
     """The harvestable characters of one snapshot's lineage, oldest id first."""
     log = sys.stderr if log is None else log
-    view = gather(save_path, title_key, with_vassals, log=log)
+    view = gather(save_path, title_key, with_vassals, log=log, cache_dir=cache_dir)
     wanted = interesting_ids(view.titles)
-    alive = living_characters(save_path, wanted)
+    alive = view.living_characters(wanted)
     print(f"  harvestable: {len(alive)} of {len(wanted)} alive at {view.fp.date}", file=log)
     return [describe(cid, alive[cid], view.fp.date, save_path) for cid in sorted(alive)]
 

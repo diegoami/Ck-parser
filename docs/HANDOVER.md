@@ -107,6 +107,14 @@ so a fresh session (any model) can continue without the conversation history.
   between two snapshots. On the three Germania saves, 46 of 68 titles changed
   liege at least once and 2 changed twice. The graph edge is bracketed by
   `first_seen`/`last_seen`, moving only outward.
+- **Incremental builds** (`ck3parser/digest.py`): each save's characters are
+  written once to a gzipped digest — 281 916 rows, 11 MB, 54 s to write, **2.1 s
+  to read back** — and the five per-save character passes become one read.
+  Adding a save to a run costs that save's pass, not the run's. Keyed by
+  fingerprint, schema-versioned, ignored rather than migrated when stale, and
+  every failure falls back to reading the save. `--no-cache` turns it off;
+  `.ck3cache/` is git-ignored. Character reads go through `SnapshotView`
+  (`view.find_characters`, `view.family_index`), never straight at the save.
 - **Family** (`ck3parser/family.py`): parents, siblings, spouses, former
   spouses and children on every character page. A save stores parentage
   **downward only** — `family_data` lists `child` and never `father` or
@@ -150,18 +158,17 @@ and in a first pass it outranks everything the graph could answer.
 1. **Narrative prose.** The wiki is factual; Phase 7's LLM-written text is still
    gated on choosing a small local model. Everything it would need now exists:
    succession, vassalage with honest bounds, family, houses and arms.
-2. **Widen further, or stop here.** The direct line — parents, spouses,
-   children — has pages and portraits (PLAN.md §10). Siblings are still
-   named-only; promoting them would add 689 pages to Germania. Beyond that lies
-   the second hop (a spouse's parents), which needs no new pass but does need a
-   decision about where a chronicle stops.
-3. **Character lookup speed, and incremental builds.** A lineage load is ~34 s
-   per snapshot and the family inversion another ~37 s, all of it full passes
-   over the character sections. The full three-chronicle build takes ~8 minutes
-   in CI, which is comfortable but grows linearly with every save added. Two
-   separable fixes: an id -> offset index within the character sections (the
-   section index already gives line ranges), and caching a built chronicle so
-   only new saves are read.
+2. **Widen further, or stop here.** Parents, spouses, children and now
+   siblings have pages and portraits (PLAN.md §10). Beyond that lies the second
+   hop — a spouse's parents, a sibling's children — which needs no new pass now
+   that the digest holds every character, but does need a decision about where a
+   chronicle stops. There is no longer a performance reason not to; the reason
+   to stop is editorial.
+3. **Cache the other sections too, if a build is still too slow.** The
+   character digest (PLAN.md §14) took the five character passes down to one
+   read. What is left uncached is `landed_titles` (~2 s a save), the dynasties
+   section, arms, cultures and faiths — each read once, none of them the shape
+   of the problem the characters were. Do this only if a measurement says to.
 4. **Deeper lineages**, then **full-save scale** (PLAN.md Phase 6). Vassalage
    has bounded stretches (§9) but still only one level down: a county under a
    vassal duchy is not loaded.
@@ -197,6 +204,11 @@ and in a first pass it outranks everything the graph could answer.
    | asked unpredictably, in words | graph + LM |
 
 ### Done since this list was last written
+
+- **Siblings have pages.** A succession is usually a quarrel between them, so
+  the brother who was passed over is worth one (PLAN.md §10). `--no-siblings`
+  goes back to the narrow line.
+- **Builds are incremental**, through a per-save character digest (PLAN.md §14).
 
 - **Cultures and faiths are resolved and have pages** (`ck3parser/cultures.py`,
   `ck3parser/faiths.py`). Every character page names both, the index lists them,

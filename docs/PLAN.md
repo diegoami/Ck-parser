@@ -907,10 +907,15 @@ later word on it, and listing the person under both names them twice.
 ### Who gets a page
 
 Holding a title is what put the ever-holders in. The **direct line** — parents,
-spouses, former spouses and children — is in by blood or marriage, and gets the
-same page and the same portrait rule. Siblings do not: they are named wherever
-they appear, and promoting them would buy 689 more pages for the Germania
-chronicle that are mostly dead ends.
+spouses, former spouses, children and **siblings** — is in by blood or marriage,
+and gets the same page and the same portrait rule.
+
+Siblings were left out at first, as 689 pages of mostly dead ends. That was the
+wrong way to count them. A succession is usually a quarrel between siblings: the
+brother who was passed over is the reason a reign happened at all, and a
+chronicle that can name him but not say what became of him has dropped the half
+of the story that explains the other half. They are the widest ring that still
+earns its pages, and `--no-siblings` goes back to the narrow line.
 
 Measured on the Germania chronicle, across its three saves:
 
@@ -1205,3 +1210,64 @@ outside the lineage is.
 
 Measured on the Germania run: 63 cultures and 21 faiths across the three saves,
 adding 84 pages to the chronicle's 1 297.
+
+---
+
+## 14. Incremental builds: the digest
+
+A build reads each save's character sections **five times over**: once for the
+lineage's holders, once for the family inversion, once to promote the direct
+line, once to name the relatives beyond it, once more for a faith's founder.
+Every one is a pass over a 280 MB gamestate, the inversion cannot exit early
+(§10), and all of it is paid again in full on the next build even for saves that
+have not changed.
+
+That is where a build's minutes go, and it is why the three Germania saves took
+~10 minutes. Worse, it grows with every save added to a run: the cost of adding
+one snapshot was the cost of re-reading all of them.
+
+### One digest per save
+
+So each save's characters are written once to a digest and read from there
+afterwards. Measured on the 1364 save:
+
+| | |
+|---|---|
+| characters stored | 281 916 |
+| size, gzipped JSONL | **11 MB** |
+| to write (one pass) | 54 s |
+| **to read back** | **2.1 s** |
+
+Five passes at ~40 s each become one read at two seconds. Adding a save to a run
+now costs that one save's pass, not the run's.
+
+### What it stores, and what it deliberately does not
+
+Exactly what this project asks a character record for: name, birth, sex, house,
+culture, faith, death and the `family_data` links. Nothing else in a record is
+read anywhere here, and a digest holding more would be a second, slower copy of
+the save. The keys are single letters because there are 281 916 rows and
+`"first_name"` over that many is megabytes of nothing.
+
+It is a **cache, not a format**. It is keyed by the save's fingerprint and the
+size of the file, carries `SCHEMA` in its header, and is ignored — never
+migrated — whenever that changes. A digest that cannot be read, is stale, or is
+half-written costs a slow build and never a wrong one: every failure path
+returns nothing and the save is read instead. It is written to a temporary name
+and renamed, so an interrupted build leaves nothing a later one would trust.
+
+`.ck3cache/` is git-ignored, and `--no-cache` turns the whole thing off.
+
+### Why the characters and nothing else
+
+The other sections are read too — titles, houses, dynasties, arms, cultures,
+faiths — and none of them is worth caching yet. `landed_titles` is one pass of
+about two seconds; the rest are smaller still. The character sections are ~60%
+of a gamestate's lines and are read five times; everything else is read once.
+Caching them as well is a later step and would not change a build's shape.
+
+### The property that matters
+
+A cache may change how long a build takes and nothing else. `tests/test_digest.py`
+builds the same run three times — once with no cache, once filling one, once
+reading it — and asserts the rendered sites are byte-identical.

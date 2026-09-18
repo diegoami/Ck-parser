@@ -210,8 +210,9 @@ def test_houses_are_read_from_the_save_and_get_a_page(tmp_path):
     house = wiki.houses[500]
     assert house.name == "of Test"  # the name key, with its prefix key
     assert house.dynasty is not None and house.dynasty.id == 50
-    # eldest first, and 830.1.1 is before 1060.1.1: dates sort as dates
-    assert [c.id for c in wiki.members_of(500)] == [100, 101, 102, 201, 200]
+    # eldest first, and 830.1.1 is before 1060.1.1: dates sort as dates.
+    # 205 is here because he is 200's brother, which is a page's worth on its own
+    assert [c.id for c in wiki.members_of(500)] == [100, 101, 102, 201, 205, 200]
     out = tmp_path / "site"
     write_site(wiki, out)
     house_page = (out / "houses" / "500.html").read_text()
@@ -483,15 +484,29 @@ def test_the_direct_line_is_promoted_to_pages_of_its_own(tmp_path):
     assert '../characters/202.html' in (out / "characters" / "200.html").read_text()
 
 
-def test_a_sibling_of_nobody_in_the_line_stays_page_less(tmp_path):
-    # siblings are named but not promoted: for Germania that would be 689 more
-    # pages, mostly dead ends
+def test_a_sibling_gets_a_page_and_no_siblings_takes_it_away(tmp_path):
+    # a succession is usually a quarrel between siblings, so the brother who was
+    # passed over is worth a page; --no-siblings goes back to the narrow line
     early, _ = two_snapshots(tmp_path)
     wiki = build_wiki(views(early), "k_testland")
     from ck3wiki.model import direct_line
 
-    assert 204 not in direct_line(wiki.characters[203])  # a sibling, not the line
-    assert 200 in direct_line(wiki.characters[203]) and 202 in direct_line(wiki.characters[203])
+    line = direct_line(wiki.characters[200])
+    assert 205 in line  # the brother who was passed over
+    assert 102 in line and 202 in line  # and the father and the spouse, as before
+    assert 205 not in direct_line(wiki.characters[200], with_siblings=False)
+
+
+def test_no_siblings_leaves_them_named_but_page_less(tmp_path):
+    early, _ = two_snapshots(tmp_path)
+    narrow = build_wiki(views(early), "k_testland", with_siblings=False)
+    wide = build_wiki(views(early), "k_testland")
+    # 205 is 200's brother and holds nothing, so nothing but the sibling rule
+    # reaches him: only the wide build gives him a page
+    assert 205 in wide.characters
+    assert 205 not in narrow.characters and 205 in narrow.relatives
+    # either way he is named on the page he appears on
+    assert 205 in narrow.characters[200].siblings
 
 
 def test_a_promoted_characters_house_is_resolved_too(tmp_path):

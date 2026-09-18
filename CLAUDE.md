@@ -7,7 +7,7 @@ Read `docs/HANDOVER.md` first (state of the project, next tasks), then
 
 ```
 uv sync --group dev              # install (the SessionStart hook does this on the web)
-uv run pytest -q                 # 179 tests, < 1 s, fixture only
+uv run pytest -q                 # 188 tests, < 1 s, fixture only
 scripts/fetch_saves.sh           # three real saves (~73 MB each) into ./saves, git-ignored
 uv run python -m ck3parser.runs verify saves --json saves/runs.json
 uv run python -m ck3parser.pipeline saves/<file>.ck3 --title e_germany --dry-run
@@ -18,6 +18,7 @@ uv run python -m ck3parser.handoff saves --title e_germany --out handoff  # port
 uv run python -m ck3wiki.build saves --out site                          # the wikis themselves
 uv run python -m ck3wiki.build saves --out site --portraits harvested    # ... with images folded in
 uv run python -m ck3wiki.build saves --out site --no-family              # ... fast: skips the full character pass
+uv run python -m ck3wiki.build saves --out site --no-cache               # ... without the per-save character digests
 uv run python -m ck3wiki.build saves --out site --no-kin                 # ... title-holders only, no direct line
 ```
 
@@ -124,6 +125,17 @@ uv run python -m ck3wiki.build saves --out site --no-kin                 # ... t
 - A faith whose `tag` is `dynamic_faith_*` was founded during the run and
   carries a `founder`. That is how the wiki can say the Germania run's own
   Folmar founded the faith the Immasonian Fylkirate is named after.
+- Character reads go through the `SnapshotView`, never straight at the save:
+  `view.find_characters` and `view.family_index` answer out of the cached
+  digest when there is one (PLAN.md §14). Calling `find_characters(save, ...)`
+  or `read_index(save, ...)` from the wiki puts a build back to minutes.
+- A digest is a cache, never a format. Bump `digest.SCHEMA` when the row
+  shape changes; old ones are ignored, never migrated. Every failure to read
+  one must fall back to the save: a bad cache costs a slow build, never a
+  wrong one.
+- Siblings get pages. A succession is usually a quarrel between them, so the
+  brother who was passed over is worth one; `--no-siblings` goes back to the
+  narrow line (PLAN.md §10).
 - A save's top-level key set varies between saves of one run. Never assume a
   section exists.
 - Facts labelled "verified" in PLAN.md were checked on three real saves. Anything
