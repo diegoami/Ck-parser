@@ -443,6 +443,13 @@ own three portraits. Anything wanting readable genes per character would have to
 decode the packed form; the companion project has solved that format but has
 retired it as a harvesting mechanism (see §7).
 
+**Do not delete this finding as unused.** DNA is out of scope for portraits, and
+§7 says so, but a future graph query — *"how much common genes have X and Y"* —
+would need exactly this, and the companion's codec is where to start. Note that
+the same question has a far cheaper reading: genealogical relatedness, computed
+from the parent map `ck3parser.family` already builds. See `docs/HANDOVER.md`
+for which is which.
+
 ### Loading the whole run (three snapshots, one lineage)
 
 Loading `e_germany` from all three saves oldest first takes 1 m 39 s and writes
@@ -987,6 +994,42 @@ Two things the canonical form must get right, both covered by tests:
 A house whose recipe cannot be read gets no arms image at all. An id alone
 cannot identify a picture, and a name that does not identify one would ask for
 the same image twice under different names.
+
+### Titles bear arms too
+
+Every one of the 1364 save's **12 915 titles** carries a `coat_of_arms_id`,
+which the title parser used to drop. They are resolved the same way and shown in
+the title page's infobox.
+
+Because the name comes from the recipe rather than from who bears it, a title
+and the house holding it **share one file** whenever they are drawn alike. That
+turns out to be the exception rather than the rule. Measured on the Germania
+chronicle, 924 arms images with 944 bearers between them:
+
+| Shared between | Images |
+|---|---|
+| two houses | 13 |
+| a title and a house | **4** |
+| two titles | 1 |
+| borne by one thing only | 906 |
+
+So only 4 of the 68 titles fly a house's arms — the guess that a realm usually
+flies its ruling house's was wrong, and adding titles added 63 genuinely new
+images rather than mostly duplicates. The collapsing is still right and still
+free; it is simply worth less than it looks, as with the cross-run dedup in the
+section above.
+
+The manifest collapses shared images into one request and lists every bearer
+under `borne_by`:
+
+```json
+{ "file": "arms_750fc7e0a608.png", "kind": "arms", "title": "c_test",
+  "page": "titles/c_test.html",
+  "borne_by": ["titles/c_test.html", "houses/500.html"], ... }
+```
+
+An entry carries `title` or `house`, never both, naming whichever bearer the
+manifest saw first; `borne_by` is the full list.
 
 ### The companion need not capture them
 

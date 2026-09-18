@@ -54,27 +54,32 @@ def wanted_images(wiki: Wiki, have: set[str]) -> list[dict]:
                 "have": portrait.file in have,
             }
         )
-    seen: set[str] = set()
+    seen: dict[str, dict] = {}
     for arms in wiki.wanted_arms:
-        # the same picture is one image: two houses drawn the same way ask once
+        # the same picture is one image, whoever bears it: a title and the house
+        # holding it usually share their arms, and two houses can as well
         if arms.file in seen:
+            seen[arms.file]["borne_by"].append(arms.page)
             continue
-        seen.add(arms.file)
-        out.append(
-            {
-                "file": arms.file,
-                "kind": "arms",
-                "save": arms.save,
-                "checksum": arms.checksum,
-                "house": arms.house,
-                "coat_of_arms_id": arms.coat_of_arms_id,
-                "page": f"houses/{arms.house}.html",
-                "have": arms.file in have,
-                # the recipe the game draws from, so this need not be captured
-                # in-game at all: pattern, colours and emblem textures
-                "definition": arms.definition,
-            }
-        )
+        entry = {
+            "file": arms.file,
+            "kind": "arms",
+            "save": arms.save,
+            "checksum": arms.checksum,
+            "coat_of_arms_id": arms.coat_of_arms_id,
+            "page": arms.page,
+            "borne_by": [arms.page],
+            "have": arms.file in have,
+            # the recipe the game draws from, so this need not be captured
+            # in-game at all: pattern, colours and emblem textures
+            "definition": arms.definition,
+        }
+        if arms.title:
+            entry["title"] = arms.title
+        else:
+            entry["house"] = arms.house
+        seen[arms.file] = entry
+        out.append(entry)
     return out
 
 

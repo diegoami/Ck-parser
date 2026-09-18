@@ -130,49 +130,138 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 | `sections SAVE` | 54 distinct top-level keys, 14 M lines, 4.8 s |
 | `sections SAVE --verify` | ~41 M tokens, balanced, max depth 7, ~38 s |
 | `handoff saves --title e_germany --run <germany>` | 26 / 2 / 25 harvestable per snapshot, 48 distinct across the run, 22 / 1 / 21 houses, all with arms, ~2 m |
-| `ck3wiki.build saves` on all five release saves | 3 chronicles, 5 516 pages (houses included), 5 630 images wanted, ~2 m 51 s without family |
+| `ck3wiki.build saves` on all five release saves | 3 chronicles, 21 879 pages, 5 845 images wanted, ~8 min in CI with family and kin |
 | `ck3wiki.build saves --run <germania>` with family | 1 chronicle, 1 297 pages, ~5 m 21 s — the family pass roughly doubles a build |
 | `runs scan` on all five | 3 runs: seeds 576691683 / 633048653 / 1370892195 on versions 1.6.1.2 / 1.4.4 / 1.3.1 |
 
 ## What is not done, in the order I would do it
 
-1. **Confirm the first ck_wiki deploy landed.** Publishing moved to
-   `diegoami/ck_wiki`: its workflow clones this repository, fetches the saves
-   from these Releases, builds with `--portraits images`, commits the manifests
-   back and deploys. Pages has never been enabled on that repository, and
-   `configure-pages` runs with `enablement: true` to do it — on Ck-parser that
-   needed admin and had to be turned on by hand, so check the first run and be
-   ready to enable it in Settings → Pages. Then check that
-   https://diegoami.github.io/ck_wiki/ serves the landing page.
+1. **The graph is a destination, not a means — and it is currently behind.**
+   `ck3graph` still writes what it wrote before family and vassalage existed:
+   `HELD_BY`, `VASSAL_OF` and the title/character/house nodes.
+
+   Read the rest of this item with the motivation stated plainly, because it
+   changes what "good" means: **building something real on Neo4j is itself a
+   goal here**, not a way to make some other feature cheaper. Nothing below is a
+   claim that the wiki needs a graph database — it does not, and §"where the
+   graph is not needed" says so. The graph is meant to be the interesting
+   artifact in its own right, paired with a local LM, answering questions the
+   wiki's pages cannot:
+
+   > *How many cousins has X? How much common genes have X and Y? Give me the
+   > vassal tree of X.*
+
+   Those three questions are the **design spec** for the schema. Two need no new
+   parsing at all — only that the graph persists more than the wiki keeps — and
+   all three are the shape Cypher is actually better at than Python: variable
+   length paths.
+
+   ```cypher
+   MATCH (x:Character {id: $id})<-[:PARENT_OF*2]-(gp)-[:PARENT_OF*2]->(y)
+   MATCH (t:Title {key: $key})<-[:VASSAL_OF* {kind: 'de_facto'}]-(v)
+   ```
+
+   A single cousin query is thirty lines of Python; so is a single vassal tree.
+   The argument for Cypher is never one query, it is that an LM can compose a
+   query nobody wrote a function for.
+
+   | Question | What answers it | Status |
+   |---|---|---|
+   | cousins | two hops up the parent map and two back down | the map exists; the wiki throws most of it away |
+   | vassal tree | recursion through de facto liege, as of a snapshot | the tree exists; `lineage()` stops at depth 1 |
+   | common genes | *two different questions* — see below | one is free, one is real work |
+
+   **Cousins.** `ck3parser.family.FamilyIndex` already inverts the **whole**
+   save — 201 498 children and 164 612 parents, about 80 MB — and the wiki then
+   keeps only the direct line. The graph should persist the map itself. Nothing
+   new to read.
+
+   **Vassal tree.** `TitleIndex.vassals` holds the full de facto tree for a save;
+   `lineage()` takes one level because loading every character under it is
+   expensive. A tree is per snapshot by nature, since vassalage is only ever
+   known as of a save (§9), so a query has to name a date or accept bounds.
+
+   **Common genes is ambiguous and the two readings differ enormously:**
+
+   - *Genealogical relatedness* — a kinship coefficient from shared ancestry.
+     Computable from the same parent map as cousins, with no new parsing. This
+     is what a chronicle usually means by "related".
+   - *Actual shared genes* — needs the packed `dna="…"` field decoded, 87 727 of
+     them per save (§5). This project has never touched it. The companion
+     project **has solved that format** and retired it only as a portrait
+     mechanism, so their codec is the place to start rather than the CK3 wiki.
+
+   **Settled: genealogical relatedness is what is meant, not DNA.** The packed
+   `dna=` field stays untouched. PLAN.md §7's "we do not owe the companion DNA"
+   still holds, and nothing in this project needs to decode it.
+
+   ### Where the graph is *not* needed
+
+   Worth stating so nobody later mistakes enthusiasm for necessity. Relatedness,
+   cousins, "vassals who are my kin" and "vassals in my house" are all
+   computable today from `FamilyIndex` plus the wiki model, with no database:
+   they are set intersections and walks over a dict. Some of them arguably
+   belong on a **page** rather than in a query — "vassals who share my house" is
+   a chronicle fact, the difference between a realm held by kin and one held by
+   strangers, and it could be rendered at build time.
+
+   The division that holds up:
+
+   | | Where it belongs |
+   |---|---|
+   | asked constantly, same shape | a section on a page |
+   | asked once, specific | an ad-hoc script over `FamilyIndex` |
+   | asked unpredictably, in words | graph + LM |
+
+   ### What catching up means
+
+   In rough order, since the queries above name their own requirements:
+
+   - `(:Character)-[:PARENT_OF]->(:Character)` from the **whole** inversion, not
+     the wiki's direct-line slice. This is the one that unlocks cousins and
+     relatedness, and the data is already built and thrown away each run.
+   - `SPOUSE_OF`, and `MEMBER_OF` to a `House`, which the wiki has and the graph
+     does not.
+   - Vassalage as bounded stretches (§9) rather than a single `as_of` edge, so a
+     tree query can be asked as of a date.
 2. **Narrative prose.** The wiki is factual; Phase 7's LLM-written text is still
-   gated on choosing a small local model. The pages are the place it would go.
-3. **Parse coat-of-arms definitions.** Houses now resolve to a dynasty and an
-   arms **id**, and the wiki asks for the image by name, but the `coat_of_arms`
-   section (11% of a save) that actually defines the emblem is still unparsed,
-   and titles carry a `coat_of_arms_id` the title parser drops. Composing arms
-   offline from save data plus install textures is the companion's roadmap item
-   (PLAN.md §7); either they capture them from the window or we extract them.
-   Arms would also be the obvious thing to put on a title page.
-4. **Character lookup speed.** A lineage load takes ~34 s per snapshot, nearly
-   all of it full passes over the character sections; the wiki and the hand-off
-   each pay it again. The section index gives line ranges, so what is missing is
-   an id -> offset index within the character sections.
-5. **Culture and faith names.** Numeric ids resolved through `culture_manager`
+   gated on choosing a small local model. Everything it would need now exists:
+   succession, vassalage with honest bounds, family, houses and arms.
+3. **Character lookup speed, and incremental builds.** A lineage load is ~34 s
+   per snapshot and the family inversion another ~37 s, all of it full passes
+   over the character sections. The full three-chronicle build takes ~8 minutes
+   in CI, which is comfortable but grows linearly with every save added. Two
+   separable fixes: an id -> offset index within the character sections (the
+   section index already gives line ranges), and caching a built chronicle so
+   only new saves are read.
+4. **Culture and faith names.** Numeric ids resolved through `culture_manager`
    and `religion`. Both the hand-off and the wiki omit culture until then.
-6. **File the companion proposal.** `docs/COMPANION_PROPOSAL.md` is written and
-   ready to open as a PR against `diegoami/ck_portrait_generator`; this session
-   had no push access to that repository. Nothing here is blocked on it — the
-   wiki already links every image by the derived name — but the companion
-   cannot find its work queue until it reads `portraits.json`.
-7. **Widen further, or stop here.** The direct line — parents, spouses,
-   children — now gets pages and portraits (PLAN.md §10), taking Germania from
-   952 to 5 550 character pages and its portrait queue from 53 to 1 389.
-   Siblings are still named-only; promoting them would add 689 pages. Beyond
-   that lies the second hop (a spouse's parents), which needs no new pass but
-   does need a decision about where a chronicle stops.
-8. **Deeper lineages**, then **full-save scale** (PLAN.md Phase 6). Vassalage
-   now has bounded stretches (PLAN.md §9), but still only one level down: a
-   county under a vassal duchy is not loaded.
+5. **Widen further, or stop here.** The direct line — parents, spouses,
+   children — has pages and portraits (PLAN.md §10). Siblings are still
+   named-only; promoting them would add 689 pages to Germania. Beyond that lies
+   the second hop (a spouse's parents), which needs no new pass but does need a
+   decision about where a chronicle stops.
+6. **Deeper lineages**, then **full-save scale** (PLAN.md Phase 6). Vassalage
+   has bounded stretches (§9) but still only one level down: a county under a
+   vassal duchy is not loaded.
+7. **Move the saves to ck_wiki's Releases.** They are still on this
+   repository's. `fetch_saves.sh` already reads `SAVES_REPO`, so it is an upload
+   plus one environment variable in ck_wiki's workflow — no code change.
+
+### Done since this list was last written
+
+- **Coat-of-arms definitions are parsed** (`ck3parser.arms`), titles included:
+  all 12 915 titles of the 1364 save carry a `coat_of_arms_id` the parser used
+  to drop. Arms are named after the recipe that draws them, so a title and the
+  house holding it share one file (PLAN.md §11).
+- **The companion proposal is filed** as
+  [ck_portrait_generator#1](https://github.com/diegoami/ck_portrait_generator/issues/1),
+  with the deliverable — a release on ck_wiki holding the saves and the images
+  harvested from them — in a follow-up comment.
+- **ck_wiki publishes.** Run 6 built all three chronicles with family and kin in
+  ~8 minutes, committed the manifests back at schema `ck3-images/2` and
+  deployed. Pages must be set to the **GitHub Actions** source, not a branch;
+  that cost several runs to discover and is recorded in ck_wiki's README.
 
 ## Known gaps and gotchas
 

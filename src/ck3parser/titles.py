@@ -56,6 +56,7 @@ class TitleRecord:
     de_facto_liege: int | None = None
     de_jure_liege: int | None = None
     capital: int | None = None
+    coat_of_arms_id: int | None = None
     date: str | None = None
     history: list[tuple[str, int | None, str | None]] = field(default_factory=list)
     #: ``(date, holder, reason)``; reason is the entry's ``type`` or None for a
@@ -132,6 +133,11 @@ def _record(idx: int, block: Block, templates: dict[str, str], keep_history: boo
         de_facto_liege=block.get("de_facto_liege") if isinstance(block.get("de_facto_liege"), int) else None,
         de_jure_liege=block.get("de_jure_liege") if isinstance(block.get("de_jure_liege"), int) else None,
         capital=block.get("capital") if isinstance(block.get("capital"), int) else None,
+        coat_of_arms_id=(
+            block.get("coat_of_arms_id")
+            if isinstance(block.get("coat_of_arms_id"), int)
+            else None
+        ),
         date=str(block["date"]) if block.get("date") is not None else None,
         history=normalize_history(block.get("history")) if keep_history else [],
     )
