@@ -205,6 +205,7 @@ push, not the issue; the issue is the handshake.
   you                                        us
   ───                                        ──
   1. upload save  ──→ ck_wiki Releases
+     send the dispatch (starts the build)
      open an issue on Ck-parser  ─────────→  2. build the wiki from it
                                                 manifests committed to ck_wiki
   4. read the queue  ←── portraits.json  ←──  3. open an issue here with
@@ -220,8 +221,15 @@ that run where you know it — you hold your saves per run already, so this
 costs you nothing. If it is a run we have never seen, any release will do; see
 *A release tag is filing* above for why nothing breaks.
 
-Then open an issue on `diegoami/Ck-parser` titled something like
-**"New save: `<file name>`"**. What we need in it:
+Then **send the dispatch**, which is what actually starts the build:
+
+```sh
+gh api repos/diegoami/ck_wiki/dispatches -f event_type=saves-updated
+```
+
+and open an issue on `diegoami/Ck-parser` titled something like
+**"New save: `<file name>`"**. The dispatch starts a machine; the issue tells a
+person. What we need in the issue:
 
 * the file name, and the release you put it on;
 * if you know it, which run it belongs to and which existing chronicle that is.
@@ -274,22 +282,26 @@ link every image by a derived name whether or not the file exists, so an image
 appearing is the whole of "integrating" it — nothing is regenerated, nothing is
 rewired, and `have` flips to `true` in the next manifest.
 
-### What is not automated yet, and should be
+### How step 1 actually starts the build
 
-Uploading a save to a `ck_wiki` release does **not** currently start a build.
-The workflow triggers on pushes to `images/**`, on a Monday cron, and on manual
-dispatch — so after step 1 a build happens within a week, or when someone
-presses the button, or when the next image push comes in. Adding
+Uploading a save to a `ck_wiki` release does not dependably start anything on
+its own. Adding an asset to a release that **already exists** — which is how a
+save is normally added, into the release for its run — does not reliably fire a
+release event, so a trigger relying on that would work for a new run and stay
+silent for every save after the first. `ck_wiki`'s workflow has an `on: release`
+trigger for the new-run case, but the dependable path is one API call:
 
-```yaml
-on:
-  release:
-    types: [published, edited]
+```sh
+gh api repos/diegoami/ck_wiki/dispatches -f event_type=saves-updated
 ```
 
-to `ck_wiki`'s workflow would close that gap and make step 1 → step 2 automatic.
-Until it is there, your issue in step 1 is what makes step 2 happen promptly,
-which is a good reason to keep opening it even once the trigger exists.
+Send that after uploading, and the build starts immediately. It is the same
+kind of call as opening the issue, and it is what an agent should send when it
+has finished step 1.
+
+If it is ever missed, nothing is lost: `ck_wiki` rebuilds on a Monday schedule,
+so a save can sit unbuilt for at most a week. The issue in step 1 remains worth
+opening either way — the dispatch starts a machine, the issue tells a person.
 
 ## What we ask you to build
 
