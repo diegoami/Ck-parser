@@ -443,6 +443,13 @@ own three portraits. Anything wanting readable genes per character would have to
 decode the packed form; the companion project has solved that format but has
 retired it as a harvesting mechanism (see §7).
 
+**Do not delete this finding as unused.** DNA is out of scope for portraits, and
+§7 says so, but a future graph query — *"how much common genes have X and Y"* —
+would need exactly this, and the companion's codec is where to start. Note that
+the same question has a far cheaper reading: genealogical relatedness, computed
+from the parent map `ck3parser.family` already builds. See `docs/HANDOVER.md`
+for which is which.
+
 ### Loading the whole run (three snapshots, one lineage)
 
 Loading `e_germany` from all three saves oldest first takes 1 m 39 s and writes

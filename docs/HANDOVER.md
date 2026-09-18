@@ -136,13 +136,48 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 
 ## What is not done, in the order I would do it
 
-1. **The graph has fallen behind the wiki.** `ck3graph` still writes what it
-   wrote before family and vassalage existed: `HELD_BY`, `VASSAL_OF` and the
-   title/character/house nodes. It knows nothing of parents, spouses, children,
-   the promoted direct line, or vassalage as bounded stretches, all of which the
-   wiki now has. Either it becomes a first-class output again or it is declared
-   vestigial — but it should not keep drifting silently, and the loader is where
-   the project started.
+1. **The graph is postponed, not abandoned — and it has a stated purpose now.**
+   `ck3graph` still writes what it wrote before family and vassalage existed:
+   `HELD_BY`, `VASSAL_OF` and the title/character/house nodes. It is deliberately
+   left behind for now. It comes back paired with a local LM, as the thing that
+   answers questions the wiki's pages cannot:
+
+   > *How many cousins has X? How much common genes have X and Y? Give me the
+   > vassal tree of X.*
+
+   That is worth writing down before the work starts, because those three
+   questions say what the graph has to hold, and two of them need **no new
+   parsing at all** — only that the graph persists more than the wiki keeps.
+
+   | Question | What answers it | Status |
+   |---|---|---|
+   | cousins | two hops up the parent map and two back down | the map exists; the wiki throws most of it away |
+   | vassal tree | recursion through de facto liege, as of a snapshot | the tree exists; `lineage()` stops at depth 1 |
+   | common genes | *two different questions* — see below | one is free, one is real work |
+
+   **Cousins.** `ck3parser.family.FamilyIndex` already inverts the **whole**
+   save — 201 498 children and 164 612 parents, about 80 MB — and the wiki then
+   keeps only the direct line. The graph should persist the map itself. Nothing
+   new to read.
+
+   **Vassal tree.** `TitleIndex.vassals` holds the full de facto tree for a save;
+   `lineage()` takes one level because loading every character under it is
+   expensive. A tree is per snapshot by nature, since vassalage is only ever
+   known as of a save (§9), so a query has to name a date or accept bounds.
+
+   **Common genes is ambiguous and the two readings differ enormously:**
+
+   - *Genealogical relatedness* — a kinship coefficient from shared ancestry.
+     Computable from the same parent map as cousins, with no new parsing. This
+     is what a chronicle usually means by "related".
+   - *Actual shared genes* — needs the packed `dna="…"` field decoded, 87 727 of
+     them per save (§5). This project has never touched it. The companion
+     project **has solved that format** and retired it only as a portrait
+     mechanism, so their codec is the place to start rather than the CK3 wiki.
+
+   Worth deciding which is meant before building either. PLAN.md §7's "we do not
+   owe the companion DNA" still holds — that is about what *they* need — but DNA
+   is no longer dead to this project.
 2. **Narrative prose.** The wiki is factual; Phase 7's LLM-written text is still
    gated on choosing a small local model. Everything it would need now exists:
    succession, vassalage with honest bounds, family, houses and arms.
