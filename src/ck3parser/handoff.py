@@ -40,6 +40,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .characters import living_characters
+from .arms import CoatOfArms, read_arms
 from .dynasties import Dynasty, House, arms_id, find_dynasties, find_houses, house_name
 from .parser import Block
 from .portraits import arms_name, portrait_name
@@ -106,19 +107,25 @@ def describe(cid: int, char: Block, save_date: str, save_path: str = "") -> Hand
 
 
 def describe_house(
-    house: House, dynasty: Dynasty | None, save_date: str, save_path: str
+    house: House, dynasty: Dynasty | None, save_date: str, recipe: CoatOfArms | None = None
 ) -> HandoffHouse:
-    arms = arms_id(house, dynasty)
+    """One house's row. `recipe` names the arms image, because the id cannot.
+
+    A `coat_of_arms_id` indexes one save, so the same number is different arms
+    in another playthrough. The recipe the game draws from is what identifies
+    the picture, and its digest is the file name both projects derive
+    (:mod:`ck3parser.arms`).
+    """
     return HandoffHouse(
         house_id=house.id,
         dynasty_id=house.dynasty,
-        coat_of_arms_id=arms,
+        coat_of_arms_id=arms_id(house, dynasty),
         name=house_name(house, dynasty),
         dynasty_name=dynasty.display_name if dynasty else "",
         found_date=house.founded,
         motto=house.motto,
         save_date=save_date,
-        arms_file=arms_name(save_path, arms) if arms is not None else "",
+        arms_file=arms_name(recipe.digest) if recipe is not None else "",
     )
 
 
@@ -129,12 +136,16 @@ def houses_of(save_path: str, characters: list[HandoffCharacter], save_date: str
     dynasties = find_dynasties(
         save_path, {h.dynasty for h in houses.values() if h.dynasty is not None}
     )
-    out = []
+    pairs = {}
     for house_id in sorted(houses):
         house = houses[house_id]
         dynasty = dynasties.get(house.dynasty) if house.dynasty is not None else None
-        out.append(describe_house(house, dynasty, save_date, save_path))
-    return out
+        pairs[house_id] = (house, dynasty, arms_id(house, dynasty))
+    recipes = read_arms(save_path, {c for _, _, c in pairs.values() if c is not None})
+    return [
+        describe_house(house, dynasty, save_date, recipes.get(coat) if coat is not None else None)
+        for house, dynasty, coat in pairs.values()
+    ]
 
 
 def interesting_ids(titles: list[TitleRecord]) -> set[int]:

@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ck3graph.loader import holder_intervals
+from ck3parser.arms import read_arms
 from ck3parser.characters import find_characters
 from ck3parser.dynasties import Dynasty, House, arms_id, find_dynasties, find_houses, house_name
 from ck3parser.family import Family, own_family, read_index
@@ -84,10 +85,17 @@ class Portrait(Image):
 
 @dataclass
 class Arms(Image):
-    """A house's coat of arms, numbered as the save it was read from numbers it."""
+    """A house's coat of arms, named after the recipe that draws it.
+
+    `save` and `checksum` say where the recipe was read from, which is what
+    `coat_of_arms_id` indexes; the file name does not depend on either, because
+    the same arms are one image in every run (docs/PLAN.md §11).
+    """
 
     coat_of_arms_id: int = 0
     house: int = 0
+    #: the recipe itself, so a companion can draw the arms instead of capturing
+    definition: object = None
 
 
 @dataclass
@@ -559,7 +567,8 @@ def _load_houses(wiki: Wiki, views: list[SnapshotView]) -> None:
     Newest save first, then older ones for whatever it could not resolve: a run
     prunes, so a house every living member has left may only still be in an old
     snapshot. Each house records the save it was read from, because a
-    `coat_of_arms_id` is an index inside that save, not a global one.
+    `coat_of_arms_id` indexes that save; the arms *image* does not, because it
+    is named after the recipe (:mod:`ck3parser.arms`).
     """
     wanted = {c.house for c in wiki.characters.values() if c.house is not None}
     if not wanted or not views:
@@ -574,17 +583,24 @@ def _load_houses(wiki: Wiki, views: list[SnapshotView]) -> None:
         dynasties = find_dynasties(
             save_file, {h.dynasty for h in found.values() if h.dynasty is not None}
         )
+        coats = {}
         for house_id, house in found.items():
             dynasty = dynasties.get(house.dynasty) if house.dynasty is not None else None
-            coat = arms_id(house, dynasty)
+            coats[house_id] = (house, dynasty, arms_id(house, dynasty))
+        recipes = read_arms(save_file, {c for _, _, c in coats.values() if c is not None})
+        for house_id, (house, dynasty, coat) in coats.items():
+            recipe = recipes.get(coat) if coat is not None else None
+            # no recipe, no name: the id alone cannot identify a picture, and a
+            # name that does not identify one would ask for the same image twice
             arms = None
-            if coat is not None:
+            if recipe is not None:
                 arms = Arms(
-                    file=arms_name(save_file, coat),
+                    file=arms_name(recipe.digest),
                     save=Path(save_file).name,
                     checksum=save_checksum(save_file),
                     coat_of_arms_id=coat,
                     house=house_id,
+                    definition=recipe.definition,
                 )
             houses[house_id] = WikiHouse(house=house, dynasty=dynasty, arms=arms)
     wiki.houses = dict(sorted(houses.items()))

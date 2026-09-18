@@ -101,7 +101,9 @@ def test_both_projects_derive_the_same_image_name():
     assert save_checksum(real) == "5a86b836cd32"
     assert len(save_checksum(real)) == CHECKSUM_LENGTH
     assert portrait_name(real, 50544311) == "5a86b836cd32_50544311.png"
-    assert arms_name(real, 42) == "5a86b836cd32_arms_42.png"
+    # arms are not keyed on the save at all: the recipe names the picture, so
+    # the same arms are one file in every run (docs/PLAN.md §11)
+    assert arms_name("4ec4589d5e8a") == "arms_4ec4589d5e8a.png"
     # the base name is what is hashed, so where the save sits cannot matter
     assert save_checksum(f"/wherever/{real}") == save_checksum(real)
 
@@ -109,3 +111,45 @@ def test_both_projects_derive_the_same_image_name():
 def test_a_different_save_means_a_different_portrait():
     assert portrait_name("a.ck3", 7) != portrait_name("b.ck3", 7)
     assert portrait_name("a.ck3", 7) != portrait_name("a.ck3", 8)
+
+
+# ---------------------------------------------------------------- arms recipes
+
+
+def test_repeated_emblems_survive_the_json_shape():
+    # `colored_emblem` repeats once per emblem, so a dict would keep one of
+    # three and two different coats of arms would collapse to one name
+    from ck3parser.arms import as_pairs, canonical, digest
+    from ck3parser.parser import parse_text
+
+    two = parse_text('colored_emblem={ texture="a.dds" } colored_emblem={ texture="b.dds" }')
+    one = parse_text('colored_emblem={ texture="a.dds" }')
+    assert len(as_pairs(two)) == 2 and len(as_pairs(one)) == 1
+    assert digest(two) != digest(one)
+
+    # order is part of the recipe: emblems are drawn in the order listed
+    flipped = parse_text('colored_emblem={ texture="b.dds" } colored_emblem={ texture="a.dds" }')
+    assert digest(flipped) != digest(two)
+    assert canonical(two).count("colored_emblem") == 2
+
+
+def test_the_same_recipe_gets_the_same_name_whatever_its_id(tmp_path):
+    from ck3parser.arms import digest, read_arms
+    from ck3parser.parser import parse_text
+    from ck3parser.portraits import arms_name
+
+    found = read_arms(save(tmp_path), {900, 901})
+    assert found[900].digest != found[901].digest  # drawn differently
+    assert arms_name(found[900].digest).startswith("arms_")
+
+    # an identical recipe under a different id is the same file
+    same = parse_text('pattern="pattern_solid.dds" color1=red color2=white'
+                      ' colored_emblem={ color1=white texture="ce_lion.dds" }')
+    assert digest(same) == found[900].digest
+
+
+def test_an_unknown_arms_id_simply_is_not_found(tmp_path):
+    from ck3parser.arms import read_arms
+
+    assert read_arms(save(tmp_path), set()) == {}
+    assert set(read_arms(save(tmp_path), {900, 99999})) == {900}

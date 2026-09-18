@@ -50,7 +50,12 @@ def wanted_images(wiki: Wiki, have: set[str]) -> list[dict]:
                 "have": portrait.file in have,
             }
         )
+    seen: set[str] = set()
     for arms in wiki.wanted_arms:
+        # the same picture is one image: two houses drawn the same way ask once
+        if arms.file in seen:
+            continue
+        seen.add(arms.file)
         out.append(
             {
                 "file": arms.file,
@@ -61,6 +66,9 @@ def wanted_images(wiki: Wiki, have: set[str]) -> list[dict]:
                 "coat_of_arms_id": arms.coat_of_arms_id,
                 "page": f"houses/{arms.house}.html",
                 "have": arms.file in have,
+                # the recipe the game draws from, so this need not be captured
+                # in-game at all: pattern, colours and emblem textures
+                "definition": arms.definition,
             }
         )
     return out

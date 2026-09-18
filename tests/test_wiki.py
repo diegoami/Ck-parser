@@ -219,12 +219,20 @@ def test_houses_are_read_from_the_save_and_get_a_page(tmp_path):
     assert 'href="houses/500.html"' in (out / "index.html").read_text()
 
 
-def test_a_houses_arms_are_wanted_too_and_scoped_to_the_save(tmp_path):
+def test_a_houses_arms_are_named_after_the_recipe_that_draws_them(tmp_path):
+    # the id indexes one save, so it cannot name a picture across runs; the
+    # recipe can, and the same arms are then one file everywhere
+    from ck3parser.arms import read_arms
+
     early, _ = two_snapshots(tmp_path)
     wiki = build_wiki(views(early), "k_testland")
     arms = wiki.houses[500].arms
-    assert arms is not None and arms.file == arms_name(str(early), 900)
+    recipe = read_arms(str(early), {900})[900]
+    assert arms is not None and arms.file == arms_name(recipe.digest)
+    assert "900" not in arms.file  # the id is not in the name
     assert arms.coat_of_arms_id == 900 and arms.house == 500
+    # and the recipe rides along, so a companion can draw it instead
+    assert ["pattern", "pattern_solid.dds"] in arms.definition
     out = tmp_path / "site"
     write_site(wiki, out)
     assert f'src="../portraits/{arms.file}"' in (out / "houses" / "500.html").read_text()

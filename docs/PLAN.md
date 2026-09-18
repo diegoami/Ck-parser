@@ -519,7 +519,7 @@ and nothing more."* So:
 |---|---|---|
 | A character-id list per save | `play <id>` only works on a **living** character, so a list is scoped to whoever was alive at that save's date | **built**, `ck3parser.handoff` |
 | Which characters are "interesting" | entirely this project's call | **defined** for v1, below |
-| Coat-of-arms definitions as data | *"Extracting them is tool 1's job"*; `coat_of_arms` is 11% of a save and titles carry `coat_of_arms_id` | **ids resolved**, `ck3parser.dynasties`; the definitions themselves are not parsed |
+| Coat-of-arms definitions as data | *"Extracting them is tool 1's job"*; `coat_of_arms` is 11% of a save | **built**, `ck3parser.arms`: every wanted recipe is in the manifest, so arms can be drawn rather than captured (§11) |
 | A name for every image it must deliver, and a list of which are missing | it has to know what to call a file without asking, and what is still wanted | **built**, `ck3parser.portraits` and `ck3wiki.manifest` |
 
 ### The hand-off, as built
@@ -564,7 +564,7 @@ Both projects have to arrive at the same file name for the same image without
 talking to each other, so the name is **derived**, never assigned:
 
     portrait:  sha256(save file's base name)[:12] + "_" + character id + ".png"
-    arms:      sha256(save file's base name)[:12] + "_arms_" + coat of arms id + ".png"
+    arms:      "arms_" + sha256(the coat of arms' own recipe)[:12] + ".png"
 
 The save's **name** is hashed, not its contents, so either side computes it
 without opening 70 MB; the companion only keeps a map from save file name to
@@ -573,6 +573,7 @@ anyone will publish, and keeps the name short and free of spaces.
 
 Keying on the save rather than the date is what gives one portrait **per save**:
 the same person at three dates is three images, which is their roadmap item 2.
+Arms are not keyed on the save at all, for the reasons in §11.
 
 **Only the living are asked for.** The companion harvests by switching to a
 character with `play <id>`, which the game refuses for the dead, so a slot for
@@ -582,9 +583,8 @@ which **53 were capturable**. `dead_data` decides it, and on the real saves that
 matches `living_characters` exactly — 26 and 25 of the 1358 and 1364 lineages.
 Someone who died on the save's own date still sits in `living` carrying the
 block, and is not harvestable either.
-Scoping the arms by save matters for a different reason — a `coat_of_arms_id` is
-an index inside one run, so the same number means different arms in a parallel
-world.
+A `coat_of_arms_id` is an index inside one run, so it can never name an image
+across runs; §11 says what does.
 
 The wiki links every such name **whether or not the file exists yet**. A missing
 one renders a dashed placeholder marked *awaiting harvest*; the `src` is already
@@ -603,9 +603,11 @@ chronicle has its own:
     {"file": "5a86b836cd32_50544311.png", "kind": "portrait", "save": "...ck3",
      "checksum": "5a86b836cd32", "save_date": "1364.3.10", "character": 50544311,
      "house": 12345, "page": "characters/50544311.html", "have": false},
-    {"file": "5a86b836cd32_arms_13996.png", "kind": "arms", "save": "...ck3",
+    {"file": "arms_4ec4589d5e8a.png", "kind": "arms", "save": "...ck3",
      "checksum": "5a86b836cd32", "house": 12345, "coat_of_arms_id": 13996,
-     "page": "houses/12345.html", "have": false}
+     "page": "houses/12345.html", "have": false,
+     "definition": [["pattern", "pattern_solid.dds"], ["color1", "red"],
+                    ["colored_emblem", [["texture", "ce_eagle.dds"]]]]}
   ] }
 ```
 
@@ -901,3 +903,65 @@ skips it, which is what to use when iterating on anything else.
 The fixture was wrong about all of this until now: it gave the child a `father`
 and `mother`, a shape no save uses. It now claims children from both parents,
 as a real save does.
+
+---
+
+## 11. Coats of arms: named by what they look like
+
+A coat of arms is worth harvesting once and reusing, so the question is when two
+of them are the same. Neither id nor owner answers it.
+
+**The id cannot.** `coat_of_arms_id` is an index inside one save. Matching
+dynasties across two playthroughs by the game's own `key`, 2 of 4 497 shared
+keys had the same id.
+
+**Nor can the owner.** The intuition is that a dynasty's arms are fixed by the
+game while a house's are generated during play. Checked against the artwork
+itself, on dynasties present in two runs:
+
+| dynasty `key` | identical artwork | different |
+|---|---|---|
+| named (`welsh_ap_bleddri`, `bovisio`) | 3 | 57 |
+| numeric (`2`, `100009`) | 55 | 5 |
+
+The same result for Germania vs the HRE and Germania vs France. Named historical
+dynasties mostly get **different** arms per playthrough — CK3 generates one when
+the game files do not author it — so "is this dynasty game-defined?" does not
+predict "are its arms fixed?", and keying on the dynasty would tell the
+companion that two different pictures are the same file.
+
+**The recipe can.** `coat_of_arms.coat_of_arms_manager_database` maps an id to
+what the game draws:
+
+```
+{pattern=pattern_solid.dds, color1=red, color2=red, color3=white,
+ colored_emblem={color1=white, color2=white, texture=ce_eagle.dds,
+                 instance={scale=[0.9, 0.9]}}}
+```
+
+That **is** the picture's identity, so it is what names the image:
+`arms_<sha256(recipe)[:12]>.png`. Identical artwork gets one name in every run
+and every chronicle and is harvested once; different artwork gets different
+names. Nothing has to be classified as fixed or generated. Of 120 dynasties
+present in two runs, 58 had byte-identical artwork, so roughly half the arms
+collapse across runs before counting duplicates within one.
+
+Two things the canonical form must get right, both covered by tests:
+
+* `colored_emblem` **repeats as its own key**, once per emblem, so the recipe is
+  kept as ordered `[key, value]` pairs. A dict would keep one emblem of three
+  and collapse two different coats of arms into one name.
+* **Order is part of the recipe.** Emblems are drawn in the order listed, so two
+  definitions differing only in order are different pictures.
+
+A house whose recipe cannot be read gets no arms image at all. An id alone
+cannot identify a picture, and a name that does not identify one would ask for
+the same image twice under different names.
+
+### The companion need not capture them
+
+The recipe rides in the manifest under `definition`. Arms can therefore be
+composed offline from the game's texture files — which is what the companion's
+own roadmap wanted before portraits went the screenshot route — instead of being
+captured one at a time in-game. Portraits still have to be screenshotted; arms
+do not.

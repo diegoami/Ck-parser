@@ -31,8 +31,8 @@ def save_checksum(save_file: str) -> str:
 def portrait_name(save_file: str, character_id: int) -> str:
     return f"{save_checksum(save_file)}_{character_id}.png"
 
-def arms_name(save_file: str, coat_of_arms_id: int) -> str:
-    return f"{save_checksum(save_file)}_arms_{coat_of_arms_id}.png"
+def arms_name(recipe_digest: str) -> str:            # see "Coats of arms" below
+    return f"arms_{recipe_digest}.png"
 ```
 
 The save file's **base name** is hashed, not its contents: you can compute it
@@ -44,8 +44,9 @@ Two consequences worth stating plainly:
 * Keying on the **save**, not the date, is what gives one portrait per save. The
   same person in three snapshots is three images — your roadmap item 2, made
   explicit in the file name.
-* A `coat_of_arms_id` is an index **inside one save**, so arms are scoped by the
-  save too. The same number means different arms in a different playthrough.
+* A `coat_of_arms_id` is an index **inside one save** and never names an image.
+  Arms are named after the recipe that draws them, so the same picture is one
+  file in every run — see below.
 
 You already keep a map from save file to what you harvested from it. The
 proposal is that the checksum becomes a column of that map — one line of code,
@@ -85,7 +86,7 @@ Chronicle:
       "checksum": "5a86b836cd32", "save_date": "1364.3.10",
       "character": 50544311, "house": 12345,
       "page": "characters/50544311.html", "have": false },
-    { "file": "5a86b836cd32_arms_13996.png", "kind": "arms",
+    { "file": "arms_4ec4589d5e8a.png", "kind": "arms",
       "save": "Fylkir_Ludwig_of_Immasonian_Fylkirate_1364_03_10.ck3",
       "checksum": "5a86b836cd32", "house": 12345, "coat_of_arms_id": 13996,
       "page": "houses/12345.html", "have": false } ] }
@@ -124,6 +125,36 @@ That last step is all there is to publishing. The wiki already links every one
 of those names, whether or not the file exists: a missing image renders as a
 dashed placeholder marked *awaiting harvest*, and the `src` is already correct.
 Nothing is rebuilt and no link changes when the file lands.
+
+## Coats of arms: you should not have to capture these
+
+An arms image is named `arms_<sha256(recipe)[:12]>.png`, where the recipe is what
+the game draws from — a pattern, some colours, one or more emblems. The manifest
+carries it under `definition`:
+
+```json
+"definition": [["pattern", "pattern_solid.dds"], ["color1", "red"],
+               ["colored_emblem", [["color1", "white"], ["texture", "ce_eagle.dds"]]]]
+```
+
+Two consequences for you:
+
+1. **Identical artwork is one file.** The same arms in three chronicles ask once.
+   Of 120 dynasties present in two of our playthroughs, 58 were byte-identical.
+2. **You can draw them instead of capturing them.** Composing arms offline from
+   the game's texture files is what your roadmap wanted before portraits went the
+   screenshot route. Everything needed is in `definition`, so ~3 000 in-game
+   captures become a rendering job. Portraits still need the game; arms do not.
+
+Why not key on the dynasty, given that the game ships many coats of arms? We
+checked: of 60 dynasties carrying the game's own named key and present in two
+runs, **57 had different artwork**. CK3 generates arms for whatever the files do
+not author, and the save does not say which is which. Keying on the dynasty
+would have told you two different pictures were the same file.
+
+It is kept as ordered `[key, value]` pairs rather than an object because
+`colored_emblem` repeats once per emblem, and because emblems are drawn in the
+order listed.
 
 ## Houses and coats of arms
 

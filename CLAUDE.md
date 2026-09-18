@@ -70,8 +70,15 @@ uv run python -m ck3wiki.build saves --out site --no-kin                 # ... t
   own, and then that one wins. `ck3parser.dynasties.arms_id` decides, and
   `house_name` likewise: the wiki and the hand-off disagreeing means the image a
   page links is not the image the companion is asked for.
-- A `coat_of_arms_id` is an index inside one save, not a global id. Scope
-  anything derived from it by the save it was read from.
+- A `coat_of_arms_id` is an index inside one save, not a global id, and never
+  names an image. An arms image is named after a digest of the **recipe** the
+  game draws it from (`ck3parser.arms`), so the same picture is one file in
+  every run. Whether arms are fixed or generated cannot be told from the
+  dynasty: 57 of 60 game-keyed dynasties had different artwork between two
+  playthroughs (PLAN.md §11).
+- A coat-of-arms recipe keeps repeated keys and their order: `colored_emblem`
+  appears once per emblem and they are drawn in the order listed. Never put one
+  in a dict, and never sort it.
 - A character is harvestable only if they are in `living` AND have no
   `dead_data`; someone who died on the save's date satisfies only the first.
   This binds the **wiki** as much as the hand-off: never link a portrait slot
