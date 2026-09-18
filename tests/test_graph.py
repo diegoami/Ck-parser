@@ -177,8 +177,12 @@ def test_parentage_is_written_downward_and_needs_no_inversion(tmp_path):
     counts = load_people(s, _Fp("1100.6.1"), stream_people(p), batch_size=1)
     parents = [params for q, params in s.statements if "PARENT_OF" in q]
     links = sorted((row["parent"], row["child"]) for params in parents for row in params["rows"])
-    # both parents claim both children, and each claim is its own edge
-    assert links == [(200, 203), (200, 204), (202, 203), (202, 204)]
+    # both parents claim both children, and each claim is its own edge; the
+    # previous holder claims his successor and the sibling passed over
+    assert links == [
+        (102, 200), (103, 200), (103, 205),
+        (200, 203), (200, 204), (202, 203), (202, 204),
+    ]
     assert counts["parent_of"] == len(links)
     assert all("DELETE" not in q for q, _ in s.statements)
 

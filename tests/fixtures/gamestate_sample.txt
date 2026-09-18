@@ -287,6 +287,15 @@ living={
 		family_data={
 		}
 	}
+	205={
+		first_name="Passed"
+		birth=1058.5.5
+		culture=0
+		faith=0
+		dynasty_house=500
+		family_data={
+		}
+	}
 }
 dead_unprunable={
 	100={
@@ -313,9 +322,23 @@ dead_unprunable={
 		first_name="Third"
 		birth=920.1.1
 		dynasty_house=500
+		family_data={
+			child={ 200 }
+		}
 		dead_data={
 			date=1090.2.1
 			reason="death_old_age"
+		}
+	}
+	103={
+		first_name="Mother"
+		birth=925.1.1
+		family_data={
+			child={ 200 205 }
+		}
+		dead_data={
+			date=1085.1.1
+			reason="death_natural_causes"
 		}
 	}
 	9001={

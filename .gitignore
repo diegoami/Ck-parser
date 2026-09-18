@@ -5,6 +5,8 @@ runs.json
 handoff/
 site/
 saves/
+# per-save character digests: a cache, rebuildable from the saves in a minute
+.ck3cache/
 
 .env
 .venv/

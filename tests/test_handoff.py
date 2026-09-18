@@ -9,12 +9,12 @@ from ck3parser.handoff import (
     describe_house,
     houses_of,
     interesting_ids,
-    living_characters,
     main,
     select,
     slug,
 )
 from ck3parser.arms import read_arms
+from ck3parser.characters import living_characters
 from ck3parser.dynasties import find_dynasties, find_houses
 from ck3parser.portraits import arms_name, portrait_name
 from ck3parser.parser import parse_text

@@ -85,19 +85,23 @@ def subject_of(run: Run, override: str | None, log) -> str | None:
 
 def build_one(
     run: Run, subject: str, with_vassals: bool, out: Path, portraits: Path | None,
-    log, with_family: bool = True, with_kin: bool = True,
-    releases: dict[str, str] | None = None,
+    log, with_family: bool = True, with_kin: bool = True, with_siblings: bool = True,
+    releases: dict[str, str] | None = None, cache_dir: Path | None = None,
 ) -> dict | None:
     views = []
     for snapshot in run.snapshots:
         try:
-            views.append(gather(snapshot.fp.file, subject, with_vassals, log=log))
+            views.append(
+                gather(snapshot.fp.file, subject, with_vassals, log=log, cache_dir=cache_dir)
+            )
         except KeyError:
             print(f"warning: {subject!r} is not in {Path(snapshot.fp.file).name}, skipped", file=log)
     if not views:
         print(f"warning: nothing to build for run {run.slug}", file=log)
         return None
-    wiki = build_wiki(views, subject, with_family=with_family, with_kin=with_kin)
+    wiki = build_wiki(
+        views, subject, with_family=with_family, with_kin=with_kin, with_siblings=with_siblings
+    )
     pages = write_site(wiki, out / run.slug, portraits, top=True)
     images = write_chronicle_manifest(
         out / run.slug, wiki, run.slug, harvested(portraits), releases
@@ -134,6 +138,8 @@ def run_build(
     portraits: str | None = None,
     with_family: bool = True,
     with_kin: bool = True,
+    with_siblings: bool = True,
+    cache: str | None = None,
     log=None,
 ) -> int:
     log = sys.stderr if log is None else log
@@ -146,6 +152,7 @@ def run_build(
     out = Path(out_dir)
     shots = Path(portraits) if portraits else None
     releases = read_releases(save_path)
+    cache_dir = Path(cache) if cache else None
     print(f"{len(runs)} run(s) to build", file=log)
     entries = []
     for run in runs:
@@ -153,7 +160,8 @@ def run_build(
         if subject is None:
             continue
         entry = build_one(
-            run, subject, with_vassals, out, shots, log, with_family, with_kin, releases
+            run, subject, with_vassals, out, shots, log, with_family, with_kin,
+            with_siblings, releases, cache_dir
         )
         if entry is not None:
             entries.append(entry)
@@ -179,10 +187,25 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--run", dest="run_id", help="build only this run (its id or slug)")
     ap.add_argument("--portraits", help="directory of harvested portrait images to include")
     ap.add_argument(
+        "--cache",
+        default=".ck3cache",
+        help="directory of per-save character digests (default: ./.ck3cache). A save"
+             " already digested is read in seconds instead of parsed in minutes",
+    )
+    ap.add_argument(
+        "--no-cache", action="store_true", help="read every save from scratch, caching nothing"
+    )
+    ap.add_argument(
         "--no-kin",
         action="store_true",
         help="do not give the direct line pages of their own; parents, spouses and"
              " children are then named on the pages they appear on and nothing more",
+    )
+    ap.add_argument(
+        "--no-siblings",
+        action="store_true",
+        help="do not give siblings pages of their own; they are then named on the"
+             " pages they appear on and nothing more",
     )
     ap.add_argument(
         "--no-family",
@@ -200,6 +223,8 @@ def main(argv: list[str] | None = None) -> int:
         portraits=args.portraits,
         with_family=not args.no_family,
         with_kin=not args.no_kin,
+        with_siblings=not args.no_siblings,
+        cache=None if args.no_cache else args.cache,
     )
 
 

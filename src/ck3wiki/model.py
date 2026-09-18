@@ -21,11 +21,10 @@ from pathlib import Path
 
 from ck3graph.loader import holder_intervals
 from ck3parser.arms import read_arms
-from ck3parser.characters import find_characters
 from ck3parser.cultures import Culture, find_cultures
 from ck3parser.dynasties import Dynasty, House, arms_id, find_dynasties, find_houses, house_name
 from ck3parser.faiths import Faith, find_faiths
-from ck3parser.family import Family, own_family, read_index
+from ck3parser.family import Family, own_family
 from ck3parser.parser import Block, date_key
 from ck3parser.pipeline import SnapshotView
 from ck3parser.portraits import arms_name, portrait_name, save_checksum
@@ -368,6 +367,7 @@ def build_wiki(
     title_key: str,
     with_family: bool = True,
     with_kin: bool = True,
+    with_siblings: bool = True,
 ) -> Wiki:
     """Merge snapshots, oldest first, into one picture of the lineage."""
     views = sorted(views, key=lambda v: date_key(v.fp.date))
@@ -388,7 +388,7 @@ def build_wiki(
         )
     _load_vassalage(wiki, views)
     if with_family:
-        _load_family(wiki, views, with_kin=with_kin)
+        _load_family(wiki, views, with_kin=with_kin, with_siblings=with_siblings)
     # after the family, never before it: promoting the direct line brings in
     # characters of its own, and their houses have to be resolved too
     _load_houses(wiki, views)
@@ -446,20 +446,27 @@ def _merge_family(record: WikiCharacter, family: Family) -> None:
     record.real_father = family.real_father or record.real_father
 
 
-def direct_line(record: WikiCharacter) -> set[int]:
-    """Parents, spouses and children: the people a dynastic chronicle is about.
+def direct_line(record: WikiCharacter, with_siblings: bool = True) -> set[int]:
+    """The people a dynastic chronicle is about, who each get a page.
 
-    Siblings are deliberately left out. They are named on the page either way,
-    and giving each one a page of their own buys 689 more for the Germania
-    chronicle that are mostly dead ends (docs/PLAN.md §10).
+    Parents, spouses and children always. Siblings too, because a succession is
+    usually a quarrel between them: the brother who was passed over is the
+    reason a reign happened at all, and a chronicle that names him without a
+    page cannot say what became of him. They are the widest ring that still
+    earns its pages (docs/PLAN.md §10); `--no-siblings` drops back to the
+    narrow line.
     """
     kin = {*record.parents, *record.spouses, *record.former_spouses, *record.children}
+    if with_siblings:
+        kin |= set(record.siblings)
     if record.real_father is not None:
         kin.add(record.real_father)
     return kin
 
 
-def _load_family(wiki: Wiki, views: list[SnapshotView], with_kin: bool = True) -> None:
+def _load_family(
+    wiki: Wiki, views: list[SnapshotView], with_kin: bool = True, with_siblings: bool = True
+) -> None:
     """Read each snapshot's family, promote the direct line, name the rest.
 
     This is the expensive part of a build: parents exist in the save only as
@@ -470,18 +477,20 @@ def _load_family(wiki: Wiki, views: list[SnapshotView], with_kin: bool = True) -
     """
     if not wiki.characters:
         return
-    indexes = {view.fp.date: read_index(view.fp.file, set(wiki.characters)) for view in views}
+    indexes = {view.fp.date: view.family_index(set(wiki.characters)) for view in views}
     for view in views:
         index = indexes[view.fp.date]
         for cid in list(wiki.characters):
             _merge_family(wiki.characters[cid], index.family_of(cid))
 
     if with_kin:
-        _promote(wiki, views, indexes)
+        _promote(wiki, views, indexes, with_siblings=with_siblings)
     _name_the_rest(wiki, views)
 
 
-def _promote(wiki: Wiki, views: list[SnapshotView], indexes: dict) -> None:
+def _promote(
+    wiki: Wiki, views: list[SnapshotView], indexes: dict, with_siblings: bool = True
+) -> None:
     """Give the direct line pages of their own, and portraits where they lived.
 
     Holding a title is what put the others in; these are here by blood or
@@ -490,13 +499,13 @@ def _promote(wiki: Wiki, views: list[SnapshotView], indexes: dict) -> None:
     """
     kin: set[int] = set()
     for record in list(wiki.characters.values()):
-        kin |= direct_line(record)
+        kin |= direct_line(record, with_siblings=with_siblings)
     kin -= wiki.characters.keys()
     if not kin:
         return
     for view in views:
         index = indexes[view.fp.date]
-        for cid, char in find_characters(view.fp.file, kin).items():
+        for cid, char in view.find_characters(kin).items():
             _merge_character(wiki, cid, char, view.fp.date, view.fp.file)
             family = char.get("family_data")
             if isinstance(family, Block):
@@ -519,7 +528,7 @@ def _name_the_rest(wiki: Wiki, views: list[SnapshotView]) -> None:
         missing = outside - wiki.relatives.keys()
         if not missing:
             break
-        for cid, char in find_characters(view.fp.file, missing).items():
+        for cid, char in view.find_characters(missing).items():
             dead = char.get("dead_data")
             wiki.relatives[cid] = Relative(
                 id=cid,
@@ -642,7 +651,7 @@ def _name_the_founders(wiki: Wiki, views: list[SnapshotView]) -> None:
         missing = outside - wiki.relatives.keys()
         if not missing:
             break
-        for cid, char in find_characters(view.fp.file, missing).items():
+        for cid, char in view.find_characters(missing).items():
             dead = char.get("dead_data")
             wiki.relatives[cid] = Relative(
                 id=cid,
