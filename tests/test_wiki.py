@@ -700,3 +700,20 @@ def test_the_index_lists_cultures_and_faiths(tmp_path):
     assert "<h2>Cultures</h2>" in page and "<h2>Faiths</h2>" in page
     # a culture with the 1.1.1 sentinel says so in words, not as a date
     assert "from the start" in page and "1.1.1" not in page
+
+
+def test_every_manifest_says_where_the_naming_rule_is_written(tmp_path):
+    # a consumer with the queue but not the rule can still deliver the wrong
+    # file name, and the rule is the one thing both sides must agree on without
+    # talking to each other
+    from ck3wiki.manifest import DOCS, chronicle_manifest
+
+    early, late = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early, late), "k_testland")
+    manifest = chronicle_manifest(wiki, "slug", set())
+    assert manifest["docs"] == DOCS and "names" in manifest["docs"]
+
+    out = tmp_path / "site"
+    assert main([str(tmp_path), "--out", str(out), "--title", "k_testland"]) == 0
+    root = json.loads((out / "portraits.json").read_text())
+    assert root["docs"]["names"].endswith("COMPANION_PROPOSAL.md#the-rule")
