@@ -7,15 +7,11 @@ name: Wiki
 # One chronicle per playthrough: saves are grouped by run, so attaching a save
 # from a different game adds a chronicle without touching this file.
 #
-# ONE-TIME SETUP, and it cannot be automated: a repository ADMIN must set
-# Settings -> Pages -> Build and deployment -> Source to "GitHub Actions".
-# Until then this workflow builds the site and then fails at configure-pages
-# with "Get Pages site failed ... Not Found".
-#
-# `enablement: true` on configure-pages was tried and does not work here:
-# creating a Pages site needs admin rights, and GITHUB_TOKEN tops out at write,
-# so it fails with "Resource not accessible by integration" instead. Only a
-# personal access token with admin rights, or the settings page, can do it.
+# Pages must already be enabled with Source = "GitHub Actions"; it is. That step
+# cannot be automated and should not be attempted again: creating a Pages site
+# needs admin rights, and GITHUB_TOKEN tops out at write, so `enablement: true`
+# on configure-pages fails with "Resource not accessible by integration". If a
+# fork needs it, do it in Settings -> Pages or with a PAT that has admin scope.
 
 on:
   push:

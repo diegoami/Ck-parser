@@ -98,35 +98,25 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 
 ## What is not done, in the order I would do it
 
-1. **Pages must be enabled by the repository owner, by hand.** The `Wiki`
-   workflow builds correctly in CI: both runs so far produced all three
-   chronicles, 4 412 pages, from the saves on the Releases. Neither could
-   publish. `has_pages` is false on the repository, so no Pages site exists,
-   and it has to be created in Settings → Pages → Source → "GitHub Actions".
-   Automating it does not work and should not be tried again: creating a Pages
-   site needs **admin** rights and `GITHUB_TOKEN` tops out at write, so
-   `enablement: true` fails with "Resource not accessible by integration".
-   Only the settings page or a PAT with admin scope can do it. The repository
-   is public and user-owned, so nothing policy-wise is in the way.
-2. **Narrative prose.** The wiki is factual; Phase 7's LLM-written text is still
+1. **Narrative prose.** The wiki is factual; Phase 7's LLM-written text is still
    gated on choosing a small local model. The pages are the place it would go.
-3. **Parse coat-of-arms definitions.** The companion's roadmap wants dynasty and
+2. **Parse coat-of-arms definitions.** The companion's roadmap wants dynasty and
    title arms composed offline from save data plus install textures, and says
    extracting them is this project's job (PLAN.md §7). `coat_of_arms` is 11% of
    a save and titles carry `coat_of_arms_id`, which the title parser drops.
    Arms would also be the obvious thing to put on a title page.
-4. **Character lookup speed.** A lineage load takes ~34 s per snapshot, nearly
+3. **Character lookup speed.** A lineage load takes ~34 s per snapshot, nearly
    all of it full passes over the character sections; the wiki and the hand-off
    each pay it again. The section index gives line ranges, so what is missing is
    an id -> offset index within the character sections.
-5. **Culture and faith names.** Numeric ids resolved through `culture_manager`
+4. **Culture and faith names.** Numeric ids resolved through `culture_manager`
    and `religion`. Both the hand-off and the wiki omit culture until then.
-6. **Dynasties and houses.** The wiki shows a bare house id because the
+5. **Dynasties and houses.** The wiki shows a bare house id because the
    `dynasties` section (9.3% of a save) is never parsed. House pages are the
    obvious next page type.
-7. **Widen what counts as "interesting".** Spouses, heirs and claimants are all
+6. **Widen what counts as "interesting".** Spouses, heirs and claimants are all
    in reach and none are included.
-8. **Deeper lineages**, **vassalage as intervals**, then **full-save scale**
+7. **Deeper lineages**, **vassalage as intervals**, then **full-save scale**
    (PLAN.md Phase 6).
 
 ## Known gaps and gotchas
@@ -183,6 +173,13 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 - What separates one wiki from another is the **run**, identified by seed and
   game version, not the title it is about. Three real playthroughs are on the
   Releases and they differ in seed, version and bookmark date.
+- Pages is enabled and the wiki publishes: run 3 of the `Wiki` workflow built
+  and deployed, and the repository reports `has_pages: true`. Getting there
+  took two failed runs, and the lesson is worth keeping: **enabling Pages
+  cannot be automated.** Creating a Pages site needs admin rights and
+  `GITHUB_TOKEN` tops out at write, so `enablement: true` on
+  `actions/configure-pages` fails with "Resource not accessible by
+  integration". Only the settings page or a PAT with admin scope can do it.
 - This container cannot reach `diegoami.github.io`; the egress proxy refuses
   it. The published site therefore cannot be verified from a session here,
   only the workflow run that produced it.
