@@ -55,6 +55,7 @@ td.num, th.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .page > .content { grid-column: 1; grid-row: 1; min-width: 0; }
 .page > .infobox { grid-column: 2; grid-row: 1; margin-top: 1rem; }
 .infobox table { margin: 0; font-size: .9rem; }
+.infobox td code { font-size: .8rem; overflow-wrap: anywhere; }
 .content > h2:first-child { margin-top: 1rem; }
 .infobox img { width: 100%; border-radius: 3px; display: block; margin-bottom: .6rem; }
 .tag { display: inline-block; font-size: .75rem; letter-spacing: .06em;
@@ -69,11 +70,13 @@ figure.shot img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: 
   border-radius: 3px; border: 1px solid var(--rule); background: var(--panel); }
 figure.shot figcaption { font-size: .8rem; color: var(--muted); margin-top: .3rem;
   font-variant-numeric: tabular-nums; }
-figure.shot.awaited img { border-style: dashed; min-height: 6rem;
-  font-size: .75rem; color: var(--muted); }
+figure.shot.awaited img { border-style: dashed; }
 figure.shot.awaited figcaption::after { content: " · awaiting harvest"; }
 .infobox figure.shot { width: 100%; }
+/* a real portrait keeps its own proportions; an empty slot has none of its
+   own, so it holds the shape a portrait will have */
 .infobox figure.shot img { aspect-ratio: auto; }
+.infobox figure.shot.awaited img { aspect-ratio: 3 / 4; }
 .current { color: var(--accent); font-weight: bold; }
 ul.plain { list-style: none; padding: 0; }
 ul.plain li { padding: .2rem 0; border-bottom: 1px solid var(--rule); }
@@ -156,10 +159,13 @@ def image_slot(image: Image | None, depth: int, alt: str, caption: str, have: se
     if image is None:
         return ""
     up = "../" * depth
-    state = "" if image.file in have else " awaited"
+    here = image.file in have
+    # an empty slot is decorative: alt text on an image that is not there yet
+    # only renders as a broken-image label, and the caption already says so
+    state = "" if here else " awaited"
     return (
         f'<figure class="shot{state}" data-image="{e(image.file)}">'
-        f'<img src="{up}{IMAGE_DIR}/{e(image.file)}" alt="{e(alt)}" loading="lazy">'
+        f'<img src="{up}{IMAGE_DIR}/{e(image.file)}" alt="{e(alt) if here else ""}" loading="lazy">'
         f"<figcaption>{e(caption)}</figcaption></figure>"
     )
 
@@ -316,8 +322,11 @@ def render_house(wiki: Wiki, house: WikiHouse, have: set[str], top: bool = False
     return page(house.name, "\n".join(body), depth=1, subtitle=subtitle, top=top)
 
 
-def render_index(wiki: Wiki, top: bool = False) -> str:
+def render_index(wiki: Wiki, have: set[str] | None = None, top: bool = False) -> str:
     root = wiki.root
+    have = have or set()
+    images = [*wiki.wanted_portraits, *wiki.wanted_arms]
+    missing = sum(1 for image in images if image.file not in have)
     body = []
     if root:
         body.append(
@@ -325,8 +334,12 @@ def render_index(wiki: Wiki, top: bool = False) -> str:
             f" and the titles held under it, across {len(wiki.snapshots)} save"
             f'{"s" if len(wiki.snapshots) != 1 else ""} of one playthrough:'
             f' {", ".join(e(d) for d in wiki.snapshots)}.</p>'
-            f"<p>{len(wiki.titles)} titles and {len(wiki.characters)} characters are recorded,"
-            f" with {sum(len(t.tenures) for t in wiki.titles.values())} reigns between them.</p></div>"
+            f"<p>{len(wiki.titles)} titles, {len(wiki.characters)} characters and"
+            f" {len(wiki.houses)} houses are recorded, with"
+            f" {sum(len(t.tenures) for t in wiki.titles.values())} reigns between them.</p>"
+            f"<p>{len(images)} images are linked — a portrait per character per save, and"
+            f" a coat of arms per house. {missing} are still to be harvested; they are listed"
+            f' in <a href="portraits.json"><code>portraits.json</code></a>.</p></div>'
         )
     body.append("<h2>Titles</h2><table><thead><tr><th>Title</th><th>Tier</th>"
                 "<th class='num'>Rulers</th><th>Current holder</th></tr></thead><tbody>")
@@ -394,7 +407,7 @@ def write_site(wiki: Wiki, out: Path, portraits: Path | None = None, top: bool =
             shutil.copyfile(portraits / name, out / IMAGE_DIR / name)
 
     pages = 1
-    (out / "index.html").write_text(render_index(wiki, top), encoding="utf-8")
+    (out / "index.html").write_text(render_index(wiki, have, top), encoding="utf-8")
     for title in wiki.titles.values():
         (out / "titles" / f"{title.key}.html").write_text(render_title(wiki, title, top), encoding="utf-8")
         pages += 1

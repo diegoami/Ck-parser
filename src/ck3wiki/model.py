@@ -66,10 +66,6 @@ class Image:
     save: str  #: the save it must be captured from, by base name
     checksum: str
 
-    @property
-    def subject(self) -> str:
-        return ""
-
 
 @dataclass
 class Portrait(Image):
@@ -78,10 +74,6 @@ class Portrait(Image):
     character: int = 0
     save_date: str = ""
 
-    @property
-    def subject(self) -> str:
-        return f"character {self.character}"
-
 
 @dataclass
 class Arms(Image):
@@ -89,10 +81,6 @@ class Arms(Image):
 
     coat_of_arms_id: int = 0
     house: int = 0
-
-    @property
-    def subject(self) -> str:
-        return f"house {self.house}"
 
 
 @dataclass

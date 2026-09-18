@@ -108,12 +108,20 @@ def test_escaping_is_applied():
     assert e("<script>") == "&lt;script&gt;" and e(None) == ""
 
 
-def test_index_lists_titles_and_characters(tmp_path):
+def test_index_lists_titles_characters_houses_and_what_is_missing(tmp_path):
     early, _ = two_snapshots(tmp_path)
-    html = render_index(build_wiki(views(early), "k_testland"))
+    wiki = build_wiki(views(early), "k_testland")
+    html = render_index(wiki)
     assert "<!doctype html>" in html and "CK3 Chronicle" in html
     assert 'href="titles/k_testland.html"' in html
     assert 'href="characters/200.html"' in html
+    assert 'href="houses/500.html"' in html
+    total = len(wiki.wanted_portraits) + len(wiki.wanted_arms)
+    assert f"{total} images are linked" in html
+    assert f"{total} are still to be harvested" in html
+    # and one already in hand is one fewer to ask for
+    one = wiki.characters[200].portraits[0].file
+    assert f"{total - 1} are still to be harvested" in render_index(wiki, {one})
 
 
 def test_write_site_produces_a_page_per_entity(tmp_path):
