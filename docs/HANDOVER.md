@@ -42,6 +42,11 @@ so a fresh session (any model) can continue without the conversation history.
   derives tiers including dynamic `x_` titles, and answers
   `immediate_vassals()` and `liege_chain()`. `normalize_history` turns a raw
   history block into `(date, holder, reason)` tuples.
+- **Sections** (`sections.py`): `section_index` reports where each top-level
+  key of a gamestate starts and ends (4.8 s on a 280 MB save), `verify_parse`
+  tokenizes the whole file and checks the braces balance, and
+  `python -m ck3parser.sections SAVE [--verify]` prints the table. All three
+  real saves parse end to end with balanced braces.
 - **Consistency** (`consistency.py`): tier-3 checks between two snapshots of
   one run. Title history up to the earlier date must survive into the later
   snapshot, and nobody may un-die or change death date. Pure functions over
@@ -68,34 +73,49 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 | `pipeline … --title e_germany --dry-run` | 51 vassals, 1 184 tenures, 100 vassal edges, 666 characters, ~33 s |
 | `pipeline saves/ --title e_germany --dry-run` | 3 snapshots oldest first, 2 324 tenures, 208 vassal edges, 0 disagreements, ~1 m 39 s |
 | `pipeline saves/ --title e_germany` into a live Neo4j | 81 titles, 952 characters, 1 559 tenures, 132 vassal edges, ~1 m 54 s |
+| `sections SAVE` | 54 distinct top-level keys, 14 M lines, 4.8 s |
+| `sections SAVE --verify` | ~41 M tokens, balanced, max depth 7, ~38 s |
 
 ## What is not done, in the order I would do it
 
-1. **Whole-file parser pass and section index** (PLAN.md Phase 2 milestone 3).
-   Stream an entire 280 MB `gamestate` through `iter_top_level(only=set())`
-   once and confirm it reaches EOF with balanced braces; record the top-level
-   keys and line numbers. Sections still untouched: `provinces`, `dynasties`,
-   `religion`, `culture_manager`, `wars`, `coat_of_arms`, and the many
-   `triggered_event` blocks (a repeated top-level key).
-2. **Character lookup speed.** A single-snapshot lineage load takes ~38 s,
+The first two come from the companion project's decisions (PLAN.md §7) and are
+now the highest-value work, because the other tool is blocked on them.
+
+1. **Emit the character-id hand-off for the portrait harvester.** The companion
+   consumes "a plain character-id list and nothing more"; deciding *which*
+   characters are interesting and the file's shape are explicitly this
+   project's job. Constraints that fall out of their design: only **living**
+   characters can be harvested, so a list is scoped to one save's date, and
+   their manifest keys on `(character, save date)`, so emit one list per
+   snapshot rather than a union. The graph already knows who was alive in each
+   snapshot. Start by deciding what "interesting" means: title holders in the
+   lineage is the obvious v1, matching the wiki's own v1 scope.
+2. **Parse coat-of-arms definitions.** Their roadmap wants dynasty and title
+   arms composed offline from save data plus install textures, and says
+   extracting them is this project's job. `coat_of_arms` is 11% of a save
+   (1 541 870 lines) and titles already carry `coat_of_arms_id`, which the
+   title parser currently drops. `meta_data` also holds the player's own
+   `meta_coat_of_arms` and `meta_house_coat_of_arms` in readable form.
+3. **Character lookup speed.** A single-snapshot lineage load takes ~38 s,
    nearly all of it three full passes over the character sections, so a
-   three-snapshot run takes ~1 m 54 s. Build an id -> section index once per
-   save, or parse the character sections a single time and keep only
-   referenced ids.
-3. **Culture and faith names.** Characters carry numeric `culture` / `faith`
-   ids; resolve them through `culture_manager` and `religion` (not parsed yet).
-   Names also carry CK3 casing markup (`A_sa`, `GilbE_rt`) that nothing
-   cleans up yet.
-4. **Dynasties and houses.** `House` nodes are bare ids; the `dynasties`
-   section is never parsed.
-5. **Deeper lineages.** `immediate_vassals` is one level by design. A whole
+   three-snapshot run takes ~1 m 54 s. The section index now gives line
+   ranges, so seeking to a section is cheap; what is still missing is an
+   id -> offset index within the character sections.
+4. **Culture and faith names.** Characters carry numeric `culture` / `faith`
+   ids; resolve them through `culture_manager` (122 126 lines) and `religion`.
+   Names also carry CK3 casing markup (`A_sa`, `GilbE_rt`) that nothing cleans
+   up yet. Culture matters to the companion too: it is their proxy for
+   ethnicity.
+5. **Dynasties and houses.** `House` nodes are bare ids; the `dynasties`
+   section (9.3% of a save) is never parsed.
+6. **Deeper lineages.** `immediate_vassals` is one level by design. A whole
    realm needs a recursive walk with a depth limit, and a decision about
    whether to store `VASSAL_OF` for every level or only the direct one.
-6. **Vassalage as intervals.** `VASSAL_OF` is a snapshot fact carrying `as_of`,
+7. **Vassalage as intervals.** `VASSAL_OF` is a snapshot fact carrying `as_of`,
    so a title that changed liege between snapshots gets one edge per liege.
    `HELD_BY` shows how intervals would be modelled instead.
-7. **Full-save scale** (Phase 6), then narrative generation (Phase 7, gated on
-   choosing a local LLM; no SDK dependency until then).
+8. **Full-save scale** (PLAN.md Phase 6), then narrative generation (Phase 7,
+   gated on choosing a local LLM; no SDK dependency until then).
 
 ## Known gaps and gotchas
 
@@ -142,6 +162,11 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
   855 with one holder between). That is the save's granularity, left as stated.
   `MATCH ()-[h:HELD_BY]->(c) WHERE c.death IS NOT NULL AND h.to > c.death`
   finds them.
+- The top-level key set is not fixed even within one run: the 1361 save has a
+  `player_event` section the other two lack. Never assume a section exists.
+- Per-character DNA is stored **packed** (87 727 `dna="…"` fields); readable
+  gene blocks exist only for the player's portraits in `meta_data`. The
+  companion project no longer needs either (PLAN.md §7).
 - 671 titles have two history entries on the same date, so a title can have two
   tenures starting the same day, one of them zero length. Anything assuming one
   tenure per (title, start date) is wrong; the graph keys them by holder too.
@@ -165,6 +190,8 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 uv run pytest -q                                   # must stay green
 scripts/fetch_saves.sh                             # once
 uv run python -m ck3parser.runs verify saves       # one run, 19/20/20, exit 0
+uv run python -m ck3parser.sections saves/<file>.ck3 --verify   # balanced, 54 keys
+
 uv run python -m ck3parser.pipeline saves --title e_germany --dry-run 2>&1 >/dev/null
 # 3 snapshots oldest first, 37/19/51 vassals, 0 missing characters, exit 0
 

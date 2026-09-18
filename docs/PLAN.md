@@ -74,8 +74,10 @@ file:
   - Keys can be bare integers (`50544311={`), dates (`867.1.1=`), or identifiers.
   - Values can be quoted strings, bare tokens, numbers, dates, `yes`/`no`, and
     inline lists (`skill={ 5 7 4 4 2 9 }`).
-- **Section index**: the parser should emit top-level section boundaries so later
-  stages can seek. In the sample: `meta_data` (line 1), `date`/`bookmark_date`/
+- **Section index**: `ck3parser.sections` walks the file once by line and
+  reports where each top-level key starts and ends (4.8 s on the 280 MB
+  sample), and `verify_parse` pushes the whole file through the tokenizer to
+  confirm the braces balance. Measured section list in §5. In the sample: `meta_data` (line 1), `date`/`bookmark_date`/
   `random_seed`/`random_count` (lines 415–420), `provinces` (3 035), `landed_titles`
   (238 167), `dynasties` (558 547), `living` (1 857 131), `dead_unprunable`
   (4 337 622), `characters` (9 692 133), `religion`, `wars`, `culture_manager`,
@@ -395,6 +397,46 @@ example `c_bithynia` has consecutive entries at 752 and 855 with one holder
 between them. That is the save's own granularity, not a loader artifact, and it
 is left as the save states it.
 
+### The whole file parses, and what is in it
+
+Every one of the three saves streams through the tokenizer end to end with
+**balanced braces**, which is the standing proof that the parser copes with a
+real save rather than only the sections the pipeline reads:
+
+| Save | Top-level entries | Distinct keys | Lines | Tokens | Max depth |
+|---|---|---|---|---|---|
+| A (1358) | 10 525 | 54 | 13 860 090 | 41 222 469 | 7 |
+| B (1361) | 10 562 | 55 | 13 862 806 | 41 275 750 | 8 |
+| C (1364) | 10 707 | 54 | 14 007 580 | 41 675 455 | 7 |
+
+The key set is **not** fixed across saves of one run: B also has a top-level
+`player_event`, so code must not assume a section exists. `triggered_event` is a
+repeated top-level key, 10 654 times in save C.
+
+Where the bulk of a save actually is, by share of lines in save C:
+
+| Section | Lines | Share |
+|---|---|---|
+| `dead_unprunable` | 5 354 511 | 38.2% |
+| `living` | 2 480 491 | 17.7% |
+| `coat_of_arms` | 1 541 870 | 11.0% |
+| `dynasties` | 1 298 582 | 9.3% |
+| `opinions` | 1 157 939 | 8.3% |
+| `artifacts` | 350 092 | 2.5% |
+| `landed_titles` | 320 380 | 2.3% |
+| `provinces` | 235 132 | 1.7% |
+| `triggered_event` (10 654 entries) | 237 306 | 1.7% |
+| `culture_manager` | 122 126 | 0.9% |
+
+### Per-character DNA is stored packed, not readable
+
+The gamestate holds 87 727 `dna="…"` fields, one per character record, in CK3's
+**packed** base64-like form. The readable `gene_…={ … }` blocks appear only in
+the header's `meta_data` portraits, 253 gene lines in total for the player's
+own three portraits. Anything wanting readable genes per character would have to
+decode the packed form; the companion project has solved that format but has
+retired it as a harvesting mechanism (see §7).
+
 ### Loading the whole run (three snapshots, one lineage)
 
 Loading `e_germany` from all three saves oldest first takes 1 m 39 s and writes
@@ -430,10 +472,9 @@ Still open:
    under a second per file without full decompression. **Done**: tier-1 scan of
    the three real saves takes 83 ms in total.
 3. Phase 2 parser streams the full 283 MB `gamestate` without errors and emits
-   the section index. **Partly done**: the streaming parser reads
-   `landed_titles`, `living`, `dead_unprunable`, `characters.dead_prunable` and
-   `played_character` of the real saves without errors (about 25 s for a full
-   title trace); a whole-file pass and the section index are still open.
+   the section index. **Done**: all three saves tokenize end to end with
+   balanced braces (~41 M tokens, ~38 s each) and `ck3parser.sections` prints
+   the top-level index in 4.8 s. Results in §5.
 4. Phase 4 `scan`/`verify` group a directory of saves; tests cover grouping,
    ordering, prefix check, and divergence split. **Done**: `verify` on the three
    real saves reports one clean run in about 11 s.
@@ -447,3 +488,41 @@ Still open:
    behaviour.
 6. Phase 6 full-save scale; Phase 7 narrative generation once the local LLM is
    chosen.
+
+---
+
+## 7. The companion project, and what it needs from here
+
+`diegoami/ck_portrait_generator` is the second of two tools. Its
+`docs/DECISIONS.md` (branch `findings-and-direction`) settles the split, and it
+changes what this project owes it.
+
+**The direction (their D6, D7, D9).** Portraits are no longer generated from a
+model. They are **harvested from the running game**: CK3 in debug mode and
+observer mode, `play <id>` to switch to a character, then screenshot the
+character window. That dissolved the accessory problem, because the game has
+already computed hair, clothes and headgear. The generative model, the packed
+DNA codec as a harvesting route, and accessory compositing are all retired.
+
+**What that makes this project responsible for.** They state it plainly: *"Out
+of scope for this repo: how tool 1 decides which characters are 'interesting',
+and the shape of the hand-off file. This repo consumes a plain character-id list
+and nothing more."* So:
+
+| They need | Constraint | Status here |
+|---|---|---|
+| A character-id list per save | `play <id>` only works on a **living** character, so a list is scoped to whoever was alive at that save's date | not built |
+| Which characters are "interesting" | entirely this project's call | not defined |
+| Coat-of-arms definitions as data | *"Extracting them is tool 1's job"*; `coat_of_arms` is 11% of a save and titles carry `coat_of_arms_id` | not parsed |
+
+**What this project does not owe them.** DNA, in either form. Their D6 retired
+DNA-driven rendering, so the packed `dna=` fields (§5) are not part of the
+hand-off.
+
+**Where the two designs already agree.** Their roadmap item 2, "walk several
+saves automatically", is the same insight as this project's multi-snapshot
+loading: successive saves give the same person at different ages, and each save
+contributes whoever was alive then. Their manifest has to be keyed on
+`(character, save date)` for the same reason this project's graph is.
+
+They stay decoupled: plain data files both ways, no imported code.
