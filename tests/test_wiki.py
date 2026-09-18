@@ -6,7 +6,7 @@ from ck3parser.pipeline import gather
 from ck3parser.portraits import arms_name, portrait_name
 from ck3wiki.build import discover, main, subject_of
 from ck3wiki.manifest import chronicle_manifest
-from ck3wiki.model import Tenure, Wiki, WikiCharacter, build_wiki, clean_name
+from ck3wiki.model import Tenure, Wiki, WikiCharacter, _runs_of, build_wiki, clean_name
 from ck3wiki.render import (
     STYLE,
     e,
@@ -15,7 +15,7 @@ from ck3wiki.render import (
     render_landing,
     write_site,
 )
-from helpers import SUCCESSION_EDITS, make_save
+from helpers import SUCCESSION_EDITS, VASSAL_MOVE_EDITS, make_save
 
 
 def quiet():
@@ -348,3 +348,91 @@ def test_the_infobox_is_a_grid_column_not_a_float(tmp_path):
     assert not re.search(r"float\s*:\s*(left|right)", STYLE)  # the declaration, not the prose
     page_html = (out / "titles" / "k_testland.html").read_text()
     assert '<div class="page">' in page_html and '<aside class="infobox card">' in page_html
+
+
+# ---------------------------------------------------------------- vassalage
+
+
+def test_stretches_collapse_and_carry_their_bounds():
+    snaps = ["1100.6.1", "1110.1.1", "1120.1.1"]
+    # same liege throughout: one stretch, open, and no lower bound to give
+    one = _runs_of({d: "k_testland" for d in snaps}, snaps)
+    assert len(one) == 1 and one[0].open
+    assert one[0].began == "by 1100.6.1" and one[0].ended == ""
+
+    # a change between the last two: the date is unknown, the bounds are not
+    two = _runs_of({"1100.6.1": "k_testland", "1110.1.1": "k_testland", "1120.1.1": "c_test"}, snaps)
+    assert [v.liege for v in two] == ["k_testland", "c_test"]
+    assert two[0].ended == "between 1110.1.1 and 1120.1.1" and not two[0].open
+    assert two[1].began == "between 1110.1.1 and 1120.1.1" and two[1].open
+
+
+def test_independence_is_a_liege_of_none_and_absence_is_not():
+    snaps = ["1100.6.1", "1110.1.1", "1120.1.1"]
+    free = _runs_of({d: None for d in snaps}, snaps)
+    assert len(free) == 1 and free[0].liege is None
+
+    # absent from the middle save: we did not see it under anyone, so the
+    # stretch breaks rather than bridging a gap we cannot see across
+    gap = _runs_of({"1100.6.1": "k_testland", "1120.1.1": "k_testland"}, snaps)
+    assert [v.liege for v in gap] == ["k_testland", "k_testland"]
+    assert gap[0].ended == "between 1100.6.1 and 1110.1.1"
+    assert gap[1].began == "between 1110.1.1 and 1120.1.1"
+
+
+def test_a_vassal_that_moves_is_seen_by_the_snapshots_disagreeing(tmp_path):
+    early = make_save(tmp_path / "a_1100.ck3", date="1100.6.1", seed=7, random_count=100)
+    late = make_save(
+        tmp_path / "b_1120.ck3", date="1120.1.1", seed=7, random_count=200, edits=VASSAL_MOVE_EDITS
+    )
+    wiki = build_wiki(views(early, late), "k_testland")
+    moved = wiki.titles["x_mc_0"].vassalage(wiki.snapshots)
+    assert [v.liege for v in moved] == ["k_testland", "c_test"]
+    assert moved[1].began == "between 1100.6.1 and 1120.1.1"
+    # and it is gone from the subject's vassals in the later snapshot
+    kingdom = wiki.titles["k_testland"]
+    assert "x_mc_0" in kingdom.vassals["1100.6.1"]
+    assert "x_mc_0" not in kingdom.vassals["1120.1.1"]
+
+
+def test_a_liege_outside_the_lineage_is_named_not_assumed(tmp_path):
+    # the old code asserted every non-subject title's liege to be the subject,
+    # because that is how it was selected; the save is asked instead
+    early = make_save(tmp_path / "a_1100.ck3", date="1100.6.1", seed=7, random_count=100)
+    late = make_save(
+        tmp_path / "b_1120.ck3", date="1120.1.1", seed=7, random_count=200, edits=VASSAL_MOVE_EDITS
+    )
+    wiki = build_wiki(views(early, late), "k_testland")
+    assert wiki.titles["x_mc_0"].liege == "c_test"  # its newest answer, not the subject
+    assert wiki.titles["k_testland"].liege is None  # the subject answers to nobody
+
+
+def test_the_subject_page_says_what_joined_and_left(tmp_path):
+    early = make_save(tmp_path / "a_1100.ck3", date="1100.6.1", seed=7, random_count=100)
+    late = make_save(
+        tmp_path / "b_1120.ck3", date="1120.1.1", seed=7, random_count=200, edits=VASSAL_MOVE_EDITS
+    )
+    wiki = build_wiki(views(early, late), "k_testland")
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    kingdom_page = (out / "titles" / "k_testland.html").read_text()
+    assert "<h2>Vassalage</h2>" in kingdom_page
+    assert "1 left" in kingdom_page and "Between <strong>1100.6.1</strong>" in kingdom_page
+
+    moved_page = (out / "titles" / "x_mc_0.html").read_text()
+    assert "between 1100.6.1 and 1120.1.1" in moved_page
+    assert '../titles/c_test.html' in moved_page
+
+
+def test_vassalage_never_claims_a_date_the_save_does_not_give(tmp_path):
+    # the whole point: a save says who holds a title and since when, but never
+    # who its liege has been, so no exact date may appear for a change
+    early = make_save(tmp_path / "a_1100.ck3", date="1100.6.1", seed=7, random_count=100)
+    late = make_save(
+        tmp_path / "b_1120.ck3", date="1120.1.1", seed=7, random_count=200, edits=VASSAL_MOVE_EDITS
+    )
+    wiki = build_wiki(views(early, late), "k_testland")
+    for stretch in wiki.titles["x_mc_0"].vassalage(wiki.snapshots):
+        for phrase in (stretch.began, stretch.ended):
+            if phrase:
+                assert phrase.startswith(("by ", "between ")), phrase

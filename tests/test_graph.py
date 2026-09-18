@@ -105,3 +105,7 @@ def test_load_vassal_edge(tmp_path):
         "liege": "k_testland", "liege_name": "Kingdom of Testland", "liege_tier": "kingdom",
         "kind": "de_facto", "date": date(1100, 6, 1),
     }
+    # the edge brackets the snapshots that saw it, and moves only outward, so
+    # loading the same run twice or out of order cannot change the answer
+    assert "r.first_seen = CASE" in query and "$date < r.first_seen" in query
+    assert "r.last_seen = CASE" in query and "$date > r.last_seen" in query

@@ -15,7 +15,7 @@ from pathlib import Path
 from ck3parser.parser import date_key
 from ck3parser.portraits import IMAGE_DIR
 
-from .model import Image, Wiki, WikiCharacter, WikiHouse, WikiTitle
+from .model import Image, Vassalage, Wiki, WikiCharacter, WikiHouse, WikiTitle
 
 STYLE = """\
 :root {
@@ -173,6 +173,27 @@ def image_slot(
     )
 
 
+def liege_label(wiki: Wiki, key: str | None, depth: int) -> str:
+    """A liege as a link, or the honest word for having none."""
+    if key is None:
+        return '<span class="tag">independent</span>'
+    return title_link(wiki, key, depth)
+
+
+def vassalage_rows(wiki: Wiki, stretches: list[Vassalage], depth: int) -> str:
+    """One row per stretch: who, which snapshots saw it, and how tight the bounds are."""
+    out = []
+    for stretch in stretches:
+        seen = stretch.first if stretch.first == stretch.last else f"{stretch.first} – {stretch.last}"
+        ended = f'<span class="tag">current</span>' if stretch.open else e(stretch.ended)
+        out.append(
+            f"<tr><td>{liege_label(wiki, stretch.liege, depth)}</td>"
+            f'<td class="num">{e(seen)}</td>'
+            f"<td>{e(stretch.began)}</td><td>{ended}</td></tr>"
+        )
+    return "".join(out)
+
+
 def tenure_rows(wiki: Wiki, title: WikiTitle, depth: int) -> str:
     out = []
     for tenure in title.tenures:
@@ -198,7 +219,10 @@ def render_title(wiki: Wiki, title: WikiTitle, top: bool = False) -> str:
             ("Liege", title_link(wiki, title.liege, 1) if title.liege else ""),
             ("De jure liege", title_link(wiki, title.de_jure_liege, 1) if title.de_jure_liege else ""),
             ("Rulers recorded", str(len(title.tenures))),
-            ("Seen in saves", f"{e(title.first_seen)} – {e(title.last_seen)}"),
+            # not "seen in saves": a title can be in a save without being in the
+            # lineage, and the vassalage table below says so
+            ("In the lineage", e(title.first_seen) if title.first_seen == title.last_seen
+             else f"{e(title.first_seen)} – {e(title.last_seen)}"),
         ]
     )
     body = [f'<div class="page"><aside class="infobox card"><table>{info}</table></aside>',
@@ -212,14 +236,58 @@ def render_title(wiki: Wiki, title: WikiTitle, top: bool = False) -> str:
     else:
         body.append("<p>No holders are recorded for this title.</p>")
 
+    stretches = title.vassalage(wiki.snapshots)
+    if stretches:
+        body.append("<h2>Vassalage</h2>")
+        body.append(
+            "<p>A save says who holds a title, but not who its liege has been over"
+            " time. These are the saves' answers, so a change is only ever known to"
+            " have happened <em>between</em> two of them.</p>"
+        )
+        body.append(
+            "<table><thead><tr><th>Under</th><th class='num'>Seen</th>"
+            "<th>Began</th><th>Ended</th></tr></thead>"
+            f"<tbody>{vassalage_rows(wiki, stretches, 1)}</tbody></table>"
+        )
+        missing = [d for d in wiki.snapshots if d not in title.lieges]
+        if missing:
+            body.append(
+                f'<p class="sub">Not in the save of {", ".join(e(d) for d in missing)}'
+                " — destroyed, or pruned; the save does not say which.</p>"
+            )
+
     if title.vassals:
         body.append("<h2>Vassals</h2>")
-        for date in sorted(title.vassals):
+        for date in sorted(title.vassals, key=date_key):
             keys = title.vassals[date]
             links = ", ".join(title_link(wiki, key, 1) for key in keys) or "none"
             body.append(f'<p><strong>{e(date)}</strong> — {len(keys)} held under it: {links}</p>')
+        body.append(movement_note(wiki, title))
     body.append("</div></div>")
     return page(heading, "\n".join(body), depth=1, subtitle=f"{len(title.tenures)} recorded rulers", top=top)
+
+
+def movement_note(wiki: Wiki, title: WikiTitle) -> str:
+    """What joined and left between consecutive snapshots of the subject."""
+    dates = sorted(title.vassals, key=date_key)
+    if len(dates) < 2:
+        return ""
+    out = []
+    for earlier, later in zip(dates, dates[1:]):
+        was, now = set(title.vassals[earlier]), set(title.vassals[later])
+        joined, left = sorted(now - was), sorted(was - now)
+        if not joined and not left:
+            continue
+        parts = []
+        if joined:
+            parts.append(f"{len(joined)} joined ({', '.join(title_link(wiki, k, 1) for k in joined[:6])}"
+                         f"{', …' if len(joined) > 6 else ''})")
+        if left:
+            parts.append(f"{len(left)} left ({', '.join(title_link(wiki, k, 1) for k in left[:6])}"
+                         f"{', …' if len(left) > 6 else ''})")
+        out.append(f"<li>Between <strong>{e(earlier)}</strong> and <strong>{e(later)}</strong>: "
+                   + "; ".join(parts) + "</li>")
+    return f'<ul class="plain">{"".join(out)}</ul>' if out else ""
 
 
 def render_character(wiki: Wiki, character: WikiCharacter, have: set[str], top: bool = False) -> str:

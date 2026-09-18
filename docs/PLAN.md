@@ -722,3 +722,68 @@ the links never depended on the file being there.
 Houses get pages of their own under `houses/`, listing their members, their
 dynasty, motto and founding date, and marking the dynasty head. Characters link
 to their house from the infobox and from the index.
+
+---
+
+## 9. Vassalage, and why it has bounds instead of dates
+
+A save records who **holds** a title and since when: `holder`, `date`, and a
+`history` of holders. It records who a title's **liege** is — `de_facto_liege`,
+`de_jure_liege` — but not who it has been. There is no vassalage history in the
+file. Verified on the three Germania saves.
+
+So vassalage cannot be read the way succession is read. All there is are the
+snapshots, and a change is only ever known to have happened *between* two of
+them. The wiki says exactly that and never invents a date:
+
+| Under | Seen | Began | Ended |
+|---|---|---|---|
+| d_optimatoi | 1358.9.13 – 1361.1.17 | by 1358.9.13 | between 1361.1.17 and 1364.3.10 |
+| Germania | 1364.3.10 | between 1361.1.17 and 1364.3.10 | *current* |
+
+"by X" is the first snapshot, with nothing before it to bound against; "between
+X and Y" is a real change with the tightest bounds the saves allow.
+
+**Every title is asked, not just the lineage.** A title is in a snapshot's
+*lineage* only while it is a direct vassal of the subject, but it is in that
+snapshot's `landed_titles` as long as it exists at all. So a vassal that left is
+not lost: the save still says who took it. Before this, a non-subject title's
+liege was *asserted* to be the subject, because that is how it had been
+selected, which could never be wrong and never said anything.
+
+**Absence is not independence.** A title missing from a save was destroyed, or
+pruned (§4), and the file does not say which. It is never recorded as a liege,
+and it breaks a stretch rather than bridging a gap nothing was seen across.
+
+Measured on the three Germania saves, 68 titles:
+
+| | |
+|---|---|
+| one stretch (never changed liege) | 20 |
+| two stretches | 46 |
+| three stretches | 2 |
+| absent from at least one save | 0 |
+| the subject itself | independent throughout |
+
+The vassal count under Germania swings 37 → 19 → 51. The dip is real: right
+after the 1360 succession Ludwig held the lineage titles directly.
+
+**The bounds are often tighter than they look**, and the page already shows why.
+Bithynia's own succession table records Ludwig taking it by `conquest_holy_war`
+on 1363.1.24 and granting it away on 1363.1.25 — inside the inferred window of
+1361.1.17 to 1364.3.10. Narrowing a liege change automatically from the holder
+history is tempting and **not** done: a title can change liege without changing
+hands, so the two are correlated rather than equivalent, and a date inferred
+that way would be a guess wearing a fact's clothes. Leaving both on the page
+lets the reader draw the tighter conclusion.
+
+**In the graph**, `(:Title)-[:VASSAL_OF {kind, first_seen, last_seen, as_of}]->(:Title)`.
+The bracket moves only outward, so the result does not depend on the order
+snapshots load in, and they are observations rather than an interval for the
+same reason as above. Nothing is ever deleted, so an edge that stopped being
+true stays, bracketed by the dates that saw it.
+
+**Still one level deep.** `TitleIndex.vassals` holds the whole tree for a save,
+but `lineage()` takes the subject plus its immediate vassals, so a county under
+a vassal duchy is not loaded. Deepening it multiplies the character load (666 at
+one level in 1364) and is left for later.

@@ -258,12 +258,19 @@ def load_title(
 
 
 def load_vassal_edge(session, vassal: TitleRecord, liege: TitleRecord, fp, kind: str = "de_facto") -> None:
-    """``(:Title)-[:VASSAL_OF {kind, as_of}]->(:Title)`` for one liege link.
+    """``(:Title)-[:VASSAL_OF {kind, first_seen, last_seen}]->(:Title)``.
 
     Names and tiers are set on both ends so that a liege reached only through a
     de jure edge is still an identifiable title rather than a bare key. Only
-    ``load_title`` sets ``first_seen``/``last_seen``, which mark the titles whose
-    history was actually loaded.
+    ``load_title`` sets ``first_seen``/``last_seen`` on the *nodes*, which mark
+    the titles whose history was actually loaded.
+
+    The edge's own `first_seen`/`last_seen` bracket the snapshots that saw this
+    link, and move only outward, so the result does not depend on the order
+    snapshots are loaded in. They are **observations, not an interval**: a save
+    carries no vassalage history, so the edge cannot say when the link began,
+    only that it held on these dates. `as_of` is kept as the newest of them,
+    because it is what earlier loads wrote.
     """
     session.run(
         """
@@ -272,7 +279,13 @@ def load_vassal_edge(session, vassal: TitleRecord, liege: TitleRecord, fp, kind:
         MERGE (l:Title {key: $liege})
         SET l.name = $liege_name, l.tier = $liege_tier
         MERGE (v)-[r:VASSAL_OF {kind: $kind}]->(l)
-        SET r.as_of = CASE WHEN r.as_of IS NULL OR $date > r.as_of THEN $date ELSE r.as_of END
+        SET r.first_seen = CASE
+                WHEN r.first_seen IS NULL OR $date < r.first_seen THEN $date
+                ELSE r.first_seen END,
+            r.last_seen = CASE
+                WHEN r.last_seen IS NULL OR $date > r.last_seen THEN $date
+                ELSE r.last_seen END,
+            r.as_of = CASE WHEN r.as_of IS NULL OR $date > r.as_of THEN $date ELSE r.as_of END
         """,
         vassal=vassal.key, vassal_name=vassal.display_name, vassal_tier=vassal.tier,
         liege=liege.key, liege_name=liege.display_name, liege_tier=liege.tier,

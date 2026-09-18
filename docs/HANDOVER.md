@@ -93,6 +93,14 @@ so a fresh session (any model) can continue without the conversation history.
   `portraits.json`, at the site root and in each chronicle, is the
   machine-readable list of what is still wanted. On the five release saves that is
   5 630 images across 3 chronicles, none harvested yet.
+- **Vassalage** (`ck3wiki/model.py`, `Vassalage`): every title in the wiki is
+  asked of every snapshot who its de facto liege was, through that snapshot's
+  own index rather than by assuming it was the subject. Consecutive snapshots
+  with the same answer collapse into a stretch carrying bounds, because a save
+  has no vassalage history and a change is only ever known to have happened
+  between two snapshots. On the three Germania saves, 46 of 68 titles changed
+  liege at least once and 2 changed twice. The graph edge is bracketed by
+  `first_seen`/`last_seen`, moving only outward.
 - **Pipeline** (`pipeline.py`): a lineage (title plus its immediate de facto
   vassals) end to end. Given a directory it loads every snapshot of that run
   oldest first, checking consecutive pairs as it goes. `--no-vassals`,
@@ -147,8 +155,9 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
    cannot find its work queue until it reads `portraits.json`.
 7. **Widen what counts as "interesting".** Spouses, heirs and claimants are all
    in reach and none are included.
-8. **Deeper lineages**, **vassalage as intervals**, then **full-save scale**
-   (PLAN.md Phase 6).
+8. **Deeper lineages**, then **full-save scale** (PLAN.md Phase 6). Vassalage
+   now has bounded stretches (PLAN.md §9), but still only one level down: a
+   county under a vassal duchy is not loaded.
 
 ## Known gaps and gotchas
 

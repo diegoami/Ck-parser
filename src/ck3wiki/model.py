@@ -108,6 +108,71 @@ class WikiCharacter:
         return "dates unknown"
 
 
+#: What `Vassalage.liege` is when the title answered to nobody at that date.
+INDEPENDENT = None
+
+
+@dataclass
+class Vassalage:
+    """A stretch of snapshots that saw one title under the same liege.
+
+    Unlike a :class:`Tenure`, this is **not** read out of a history: a save
+    records who holds a title and since when, but not who its liege has been
+    over time. All we ever have are observations at the snapshot dates, so a
+    change is only ever known to have happened *between* two of them, and this
+    says so rather than inventing a date (docs/PLAN.md §9).
+    """
+
+    liege: str | None  #: the liege's key, or None for independent
+    first: str  #: first snapshot that saw this
+    last: str  #: last snapshot that saw this
+    after: str | None = None  #: the snapshot before it, if any: it began after this
+    before: str | None = None  #: the snapshot after it, if any: it ended before this
+
+    @property
+    def open(self) -> bool:
+        """Still true when we last looked."""
+        return self.before is None
+
+    @property
+    def began(self) -> str:
+        return f"between {self.after} and {self.first}" if self.after else f"by {self.first}"
+
+    @property
+    def ended(self) -> str:
+        return f"between {self.last} and {self.before}" if self.before else ""
+
+
+def _runs_of(observed: dict[str, str | None], order: list[str]) -> list[Vassalage]:
+    """Collapse per-snapshot observations into stretches, with their bounds.
+
+    `order` is every snapshot of the run, oldest first, so a snapshot the title
+    was absent from breaks a stretch just as a change of liege does: we did not
+    see it under anyone, and saying otherwise would bridge a gap we cannot see
+    across.
+    """
+    out: list[Vassalage] = []
+    previous: str | None = None  #: the snapshot before the current stretch
+    current: Vassalage | None = None
+    for date in order:
+        if date not in observed:
+            if current is not None:
+                current.before = date
+                current = None
+            previous = date
+            continue
+        liege = observed[date]
+        if current is not None and current.liege == liege:
+            current.last = date
+        else:
+            if current is not None:
+                current.before = date
+            current = Vassalage(liege=liege, first=date, last=date, after=previous)
+            out.append(current)
+        previous = date
+    return out
+
+
 @dataclass
 class WikiTitle:
     key: str
@@ -118,12 +183,17 @@ class WikiTitle:
     liege: str | None = None
     de_jure_liege: str | None = None
     vassals: dict[str, list[str]] = field(default_factory=dict)  #: snapshot date -> vassal keys
+    lieges: dict[str, str | None] = field(default_factory=dict)  #: snapshot date -> liege key
     first_seen: str | None = None
     last_seen: str | None = None
 
     @property
     def all_vassals(self) -> list[str]:
         return sorted({key for keys in self.vassals.values() for key in keys})
+
+    def vassalage(self, snapshots: list[str]) -> list[Vassalage]:
+        """Who this title answered to, as stretches between snapshots."""
+        return _runs_of(self.lieges, snapshots)
 
 
 @dataclass
@@ -281,11 +351,6 @@ def build_wiki(views: list[SnapshotView], title_key: str) -> Wiki:
         wiki.snapshots.append(view.fp.date)
         for record in view.titles:
             title = _merge_title(wiki, record, view)
-            if record is view.target:
-                liege = view.index.resolve(record.de_facto_liege)
-                title.liege = liege.key if liege else title.liege
-            else:
-                title.liege = view.target.key
             de_jure = view.index.resolve(record.de_jure_liege)
             if de_jure is not None:
                 title.de_jure_liege = de_jure.key
@@ -296,8 +361,35 @@ def build_wiki(views: list[SnapshotView], title_key: str) -> Wiki:
         wiki.saves.append(
             {"file": Path(view.fp.file).name, "checksum": save_checksum(view.fp.file), "date": view.fp.date}
         )
+    _load_vassalage(wiki, views)
     _load_houses(wiki, views)
     return wiki
+
+
+def _load_vassalage(wiki: Wiki, views: list[SnapshotView]) -> None:
+    """Ask every snapshot who each title answered to, not just the lineage.
+
+    A title is only in a snapshot's *lineage* while it is a direct vassal of the
+    subject, but it is in that snapshot's `index` as long as it exists at all.
+    So a vassal that left is not simply lost: the save still says who took it,
+    and that is worth more than recording its liege as the subject because that
+    is how it was selected.
+
+    Absence is not the same as independence and is never recorded as a liege: a
+    title missing from a save was destroyed, or pruned, and we do not know
+    which.
+    """
+    for view in views:
+        for key, title in wiki.titles.items():
+            record = view.index.get(key)
+            if record is None:
+                continue
+            liege = view.index.resolve(record.de_facto_liege)
+            title.lieges[view.fp.date] = liege.key if liege else INDEPENDENT
+    # the infobox wants the current answer, which is the newest one we have
+    for title in wiki.titles.values():
+        seen = sorted(title.lieges, key=date_key)
+        title.liege = title.lieges[seen[-1]] if seen else title.liege
 
 
 def _load_houses(wiki: Wiki, views: list[SnapshotView]) -> None:

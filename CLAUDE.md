@@ -32,6 +32,13 @@ uv run python -m ck3wiki.build saves --out site --portraits harvested    # ... w
 - `Block` subclasses `list`. Test for `Block` before `list` in any isinstance chain.
 - Title liege fields are numeric indices into `landed_titles`, not keys. Resolve
   them through `ck3parser.titles.TitleIndex`.
+- A save has **no vassalage history**: it says who a title's liege *is*, never
+  who it has been. A liege change is only ever known to have happened between
+  two snapshots, and must be shown as bounds ("between X and Y"), never as a
+  date. Never narrow it from the holder history: a title can change liege
+  without changing hands (PLAN.md §9).
+- A title absent from a save was destroyed or pruned, and the save does not say
+  which. Absence is never independence, and never bridges two stretches.
 - No LLM SDK dependency yet; narrative generation is deferred (PLAN.md Phase 7).
   The wiki `ck3wiki` builds today is factual, generated straight from save data.
 - Character names in saves are localization keys with diacritics marked by an
