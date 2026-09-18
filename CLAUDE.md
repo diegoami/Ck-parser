@@ -63,10 +63,14 @@ uv run python -m ck3wiki.build saves --out site --no-kin                 # ... t
   underscore. Drop the marker, never guess the letter (PLAN.md §8).
 - One wiki per playthrough. What separates them is the run, identified by seed
   and game version, never the title the wiki is about.
-- A GitHub release is a **batch**, not a run. The Germania run's saves sit on
-  releases 0.0.2, 0.0.3 and 0.0.4, so grouping by release would split one
-  chronicle into three. The release tag is carried for delivery only: it says
-  where a save came from and where its images belong (PLAN.md §7).
+- Runs are grouped by the save's own **fingerprint**, never by the release it
+  came from. On ck_wiki the tags are run seeds today, so a release does hold one
+  run — but that is the owner's filing, not a guarantee, and until it moved the
+  Germania run sat on three batch-numbered releases at once. The tag is carried
+  for delivery only: it says where a save came from and where its images belong
+  (PLAN.md §7).
+- The saves live on **ck_wiki's** Releases, not this repository's.
+  `scripts/fetch_saves.sh` defaults there and takes `SAVES_REPO` to override.
 - `diegoami/ck_portrait_generator` is the companion tool. It consumes plain data
   files from here and imports no code; see PLAN.md §7 for what it needs. Read its
   `docs/DECISIONS.md` before assuming anything about portraits.
@@ -74,8 +78,8 @@ uv run python -m ck3wiki.build saves --out site --no-kin                 # ... t
   commits its images. This repository builds the pages; it does not publish them
   and has no Pages workflow. Generated pages are never committed anywhere.
 - `scripts/fetch_saves.sh` must never infer the repository from
-  `GITHUB_REPOSITORY`: it runs inside ck_wiki's workflow, where that names
-  ck_wiki and the saves are not there.
+  `GITHUB_REPOSITORY`: it names whichever repository the workflow runs in,
+  which is the one place the saves are not guaranteed to be.
 - Never write character names into the hand-off: the companion drops them on
   principle. Only emit fields this project can resolve correctly. A house's name
   is not a person's name; the house list keeps it.

@@ -1,5 +1,7 @@
 #!/bin/bash
-# Download every .ck3 save attached to this repository's Releases.
+# Download every .ck3 save attached to the Releases of the repository that holds
+# them, which is ck_wiki -- the same place the wiki is published and the
+# companion commits its images.
 #
 # The saves are not in git (they are tens of megabytes each), so this is how a
 # checkout gets them. Every release is read, not a fixed list, so attaching a
@@ -11,20 +13,25 @@
 set -euo pipefail
 
 dest="${1:-saves}"
-# Never inferred from GITHUB_REPOSITORY: the wiki is built from another
-# repository's workflow, where that variable names *that* repository and the
-# saves are not there. Override with SAVES_REPO if they ever move.
-repo="${SAVES_REPO:-diegoami/Ck-parser}"
+# Never inferred from GITHUB_REPOSITORY. It names whichever repository the
+# workflow is running in, which is the one place the saves are guaranteed not to
+# be: this script runs from ck_wiki's workflow *and* from this repository's
+# checkout, and the answer is the same either way. Override with SAVES_REPO.
+repo="${SAVES_REPO:-diegoami/ck_wiki}"
 mkdir -p "$dest"
 
 auth=()
 [ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
 
 # name<TAB>sha256<TAB>url<TAB>release tag, one per save, deduplicated by checksum.
-# The release a save was published in is recorded because it is the batch the
-# owner grouped it into, and because it is where the harvested images for that
-# save belong. It is NOT how runs are grouped -- runs are decided by the save's
-# own fingerprint, and one run already spans three releases.
+# The release a save was published in is recorded because it is where the
+# harvested images for that save belong.
+#
+# It is still NOT how runs are grouped. On ck_wiki the tags happen to be run
+# seeds, so a release currently does hold exactly one run -- but that is the
+# owner's filing, not a guarantee the format makes, and the saves were split
+# across three batch-numbered releases until today. Runs are decided by the
+# save's own fingerprint and nothing else (docs/PLAN.md §7).
 assets=$(
   curl -sS --retry 3 "${auth[@]}" \
     "https://api.github.com/repos/$repo/releases?per_page=100" |
