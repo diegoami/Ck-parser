@@ -101,6 +101,16 @@ so a fresh session (any model) can continue without the conversation history.
   between two snapshots. On the three Germania saves, 46 of 68 titles changed
   liege at least once and 2 changed twice. The graph edge is bracketed by
   `first_seen`/`last_seen`, moving only outward.
+- **Family** (`ck3parser/family.py`): parents, siblings, spouses, former
+  spouses and children on every character page. A save stores parentage
+  **downward only** — `family_data` lists `child` and never `father` or
+  `mother`, verified across all 281 916 characters of the 1364 save — so
+  parents are found by inverting every child list. That is a full pass with no
+  early exit, ~37 s per snapshot, and it is the most expensive thing a build
+  does; `--no-family` skips it. It buys parents for 590 of the Germania
+  lineage's 666 characters (536 with both) against 447 for a lineage-only
+  inversion. Relatives outside the lineage (2 784 of 3 235) are fetched only
+  far enough to be named.
 - **Pipeline** (`pipeline.py`): a lineage (title plus its immediate de facto
   vassals) end to end. Given a directory it loads every snapshot of that run
   oldest first, checking consecutive pairs as it goes. `--no-vassals`,
@@ -120,7 +130,8 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 | `sections SAVE` | 54 distinct top-level keys, 14 M lines, 4.8 s |
 | `sections SAVE --verify` | ~41 M tokens, balanced, max depth 7, ~38 s |
 | `handoff saves --title e_germany --run <germany>` | 26 / 2 / 25 harvestable per snapshot, 48 distinct across the run, 22 / 1 / 21 houses, all with arms, ~2 m |
-| `ck3wiki.build saves` on all five release saves | 3 chronicles, 5 516 pages (houses included), 5 630 images wanted, ~2 m 51 s |
+| `ck3wiki.build saves` on all five release saves | 3 chronicles, 5 516 pages (houses included), 5 630 images wanted, ~2 m 51 s without family |
+| `ck3wiki.build saves --run <germania>` with family | 1 chronicle, 1 297 pages, ~5 m 21 s — the family pass roughly doubles a build |
 | `runs scan` on all five | 3 runs: seeds 576691683 / 633048653 / 1370892195 on versions 1.6.1.2 / 1.4.4 / 1.3.1 |
 
 ## What is not done, in the order I would do it
@@ -153,8 +164,9 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
    had no push access to that repository. Nothing here is blocked on it — the
    wiki already links every image by the derived name — but the companion
    cannot find its work queue until it reads `portraits.json`.
-7. **Widen what counts as "interesting".** Spouses, heirs and claimants are all
-   in reach and none are included.
+7. **Widen what counts as "interesting".** Spouses, heirs and claimants are now
+   *named* on character pages (PLAN.md §10) but still get no page of their own
+   and no portrait, because the lineage is still what decides who is in.
 8. **Deeper lineages**, then **full-save scale** (PLAN.md Phase 6). Vassalage
    now has bounded stretches (PLAN.md §9), but still only one level down: a
    county under a vassal duchy is not loaded.
