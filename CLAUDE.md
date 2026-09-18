@@ -12,6 +12,7 @@ scripts/fetch_saves.sh           # three real saves (~73 MB each) into ./saves, 
 uv run python -m ck3parser.runs verify saves --json saves/runs.json
 uv run python -m ck3parser.pipeline saves/<file>.ck3 --title e_germany --dry-run
 uv run python -m ck3parser.pipeline saves --title e_germany --dry-run   # whole run, oldest first
+uv run python -m ck3parser.sections saves/<file>.ck3 --verify           # top-level layout
 ```
 
 ## Rules
@@ -29,6 +30,11 @@ uv run python -m ck3parser.pipeline saves --title e_germany --dry-run   # whole 
 - Title liege fields are numeric indices into `landed_titles`, not keys. Resolve
   them through `ck3parser.titles.TitleIndex`.
 - No LLM SDK dependency yet; narrative generation is deferred (PLAN.md Phase 7).
+- `diegoami/ck_portrait_generator` is the companion tool. It consumes plain data
+  files from here and imports no code; see PLAN.md §7 for what it needs. Read its
+  `docs/DECISIONS.md` before assuming anything about portraits.
+- A save's top-level key set varies between saves of one run. Never assume a
+  section exists.
 - Facts labelled "verified" in PLAN.md were checked on three real saves. Anything
   new you assume about the format goes in PLAN.md §5 with a note whether it was
   checked against a real save.

@@ -20,6 +20,7 @@ src/ck3parser/
   fingerprint.py  cheap per-save fingerprint (header + first KB of gamestate)
   runs.py         group saves into runs, order and verify them; CLI + runs.json
   titles.py       title records, liege/vassal structure, history normalisation
+  sections.py     top-level layout of a gamestate, and a whole-file parse check
   consistency.py  tier-3 checks between two snapshots of one run
   pipeline.py     load a lineage from one save or from a whole run
 src/ck3graph/
@@ -103,6 +104,12 @@ code is 0 when they agree and 1 when they do not. `--no-vassals` loads the
 title alone, `--no-check` skips the comparison, and `--run <id>` picks one run
 when a directory holds several. Drop `--dry-run` to write to Neo4j using the
 `.env` settings.
+
+See what a save contains, and check the parser handles all of it:
+
+```
+uv run python -m ck3parser.sections saves/some_save.ck3 --verify
+```
 
 Extract the raw `gamestate` to disk for inspection:
 
