@@ -98,9 +98,11 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 
 ## What is not done, in the order I would do it
 
-1. **Merge and watch the first deploy.** Pages has been switched to the
-   "GitHub Actions" source, so the `Wiki` workflow should publish on the next
-   push to `main`. Nobody has seen it run in CI yet.
+1. **Confirm the first deploy landed.** The `Wiki` workflow's first run built
+   all three chronicles (4 412 pages) but could not publish: the Pages API
+   returned Not Found, so `configure-pages` now runs with `enablement: true`
+   and turns Pages on itself. Check that the next run deploys and that
+   https://diegoami.github.io/Ck-parser/ serves the landing page.
 2. **Narrative prose.** The wiki is factual; Phase 7's LLM-written text is still
    gated on choosing a small local model. The pages are the place it would go.
 3. **Parse coat-of-arms definitions.** The companion's roadmap wants dynasty and
