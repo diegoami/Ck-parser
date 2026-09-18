@@ -27,7 +27,11 @@ from ck3parser.portraits import IMAGE_DIR
 from .model import Wiki
 
 #: Bumped when the shape changes in a way a consumer has to notice.
-SCHEMA = "ck3-images/1"
+#:
+#: 2: an arms `file` is named after the coat of arms' recipe rather than the
+#:    save and id, so the same key means a different thing; `definition` added.
+#:    Portrait names are unchanged.
+SCHEMA = "ck3-images/2"
 
 #: The manifest's name, in each chronicle and at the root.
 MANIFEST = "portraits.json"

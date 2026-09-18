@@ -6,6 +6,23 @@ reviewed alongside the code that produces it.*
 
 ---
 
+## The three repositories
+
+Nothing here needs you to import our code, and nothing needs us to import
+yours. Three repositories, three jobs:
+
+| Repository | Job | What you do with it |
+|---|---|---|
+| [`diegoami/Ck-parser`](https://github.com/diegoami/Ck-parser) | reads the saves, writes the pages | nothing — but the saves are attached to its **Releases**, and those are the files you harvest from |
+| [`diegoami/ck_wiki`](https://github.com/diegoami/ck_wiki) | publishes the wiki, holds the images | **read** `portraits.json` for your queue; **push** your captures to `images/` |
+| `diegoami/ck_portrait_generator` | captures the images | unchanged, except for where the queue comes from and what the files are called |
+
+`ck_wiki` is the one you need write access to. Its CI clones the parser, fetches
+the saves from the parser's Releases, rebuilds the site, commits the refreshed
+manifests back, and deploys to <https://diegoami.github.io/ck_wiki/>. Pushing to
+`images/` is what triggers that, so a push both delivers the images and
+republishes the pages that link them.
+
 ## What changes for you
 
 Nothing about how you harvest. `play <id>`, observer mode, screenshot the
@@ -63,23 +80,23 @@ captured yet.
 Root:
 
 ```json
-{ "schema": "ck3-images/1",
+{ "schema": "ck3-images/2",
   "chronicles": [ { "slug": "576691683-1-6-1-2",
                     "manifest": "576691683-1-6-1-2/portraits.json",
-                    "wanted": 1606, "missing": 1606 } ],
-  "wanted": 5630, "missing": 5630 }
+                    "wanted": 2250, "missing": 2250 } ],
+  "wanted": 5845, "missing": 5845 }
 ```
 
 Chronicle:
 
 ```json
-{ "schema": "ck3-images/1",
+{ "schema": "ck3-images/2",
   "chronicle": "576691683-1-6-1-2",
   "title": "e_germany",
   "images": "portraits",
   "saves": [ { "file": "Fylkir_Ludwig_of_Immasonian_Fylkirate_1364_03_10.ck3",
                "checksum": "5a86b836cd32", "date": "1364.3.10" } ],
-  "wanted": 1606, "missing": 1606,
+  "wanted": 2250, "missing": 2250,
   "portraits": [
     { "file": "5a86b836cd32_50544311.png", "kind": "portrait",
       "save": "Fylkir_Ludwig_of_Immasonian_Fylkirate_1364_03_10.ck3",
@@ -89,9 +106,17 @@ Chronicle:
     { "file": "arms_4ec4589d5e8a.png", "kind": "arms",
       "save": "Fylkir_Ludwig_of_Immasonian_Fylkirate_1364_03_10.ck3",
       "checksum": "5a86b836cd32", "house": 12345, "coat_of_arms_id": 13996,
-      "page": "houses/12345.html", "have": false } ] }
+      "page": "houses/12345.html", "have": false,
+      "definition": [["pattern", "pattern_solid.dds"], ["color1", "red"],
+                     ["colored_emblem", [["texture", "ce_eagle.dds"]]]] } ] }
 ```
 
+* **Every `portrait` entry is someone who was alive in that save.** `play <id>`
+  refuses the dead, so asking for a portrait of a buried character is work
+  nobody can do; the wiki now applies the same liveness rule your hand-off has
+  always had. We got this wrong at first and the queue was 96% impossible — 1 330
+  portraits of which 53 were capturable. If you hit a character `play` refuses,
+  that is our bug, so please say so.
 * `saves` is the checksum map, repeated so you can check it against your own
   rather than trust ours.
 * `have` is one build's answer, not a promise. Treat the file's absence as the
@@ -99,7 +124,16 @@ Chronicle:
 * `kind` is `portrait` or `arms`. If you only do portraits today, filter on it
   and ignore the rest; the arms entries are a standing request, not a blocker.
 * Unknown keys will be added over time. `schema` only changes when something
-  already there changes meaning.
+  already there changes meaning. **It is at `/2`**: arms names changed from
+  `<save checksum>_arms_<id>.png` to `arms_<recipe digest>.png`. Portrait names
+  did not change, so if you only do portraits, `/1` and `/2` are the same to you.
+
+* **It is no longer only rulers.** The wiki used to hold whoever had held one of
+  the lineage's titles. It now also holds their parents, spouses and children,
+  because a dynastic chronicle is about the family, not the office. For one
+  chronicle that took the character pages from 952 to 5 550, and the portrait
+  queue from 53 to 1 389 — the newcomers are mostly *alive*, which is why the
+  capturable count went up rather than down.
 
 No names, here as in the hand-off. You drop them on principle and we do not
 write them.
@@ -159,18 +193,19 @@ It is kept as ordered `[key, value]` pairs rather than an object because
 `colored_emblem` repeats once per emblem, and because emblems are drawn in the
 order listed.
 
-## Houses and coats of arms
+## Houses, and the hand-off CSVs
 
-New on our side: houses are now read out of the save and shown. A character
-carries `dynasty_house`; the house names a dynasty; the dynasty carries
-`coat_of_arms_id`. Each snapshot's hand-off now has a `houses_<date>.csv`
-beside its `characters_<date>.csv`, with the house id, dynasty id, arms id,
-name, motto key, founding date and the derived `arms_file`.
+Houses are read out of the save and shown now. A character carries
+`dynasty_house`; the house names a dynasty; the arms id sits on the house when
+it has one of its own and on the dynasty otherwise. Each snapshot's hand-off has
+a `houses_<date>.csv` beside its `characters_<date>.csv`, carrying the house id,
+dynasty id, arms id, name, dynasty name, motto key, founding date and the
+derived `arms_file`.
 
-Whether arms are worth capturing from the game window, or are better rendered
-from the `coat_of_arms` section of the save, is your call — the ids and the
-names are here either way, and the manifest will keep listing them as wanted
-until files with those names appear.
+**The manifest is the work queue; the CSVs are context.** If the two ever
+disagree about a file name, the manifest is right and we have a bug. The CSVs
+stay because they carry per-snapshot detail the manifest does not, and because
+`--ids-only` still writes the bare id list your `--ids-file` takes.
 
 ## What we are not asking for
 
@@ -178,9 +213,23 @@ Nothing about DNA, in either form: your D6 retired it and we have not revived
 it. Nothing about how you drive the game. And no code dependency in either
 direction — this stays plain data files both ways, as it has been.
 
+## If you implement only one thing
+
+Read `ck_wiki/portraits.json`, filter to `kind == "portrait"` and `have == false`,
+group by `save`, capture, and push the files to `ck_wiki/images/` under the
+names given. Everything else in this document is either the reasoning behind
+that or an offer to do less work.
+
 ## Reference
 
-`ck3parser/portraits.py` in `diegoami/Ck-parser` is the one place the naming
-rule is written down, and `ck3wiki/manifest.py` produces the files above.
-`docs/PLAN.md` §7 carries the reasoning, and `diegoami/ck_wiki`'s README states
-the same contract from the delivery side.
+| What | Where |
+|---|---|
+| the naming rule, in one file | `ck3parser/portraits.py` in `diegoami/Ck-parser` |
+| the arms recipe and its digest | `ck3parser/arms.py` |
+| what produces the manifests | `ck3wiki/manifest.py` |
+| the reasoning | `docs/PLAN.md` §7 (images), §10 (family), §11 (coats of arms) |
+| the same contract from the delivery side | `diegoami/ck_wiki`'s README |
+
+Questions, disagreements and "this would be easier if you sent X instead" are
+all welcome — the shape of the hand-off is ours to change, and it has changed
+three times already because measuring something proved an assumption wrong.

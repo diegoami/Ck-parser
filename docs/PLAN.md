@@ -596,7 +596,7 @@ parse HTML. One sits at the root of the site listing the chronicles, and each
 chronicle has its own:
 
 ```json
-{ "schema": "ck3-images/1", "chronicle": "<seed>-<version>", "images": "portraits",
+{ "schema": "ck3-images/2", "chronicle": "<seed>-<version>", "images": "portraits",
   "saves":  [ {"file": "...ck3", "checksum": "5a86b836cd32", "date": "1364.3.10"} ],
   "wanted": 53, "missing": 53,
   "portraits": [
@@ -610,6 +610,10 @@ chronicle has its own:
                     ["colored_emblem", [["texture", "ce_eagle.dds"]]]]}
   ] }
 ```
+
+`schema` is bumped when a key already there changes meaning. It went to `/2`
+when arms stopped being named after the save and id and started being named
+after their recipe (§11); portrait names did not change.
 
 `have` is this build's answer, not a promise: the companion should treat the
 absence of the file as the truth and the flag as a hint. `saves` repeats the
