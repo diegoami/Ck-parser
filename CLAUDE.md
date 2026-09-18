@@ -7,7 +7,7 @@ Read `docs/HANDOVER.md` first (state of the project, next tasks), then
 
 ```
 uv sync --group dev              # install (the SessionStart hook does this on the web)
-uv run pytest -q                 # 137 tests, < 1 s, fixture only
+uv run pytest -q                 # 133 tests, < 1 s, fixture only
 scripts/fetch_saves.sh           # three real saves (~73 MB each) into ./saves, git-ignored
 uv run python -m ck3parser.runs verify saves --json saves/runs.json
 uv run python -m ck3parser.pipeline saves/<file>.ck3 --title e_germany --dry-run
@@ -51,8 +51,12 @@ uv run python -m ck3wiki.build saves --out site --portraits harvested    # ... w
 - The wiki links an image whether or not it exists yet. Never make a page's
   `src` depend on the file being there: dropping the file in must be all it
   takes, with nothing rebuilt.
-- `coat_of_arms_id` lives on the dynasty, not the house, and is an index inside
-  one save. Scope anything derived from it by the save it was read from.
+- A `coat_of_arms_id` usually lives on the dynasty, but a house may carry its
+  own, and then that one wins. `ck3parser.dynasties.arms_id` decides, and
+  `house_name` likewise: the wiki and the hand-off disagreeing means the image a
+  page links is not the image the companion is asked for.
+- A `coat_of_arms_id` is an index inside one save, not a global id. Scope
+  anything derived from it by the save it was read from.
 - A character is harvestable only if they are in `living` AND have no
   `dead_data`; someone who died on the save's date satisfies only the first.
 - A save's top-level key set varies between saves of one run. Never assume a
