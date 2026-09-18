@@ -12,7 +12,10 @@ import html
 import shutil
 from pathlib import Path
 
-from .model import Wiki, WikiCharacter, WikiTitle
+from ck3parser.parser import date_key
+from ck3parser.portraits import IMAGE_DIR
+
+from .model import Image, Wiki, WikiCharacter, WikiHouse, WikiTitle
 
 STYLE = """\
 :root {
@@ -52,11 +55,29 @@ td.num, th.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .page > .content { grid-column: 1; grid-row: 1; min-width: 0; }
 .page > .infobox { grid-column: 2; grid-row: 1; margin-top: 1rem; }
 .infobox table { margin: 0; font-size: .9rem; }
+.infobox td code { font-size: .8rem; overflow-wrap: anywhere; }
 .content > h2:first-child { margin-top: 1rem; }
 .infobox img { width: 100%; border-radius: 3px; display: block; margin-bottom: .6rem; }
 .tag { display: inline-block; font-size: .75rem; letter-spacing: .06em;
   text-transform: uppercase; color: var(--muted); border: 1px solid var(--rule);
   border-radius: 2px; padding: .05rem .4rem; }
+/* Every portrait slot is rendered, harvested or not, and points at the name
+   both projects derive. A slot whose file is not here yet keeps the link, so
+   the page starts working the moment the companion uploads it. */
+.gallery { display: flex; flex-wrap: wrap; gap: .9rem; padding: 0; margin: .5rem 0 1rem; }
+figure.shot { margin: 0; width: 9rem; }
+figure.shot img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: block;
+  border-radius: 3px; border: 1px solid var(--rule); background: var(--panel); }
+figure.shot figcaption { font-size: .8rem; color: var(--muted); margin-top: .3rem;
+  font-variant-numeric: tabular-nums; }
+figure.shot.awaited img { border-style: dashed; }
+figure.shot.awaited figcaption::after { content: " · awaiting harvest"; }
+.infobox figure.shot { width: 100%; }
+/* a real portrait keeps its own proportions; an empty slot has none of its
+   own, so it holds the shape a portrait will have */
+.infobox figure.shot img { aspect-ratio: auto; }
+.infobox figure.shot.awaited img { aspect-ratio: 3 / 4; }
+figure.shot.arms.awaited img { aspect-ratio: 1 / 1; }
 .current { color: var(--accent); font-weight: bold; }
 ul.plain { list-style: none; padding: 0; }
 ul.plain li { padding: .2rem 0; border-bottom: 1px solid var(--rule); }
@@ -120,6 +141,38 @@ def character_link(wiki: Wiki, cid: int, depth: int) -> str:
     return f'<a href="{up}characters/{cid}.html">{e(wiki.named(cid))}</a>'
 
 
+def house_link(wiki: Wiki, house_id: int | None, depth: int) -> str:
+    if house_id is None:
+        return ""
+    up = "../" * depth
+    known = wiki.houses.get(house_id)
+    if known is None:
+        return f'<code>{house_id}</code> <span class="tag">not in this wiki</span>'
+    return f'<a href="{up}houses/{house_id}.html">{e(known.name)}</a>'
+
+
+def image_slot(
+    image: Image | None, depth: int, alt: str, caption: str, have: set[str], kind: str = "portrait"
+) -> str:
+    """One image the companion is expected to harvest, linked whether it is here.
+
+    The `src` always points at the derived name, so nothing has to be rebuilt
+    once the file lands: only the class changes, and that is cosmetic.
+    """
+    if image is None:
+        return ""
+    up = "../" * depth
+    here = image.file in have
+    # an empty slot is decorative: alt text on an image that is not there yet
+    # only renders as a broken-image label, and the caption already says so
+    state = "" if here else " awaited"
+    return (
+        f'<figure class="shot {kind}{state}" data-image="{e(image.file)}">'
+        f'<img src="{up}{IMAGE_DIR}/{e(image.file)}" alt="{e(alt) if here else ""}" loading="lazy">'
+        f"<figcaption>{e(caption)}</figcaption></figure>"
+    )
+
+
 def tenure_rows(wiki: Wiki, title: WikiTitle, depth: int) -> str:
     out = []
     for tenure in title.tenures:
@@ -169,21 +222,29 @@ def render_title(wiki: Wiki, title: WikiTitle, top: bool = False) -> str:
     return page(heading, "\n".join(body), depth=1, subtitle=f"{len(title.tenures)} recorded rulers", top=top)
 
 
-def render_character(wiki: Wiki, character: WikiCharacter, portrait: str | None, top: bool = False) -> str:
+def render_character(wiki: Wiki, character: WikiCharacter, have: set[str], top: bool = False) -> str:
     held = wiki.held_by(character.id)
+    house = wiki.houses.get(character.house) if character.house else None
+    # newest first: the infobox wants the latest likeness, the gallery the run
+    shots = sorted(character.portraits, key=lambda p: date_key(p.save_date), reverse=True)
     info = rows(
         [
             ("Born", e(character.birth)),
             ("Died", e(character.death) if character.death else '<span class="tag">alive</span>'),
             ("Cause", e(character.death_reason.replace("death_", "").replace("_", " ")) if character.death_reason else ""),
             ("Sex", "female" if character.female else "male"),
-            ("House", f"<code>{character.house}</code>" if character.house else ""),
+            ("House", house_link(wiki, character.house, 1)),
+            ("Dynasty", e(house.dynasty.display_name) if house and house.dynasty else ""),
             ("Id", f"<code>{character.id}</code>"),
             ("In saves", ", ".join(e(d) for d in character.seen)),
         ]
     )
-    image = f'<img src="../portraits/{e(portrait)}" alt="Portrait of {e(character.name)}">' if portrait else ""
-    body = [f'<div class="page"><aside class="infobox card">{image}<table>{info}</table></aside>',
+    portrait = image_slot(
+        shots[0] if shots else None, 1,
+        f"Portrait of {character.name or character.id} in {shots[0].save_date}" if shots else "",
+        shots[0].save_date if shots else "", have,
+    )
+    body = [f'<div class="page"><aside class="infobox card">{portrait}<table>{info}</table></aside>',
             '<div class="content">']
     body.append("<h2>Titles held</h2>")
     if held:
@@ -204,6 +265,20 @@ def render_character(wiki: Wiki, character: WikiCharacter, portrait: str | None,
         )
     else:
         body.append("<p>This character holds none of the titles in this wiki.</p>")
+
+    if len(shots) > 1:
+        body.append("<h2>Portraits</h2>")
+        body.append(
+            f"<p>One per save this character appears in — the same person at"
+            f" {len(shots)} ages, {shots[-1].save_date} to {shots[0].save_date}.</p>"
+        )
+        body.append('<div class="gallery">')
+        for shot in reversed(shots):
+            body.append(image_slot(
+                shot, 1, f"Portrait of {character.name or character.id} in {shot.save_date}",
+                shot.save_date, have,
+            ))
+        body.append("</div>")
     body.append("</div></div>")
     return page(
         character.name or f"Character {character.id}", "\n".join(body), depth=1,
@@ -211,8 +286,50 @@ def render_character(wiki: Wiki, character: WikiCharacter, portrait: str | None,
     )
 
 
-def render_index(wiki: Wiki, top: bool = False) -> str:
+def render_house(wiki: Wiki, house: WikiHouse, have: set[str], top: bool = False) -> str:
+    members = wiki.members_of(house.id)
+    dynasty = house.dynasty
+    info = rows(
+        [
+            ("Dynasty", e(dynasty.display_name) if dynasty and dynasty.display_name else ""),
+            ("Head", character_link(wiki, house.head, 1) if house.head in wiki.characters else ""),
+            ("Founded", e(house.house.founded)),
+            ("Motto", f"<code>{e(house.house.motto)}</code>" if house.house.motto else ""),
+            ("House id", f"<code>{house.id}</code>"),
+            ("Dynasty id", f"<code>{dynasty.id}</code>" if dynasty else ""),
+            ("Arms id", f"<code>{house.arms.coat_of_arms_id}</code>" if house.arms else ""),
+            ("Members here", str(len(members))),
+        ]
+    )
+    arms = image_slot(house.arms, 1, f"Arms of {house.name}", "coat of arms", have, kind="arms")
+    body = [f'<div class="page"><aside class="infobox card">{arms}<table>{info}</table></aside>',
+            '<div class="content">']
+    body.append("<h2>Members</h2>")
+    if members:
+        lines = []
+        for member in members:
+            head = ' <span class="tag">head of house</span>' if house.head == member.id else ""
+            lines.append(
+                f"<tr><td>{character_link(wiki, member.id, 1)}{head}</td>"
+                f'<td class="num">{e(member.lifespan)}</td>'
+                f'<td class="num">{len(wiki.held_by(member.id))}</td></tr>'
+            )
+        body.append(
+            "<table><thead><tr><th>Name</th><th class='num'>Lived</th>"
+            f"<th class='num'>Reigns</th></tr></thead><tbody>{''.join(lines)}</tbody></table>"
+        )
+    else:
+        body.append("<p>No member of this house appears in this wiki.</p>")
+    body.append("</div></div>")
+    subtitle = f"{len(members)} member{'s' if len(members) != 1 else ''} in this chronicle"
+    return page(house.name, "\n".join(body), depth=1, subtitle=subtitle, top=top)
+
+
+def render_index(wiki: Wiki, have: set[str] | None = None, top: bool = False) -> str:
     root = wiki.root
+    have = have or set()
+    images = [*wiki.wanted_portraits, *wiki.wanted_arms]
+    missing = sum(1 for image in images if image.file not in have)
     body = []
     if root:
         body.append(
@@ -220,8 +337,12 @@ def render_index(wiki: Wiki, top: bool = False) -> str:
             f" and the titles held under it, across {len(wiki.snapshots)} save"
             f'{"s" if len(wiki.snapshots) != 1 else ""} of one playthrough:'
             f' {", ".join(e(d) for d in wiki.snapshots)}.</p>'
-            f"<p>{len(wiki.titles)} titles and {len(wiki.characters)} characters are recorded,"
-            f" with {sum(len(t.tenures) for t in wiki.titles.values())} reigns between them.</p></div>"
+            f"<p>{len(wiki.titles)} titles, {len(wiki.characters)} characters and"
+            f" {len(wiki.houses)} houses are recorded, with"
+            f" {sum(len(t.tenures) for t in wiki.titles.values())} reigns between them.</p>"
+            f"<p>{len(images)} images are linked — a portrait per character per save, and"
+            f" a coat of arms per house. {missing} are still to be harvested; they are listed"
+            f' in <a href="portraits.json"><code>portraits.json</code></a>.</p></div>'
         )
     body.append("<h2>Titles</h2><table><thead><tr><th>Title</th><th>Tier</th>"
                 "<th class='num'>Rulers</th><th>Current holder</th></tr></thead><tbody>")
@@ -235,49 +356,72 @@ def render_index(wiki: Wiki, top: bool = False) -> str:
         )
     body.append("</tbody></table>")
 
-    body.append("<h2>Characters</h2><table><thead><tr><th>Name</th><th class='num'>Lived</th>"
-                "<th class='num'>Reigns</th></tr></thead><tbody>")
+    body.append("<h2>Characters</h2><table><thead><tr><th>Name</th><th>House</th>"
+                "<th class='num'>Lived</th><th class='num'>Reigns</th></tr></thead><tbody>")
     for character in sorted(wiki.characters.values(), key=lambda c: (c.name or "", c.id)):
         body.append(
             f"<tr><td>{character_link(wiki, character.id, 0)}</td>"
+            f"<td>{house_link(wiki, character.house, 0) or '—'}</td>"
             f'<td class="num">{e(character.lifespan)}</td>'
             f'<td class="num">{len(wiki.held_by(character.id))}</td></tr>'
         )
     body.append("</tbody></table>")
+
+    if wiki.houses:
+        body.append("<h2>Houses</h2><table><thead><tr><th>House</th><th>Dynasty</th>"
+                    "<th class='num'>Founded</th><th class='num'>Members</th>"
+                    "</tr></thead><tbody>")
+        for house in sorted(wiki.houses.values(), key=lambda h: (h.name, h.id)):
+            dynasty = house.dynasty.display_name if house.dynasty else ""
+            body.append(
+                f"<tr><td>{house_link(wiki, house.id, 0)}</td><td>{e(dynasty)}</td>"
+                f'<td class="num">{e(house.house.founded) or "—"}</td>'
+                f'<td class="num">{len(wiki.members_of(house.id))}</td></tr>'
+            )
+        body.append("</tbody></table>")
     return page("CK3 Chronicle", "\n".join(body), depth=0,
                 subtitle=f"run {wiki.run_id}" if wiki.run_id else "", top=top)
 
 
-def find_portraits(directory: Path | None, ids: list[int]) -> dict[int, str]:
-    """Match harvested ``<id>_<date>.png`` files to characters, newest first."""
+def harvested(directory: Path | None) -> set[str]:
+    """The image file names the companion has already delivered.
+
+    Only names matter: the wiki derives every name it links, so this is purely
+    the question of whether the file is here yet.
+    """
     if directory is None or not directory.is_dir():
-        return {}
-    found: dict[int, str] = {}
-    for cid in ids:
-        matches = sorted(directory.glob(f"{cid}*.png"))
-        if matches:
-            found[cid] = matches[-1].name
-    return found
+        return set()
+    return {path.name for path in directory.iterdir() if path.is_file()}
 
 
 def write_site(wiki: Wiki, out: Path, portraits: Path | None = None, top: bool = False) -> int:
     """Write the whole site. Returns the number of pages written."""
-    (out / "titles").mkdir(parents=True, exist_ok=True)
-    (out / "characters").mkdir(parents=True, exist_ok=True)
+    for folder in ("titles", "characters", "houses"):
+        (out / folder).mkdir(parents=True, exist_ok=True)
     (out / "style.css").write_text(STYLE, encoding="utf-8")
 
-    images = find_portraits(portraits, list(wiki.characters))
-    if images and portraits is not None:
-        shutil.copytree(portraits, out / "portraits", dirs_exist_ok=True)
+    wanted = {image.file for image in (*wiki.wanted_portraits, *wiki.wanted_arms)}
+    # only what this chronicle links: one directory can hold every run's images,
+    # and copying all of them into each site would multiply them by the runs
+    have = harvested(portraits) & wanted
+    if have and portraits is not None:
+        (out / IMAGE_DIR).mkdir(parents=True, exist_ok=True)
+        for name in have:
+            shutil.copyfile(portraits / name, out / IMAGE_DIR / name)
 
     pages = 1
-    (out / "index.html").write_text(render_index(wiki, top), encoding="utf-8")
+    (out / "index.html").write_text(render_index(wiki, have, top), encoding="utf-8")
     for title in wiki.titles.values():
         (out / "titles" / f"{title.key}.html").write_text(render_title(wiki, title, top), encoding="utf-8")
         pages += 1
     for character in wiki.characters.values():
         (out / "characters" / f"{character.id}.html").write_text(
-            render_character(wiki, character, images.get(character.id), top), encoding="utf-8"
+            render_character(wiki, character, have, top), encoding="utf-8"
+        )
+        pages += 1
+    for house in wiki.houses.values():
+        (out / "houses" / f"{house.id}.html").write_text(
+            render_house(wiki, house, have, top), encoding="utf-8"
         )
         pages += 1
     return pages
@@ -298,18 +442,33 @@ def render_landing(entries: list[dict]) -> str:
     body.append(
         "<h2>Chronicles</h2><table><thead><tr><th>Chronicle</th><th>Seed</th>"
         "<th>Version</th><th class='num'>Saves</th><th class='num'>Titles</th>"
-        "<th class='num'>Characters</th></tr></thead><tbody>"
+        "<th class='num'>Characters</th><th class='num'>Houses</th>"
+        "<th class='num'>Images</th></tr></thead><tbody>"
     )
     for entry in entries:
+        images = entry.get("images") or {}
+        wanted = images.get("wanted", 0)
+        missing = images.get("missing", 0)
+        tally = f'{wanted - missing} / {wanted}' if wanted else "—"
         body.append(
             f'<tr><td><a href="{e(entry["slug"])}/index.html">{e(entry["name"])}</a></td>'
             f'<td class="num"><code>{e(entry["seed"])}</code></td>'
             f'<td class="num">{e(entry["version"])}</td>'
             f'<td class="num">{entry["snapshots"]}</td>'
             f'<td class="num">{entry["titles"]}</td>'
-            f'<td class="num">{entry["characters"]}</td></tr>'
+            f'<td class="num">{entry["characters"]}</td>'
+            f'<td class="num">{entry.get("houses", 0)}</td>'
+            f'<td class="num">{tally}</td></tr>'
         )
     body.append("</tbody></table>")
+    body.append(
+        '<p class="sub">Images counts what has been harvested of what the wiki asks'
+        " for. Portraits and coats of arms are captured from the running game by"
+        ' <a href="https://github.com/diegoami/ck_portrait_generator">'
+        "ck_portrait_generator</a>; every image wanted, the missing ones included, is"
+        ' listed in <a href="portraits.json"><code>portraits.json</code></a> and in'
+        " each chronicle's own copy.</p>"
+    )
     return page("CK3 Chronicles", "\n".join(body), depth=0,
                 subtitle=f"{len(entries)} playthrough{'s' if len(entries) != 1 else ''}")
 

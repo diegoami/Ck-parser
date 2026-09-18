@@ -519,7 +519,8 @@ and nothing more."* So:
 |---|---|---|
 | A character-id list per save | `play <id>` only works on a **living** character, so a list is scoped to whoever was alive at that save's date | **built**, `ck3parser.handoff` |
 | Which characters are "interesting" | entirely this project's call | **defined** for v1, below |
-| Coat-of-arms definitions as data | *"Extracting them is tool 1's job"*; `coat_of_arms` is 11% of a save and titles carry `coat_of_arms_id` | not parsed |
+| Coat-of-arms definitions as data | *"Extracting them is tool 1's job"*; `coat_of_arms` is 11% of a save and titles carry `coat_of_arms_id` | **ids resolved**, `ck3parser.dynasties`; the definitions themselves are not parsed |
+| A name for every image it must deliver, and a list of which are missing | it has to know what to call a file without asking, and what is still wanted | **built**, `ck3parser.portraits` and `ck3wiki.manifest` |
 
 ### The hand-off, as built
 
@@ -556,6 +557,81 @@ is omitted too, because in the save it is a numeric id this project cannot yet
 resolve and emitting the raw number under that name would be wrong. `dynasty_house`
 is named for what it actually is, a house id, not the dynasty id their optional
 `dynasty_id` column means.
+
+### Image names, and the manifest
+
+Both projects have to arrive at the same file name for the same image without
+talking to each other, so the name is **derived**, never assigned:
+
+    portrait:  sha256(save file's base name)[:12] + "_" + character id + ".png"
+    arms:      sha256(save file's base name)[:12] + "_arms_" + coat of arms id + ".png"
+
+The save's **name** is hashed, not its contents, so either side computes it
+without opening 70 MB; the companion only keeps a map from save file name to
+checksum. Twelve hex characters is far more than enough for the number of saves
+anyone will publish, and keeps the name short and free of spaces.
+
+Keying on the save rather than the date is what gives one portrait **per save**:
+the same person at three dates is three images, which is their roadmap item 2.
+Scoping the arms by save matters for a different reason — a `coat_of_arms_id` is
+an index inside one run, so the same number means different arms in a parallel
+world.
+
+The wiki links every such name **whether or not the file exists yet**. A missing
+one renders a dashed placeholder marked *awaiting harvest*; the `src` is already
+correct, so dropping the file into the chronicle's `portraits/` directory is the
+whole of publishing it — nothing is rebuilt and no link changes.
+
+`portraits.json` is the machine-readable half, so the companion never has to
+parse HTML. One sits at the root of the site listing the chronicles, and each
+chronicle has its own:
+
+```json
+{ "schema": "ck3-images/1", "chronicle": "<seed>-<version>", "images": "portraits",
+  "saves":  [ {"file": "...ck3", "checksum": "5a86b836cd32", "date": "1364.3.10"} ],
+  "wanted": 53, "missing": 53,
+  "portraits": [
+    {"file": "5a86b836cd32_50544311.png", "kind": "portrait", "save": "...ck3",
+     "checksum": "5a86b836cd32", "save_date": "1364.3.10", "character": 50544311,
+     "house": 12345, "page": "characters/50544311.html", "have": false},
+    {"file": "5a86b836cd32_arms_13996.png", "kind": "arms", "save": "...ck3",
+     "checksum": "5a86b836cd32", "house": 12345, "coat_of_arms_id": 13996,
+     "page": "houses/12345.html", "have": false}
+  ] }
+```
+
+`have` is this build's answer, not a promise: the companion should treat the
+absence of the file as the truth and the flag as a hint. `saves` repeats the
+checksum map so the two sides can be checked against each other.
+
+Delivery is a git push. `diegoami/ck_wiki` is where the two projects meet: the
+companion commits images to its flat `images/` directory, that push triggers the
+build, and `--portraits` folds them in. A chronicle copies only the images it
+links, so one flat directory serves every run — the names already carry the
+save, so nothing collides.
+
+`ck_wiki` is also where the manifests live in git, committed back by the build,
+so the companion reads its queue without going through Pages or parsing HTML.
+The pages themselves are never committed: they are rebuilt from this repository
+and the saves on its Releases, and published as a Pages artifact.
+
+### Houses and dynasties
+
+A character carries `dynasty_house`; houses live in `dynasties.dynasty_house`
+and name a parent dynasty in `dynasties.dynasties`, which is where
+`coat_of_arms_id` actually sits — the house does not carry one.
+
+Verified on the 1364 save: 49 891 houses, 48 099 dynasties. Of the dynasties,
+45 689 have a `coat_of_arms_id`, 41 128 a `name` key, 2 210 a plain
+`localized_name`, 6 320 a `prefix` key, and 4 761 a `key` — and that `key` is a
+bare number (`"2"`), not a readable name, so it is never used for display. A
+house may have no name of its own, and then the dynasty's name is the one to
+show. Houses the game shipped with are dated `9999.1.1`, a sentinel, not a
+founding date.
+
+Houses go into the hand-off beside the characters, one `houses_<date>.csv` per
+snapshot, carrying the arms id and the derived `arms_file`. They are per
+snapshot for the same reason the arms name is: the ids are per save.
 
 **What this project does not owe them.** DNA, in either form. Their D6 retired
 DNA-driven rendering, so the packed `dna=` fields (§5) are not part of the
@@ -634,8 +710,15 @@ files, which this project deliberately does not read (§2). `clean_name` drops
 the marker and never invents a letter, so the wiki shows "Francois" rather than
 a wrong guess. 2 070 of 20 000 sampled living characters carry one.
 
-### Portraits
+### Portraits and houses
 
-`--portraits DIR` folds in images harvested by the companion project, matched by
-the `<id>_<date>.png` names it writes (§7). Without it the pages simply have no
-portrait, so the two projects can progress independently.
+Every character page carries a portrait slot per save the character appears in,
+and every house page a slot for its coat of arms, linked by the derived names of
+§7 whether or not the image exists yet. `--portraits DIR` folds in whatever the
+companion has delivered: files found there are copied into the chronicle and
+their slots lose the *awaiting harvest* marking. Nothing else changes, because
+the links never depended on the file being there.
+
+Houses get pages of their own under `houses/`, listing their members, their
+dynasty, motto and founding date, and marking the dynasty head. Characters link
+to their house from the infobox and from the index.

@@ -20,8 +20,14 @@ alive at that snapshot's date.
 
 Output matches what the harvester already reads: a CSV whose `character_id`
 column is the only one it requires, or with ``--ids-only`` the bare
-one-id-per-line form its ``--ids-file`` takes. Names are deliberately absent;
-the harvester drops them on principle.
+one-id-per-line form its ``--ids-file`` takes. Character names are deliberately
+absent; the harvester drops them on principle.
+
+Alongside each snapshot's characters go the **houses** those characters belong
+to, with the `coat_of_arms_id` their dynasty carries. A coat of arms is an image
+to be harvested just as a portrait is, and its id is an index inside one save,
+so it is written per snapshot and named from that save
+(:mod:`ck3parser.portraits`). House names are not people's names and are kept.
 """
 
 from __future__ import annotations
@@ -34,13 +40,21 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .characters import living_characters
+from .dynasties import Dynasty, House, arms_id, find_dynasties, find_houses, house_name
 from .parser import Block
+from .portraits import arms_name, portrait_name
 from .pipeline import gather, resolve_saves
 from .titles import TitleRecord
 
 #: Columns written. `character_id` is the only one the harvester needs; the
 #: rest land in its `extra` dict, so adding one here cannot break it.
-COLUMNS = ("character_id", "birth_year", "sex", "dynasty_house", "save_date")
+COLUMNS = ("character_id", "birth_year", "sex", "dynasty_house", "save_date", "portrait_file")
+
+#: Columns of the house list written beside each snapshot's characters.
+HOUSE_COLUMNS = (
+    "house_id", "dynasty_id", "coat_of_arms_id", "name", "dynasty_name",
+    "found_date", "motto", "save_date", "arms_file",
+)
 
 
 @dataclass
@@ -50,6 +64,23 @@ class HandoffCharacter:
     sex: str | None
     dynasty_house: int | None
     save_date: str
+    portrait_file: str = ""
+
+    def row(self) -> dict[str, object]:
+        return {k: ("" if v is None else v) for k, v in asdict(self).items()}
+
+
+@dataclass
+class HandoffHouse:
+    house_id: int
+    dynasty_id: int | None
+    coat_of_arms_id: int | None
+    name: str
+    dynasty_name: str
+    found_date: str | None
+    motto: str
+    save_date: str
+    arms_file: str = ""
 
     def row(self) -> dict[str, object]:
         return {k: ("" if v is None else v) for k, v in asdict(self).items()}
@@ -62,7 +93,7 @@ def _year(date: object) -> int | None:
         return None
 
 
-def describe(cid: int, char: Block, save_date: str) -> HandoffCharacter:
+def describe(cid: int, char: Block, save_date: str, save_path: str = "") -> HandoffCharacter:
     house = char.get("dynasty_house")
     return HandoffCharacter(
         character_id=cid,
@@ -70,7 +101,40 @@ def describe(cid: int, char: Block, save_date: str) -> HandoffCharacter:
         sex="female" if char.get("female") else "male",
         dynasty_house=house if isinstance(house, int) else None,
         save_date=save_date,
+        portrait_file=portrait_name(save_path, cid) if save_path else "",
     )
+
+
+def describe_house(
+    house: House, dynasty: Dynasty | None, save_date: str, save_path: str
+) -> HandoffHouse:
+    arms = arms_id(house, dynasty)
+    return HandoffHouse(
+        house_id=house.id,
+        dynasty_id=house.dynasty,
+        coat_of_arms_id=arms,
+        name=house_name(house, dynasty),
+        dynasty_name=dynasty.display_name if dynasty else "",
+        found_date=house.founded,
+        motto=house.motto,
+        save_date=save_date,
+        arms_file=arms_name(save_path, arms) if arms is not None else "",
+    )
+
+
+def houses_of(save_path: str, characters: list[HandoffCharacter], save_date: str) -> list[HandoffHouse]:
+    """The houses these characters belong to, with their dynasty's arms id."""
+    wanted = {c.dynasty_house for c in characters if c.dynasty_house is not None}
+    houses = find_houses(save_path, wanted)
+    dynasties = find_dynasties(
+        save_path, {h.dynasty for h in houses.values() if h.dynasty is not None}
+    )
+    out = []
+    for house_id in sorted(houses):
+        house = houses[house_id]
+        dynasty = dynasties.get(house.dynasty) if house.dynasty is not None else None
+        out.append(describe_house(house, dynasty, save_date, save_path))
+    return out
 
 
 def interesting_ids(titles: list[TitleRecord]) -> set[int]:
@@ -88,15 +152,15 @@ def select(save_path: str, title_key: str, with_vassals: bool = True, log=None) 
     wanted = interesting_ids(view.titles)
     alive = living_characters(save_path, wanted)
     print(f"  harvestable: {len(alive)} of {len(wanted)} alive at {view.fp.date}", file=log)
-    return [describe(cid, alive[cid], view.fp.date) for cid in sorted(alive)]
+    return [describe(cid, alive[cid], view.fp.date, save_path) for cid in sorted(alive)]
 
 
-def write_csv(path: Path, characters: list[HandoffCharacter]) -> None:
+def write_csv(path: Path, rows: list, columns: tuple[str, ...] = COLUMNS) -> None:
     with open(path, "w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=list(COLUMNS))
+        writer = csv.DictWriter(fh, fieldnames=list(columns))
         writer.writeheader()
-        for character in characters:
-            writer.writerow(character.row())
+        for item in rows:
+            writer.writerow(item.row())
 
 
 def write_ids(path: Path, characters: list[HandoffCharacter]) -> None:
@@ -136,7 +200,18 @@ def run(
         date = characters[0].save_date
         name = f"characters_{slug(date)}." + ("txt" if ids_only else "csv")
         (write_ids if ids_only else write_csv)(out / name, characters)
-        snapshots.append({"save": path, "save_date": date, "file": name, "characters": len(characters)})
+        houses = houses_of(path, characters, date)
+        house_file = f"houses_{slug(date)}.csv"
+        write_csv(out / house_file, houses, HOUSE_COLUMNS)
+        print(f"  houses: {len(houses)}, {sum(1 for h in houses if h.arms_file)} with arms", file=sys.stderr)
+        snapshots.append({
+            "save": path,
+            "save_date": date,
+            "file": name,
+            "characters": len(characters),
+            "houses_file": house_file,
+            "houses": len(houses),
+        })
 
     if not snapshots:
         print(f"no harvestable characters for {title_key!r} in any of the {len(saves)} save(s)", file=sys.stderr)

@@ -24,8 +24,9 @@ from ck3parser.pipeline import gather
 from ck3parser.player import primary_title_key
 from ck3parser.runs import Run, Snapshot, scan
 
+from .manifest import write_chronicle_manifest, write_root_manifest
 from .model import build_wiki
-from .render import write_landing, write_site
+from .render import harvested, write_landing, write_site
 
 
 def discover(save_path: str, run_id: str | None = None) -> list[Run]:
@@ -78,8 +79,13 @@ def build_one(run: Run, subject: str, with_vassals: bool, out: Path, portraits: 
         return None
     wiki = build_wiki(views, subject)
     pages = write_site(wiki, out / run.slug, portraits, top=True)
+    images = write_chronicle_manifest(out / run.slug, wiki, run.slug, harvested(portraits))
     root = wiki.root
-    print(f"  {run.slug}: {pages} pages", file=log)
+    print(
+        f"  {run.slug}: {pages} pages, {images['missing']} of {images['wanted']}"
+        f" images still to harvest",
+        file=log,
+    )
     return {
         "slug": run.slug,
         "name": root.name if root else subject,
@@ -88,6 +94,8 @@ def build_one(run: Run, subject: str, with_vassals: bool, out: Path, portraits: 
         "snapshots": len(wiki.snapshots),
         "titles": len(wiki.titles),
         "characters": len(wiki.characters),
+        "houses": len(wiki.houses),
+        "images": images,
     }
 
 
@@ -123,8 +131,11 @@ def run_build(
         print("no chronicles could be built", file=sys.stderr)
         return 2
     write_landing(out, entries)
-    total = sum(e["titles"] + e["characters"] + 1 for e in entries)
+    write_root_manifest(out, [e["images"] for e in entries])
+    total = sum(e["titles"] + e["characters"] + e["houses"] + 1 for e in entries)
+    missing = sum(e["images"]["missing"] for e in entries)
     print(f"wrote {len(entries)} chronicle(s), {total} pages, to {out}/", file=log)
+    print(f"{missing} image(s) still to harvest; see {out}/portraits.json", file=log)
     return 0
 
 

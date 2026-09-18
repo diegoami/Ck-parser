@@ -7,7 +7,7 @@ Read `docs/HANDOVER.md` first (state of the project, next tasks), then
 
 ```
 uv sync --group dev              # install (the SessionStart hook does this on the web)
-uv run pytest -q                 # 30 tests, < 1 s, fixture only
+uv run pytest -q                 # 133 tests, < 1 s, fixture only
 scripts/fetch_saves.sh           # three real saves (~73 MB each) into ./saves, git-ignored
 uv run python -m ck3parser.runs verify saves --json saves/runs.json
 uv run python -m ck3parser.pipeline saves/<file>.ck3 --title e_germany --dry-run
@@ -15,6 +15,7 @@ uv run python -m ck3parser.pipeline saves --title e_germany --dry-run   # whole 
 uv run python -m ck3parser.sections saves/<file>.ck3 --verify           # top-level layout
 uv run python -m ck3parser.handoff saves --title e_germany --out handoff  # portrait harvester list
 uv run python -m ck3wiki.build saves --out site                          # the wikis themselves
+uv run python -m ck3wiki.build saves --out site --portraits harvested    # ... with images folded in
 ```
 
 ## Rules
@@ -40,8 +41,28 @@ uv run python -m ck3wiki.build saves --out site                          # the w
 - `diegoami/ck_portrait_generator` is the companion tool. It consumes plain data
   files from here and imports no code; see PLAN.md §7 for what it needs. Read its
   `docs/DECISIONS.md` before assuming anything about portraits.
+- `diegoami/ck_wiki` is where the wiki is published and where the companion
+  commits its images. This repository builds the pages; it does not publish them
+  and has no Pages workflow. Generated pages are never committed anywhere.
+- `scripts/fetch_saves.sh` must never infer the repository from
+  `GITHUB_REPOSITORY`: it runs inside ck_wiki's workflow, where that names
+  ck_wiki and the saves are not there.
 - Never write character names into the hand-off: the companion drops them on
-  principle. Only emit fields this project can resolve correctly.
+  principle. Only emit fields this project can resolve correctly. A house's name
+  is not a person's name; the house list keeps it.
+- Image names are **derived**, never assigned: `ck3parser.portraits` is the one
+  place that spells the rule, and the companion derives the same names. Changing
+  it renames every image both projects hold, so it is a contract change, not a
+  refactor (PLAN.md §7).
+- The wiki links an image whether or not it exists yet. Never make a page's
+  `src` depend on the file being there: dropping the file in must be all it
+  takes, with nothing rebuilt.
+- A `coat_of_arms_id` usually lives on the dynasty, but a house may carry its
+  own, and then that one wins. `ck3parser.dynasties.arms_id` decides, and
+  `house_name` likewise: the wiki and the hand-off disagreeing means the image a
+  page links is not the image the companion is asked for.
+- A `coat_of_arms_id` is an index inside one save, not a global id. Scope
+  anything derived from it by the save it was read from.
 - A character is harvestable only if they are in `living` AND have no
   `dead_data`; someone who died on the save's date satisfies only the first.
 - A save's top-level key set varies between saves of one run. Never assume a
