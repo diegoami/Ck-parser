@@ -44,9 +44,15 @@ so a fresh session (any model) can continue without the conversation history.
   history block into `(date, holder, reason)` tuples.
 - **The wiki** (`src/ck3wiki/`): `model.py` merges a run's snapshots into one
   picture, `render.py` writes static HTML, `build.py` is the CLI
-  (`python -m ck3wiki.build SAVES --title KEY --out site`). This is the
+  (`python -m ck3wiki.build SAVES --out site`). One chronicle per playthrough
+  under `site/<seed>-<version>/`, with a landing page above them; the subject
+  title is auto-detected per run and `--title` overrides it. This is the
   project's actual deliverable; see PLAN.md §8. Factual pages only, no LLM
   prose. A GitHub Actions workflow publishes it to Pages.
+- **Who was played** (`ck3parser/player.py`): `primary_title_key` reads the
+  played character from the header, finds their `landed_data.domain`, and
+  resolves its first entry to a title key. `ck3parser/characters.py` holds the
+  targeted character lookup both it and the hand-off use.
 - **Hand-off** (`handoff.py`): writes the portrait harvester's character list,
   one file per snapshot, via
   `python -m ck3parser.handoff SAVES --title KEY --out DIR [--ids-only]`.
@@ -87,13 +93,14 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 | `sections SAVE` | 54 distinct top-level keys, 14 M lines, 4.8 s |
 | `sections SAVE --verify` | ~41 M tokens, balanced, max depth 7, ~38 s |
 | `handoff saves --title e_germany` | 26 / 2 / 25 harvestable per snapshot, 48 distinct across the run, ~2 m |
-| `ck3wiki.build saves --title e_germany` | 1 021 pages, 68 titles, 952 characters, 1 559 reigns, ~1 m 42 s, 4.4 MB |
+| `ck3wiki.build saves` on all five release saves | 3 chronicles, 4 412 pages, ~2 m 34 s |
+| `runs scan` on all five | 3 runs: seeds 576691683 / 633048653 / 1370892195 on versions 1.6.1.2 / 1.4.4 / 1.3.1 |
 
 ## What is not done, in the order I would do it
 
-1. **Enable GitHub Pages.** The workflow exists and builds, but publishing needs
-   a repository setting only an owner can flip: Settings → Pages → Source →
-   "GitHub Actions". Until then the job builds and the deploy step fails.
+1. **Merge and watch the first deploy.** Pages has been switched to the
+   "GitHub Actions" source, so the `Wiki` workflow should publish on the next
+   push to `main`. Nobody has seen it run in CI yet.
 2. **Narrative prose.** The wiki is factual; Phase 7's LLM-written text is still
    gated on choosing a small local model. The pages are the place it would go.
 3. **Parse coat-of-arms definitions.** The companion's roadmap wants dynasty and
@@ -166,6 +173,11 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
   not read.
 - Two titles can share a display name (a duchy and a kingdom of Pomerania), so
   a name alone never identifies a title. The key does.
+- What separates one wiki from another is the **run**, identified by seed and
+  game version, not the title it is about. Three real playthroughs are on the
+  Releases and they differ in seed, version and bookmark date.
+- A run's subject title can be a dynamic one: France's is `x_x_5822`, a custom
+  empire, so anything assuming a static key prefix will break on it.
 - A character can sit in the `living` section and still carry `dead_data`, if
   they died on the save's own date. `handoff.living_characters` requires both
   signals; anything else deciding who is alive should too.
@@ -205,7 +217,7 @@ uv run python -m ck3parser.sections saves/<file>.ck3 --verify   # balanced, 54 k
 uv run python -m ck3parser.handoff saves --title e_germany --out handoff
 # 26 / 2 / 25 harvestable per snapshot, 48 distinct characters
 
-uv run python -m ck3wiki.build saves --title e_germany --out site   # 1 021 pages
+uv run python -m ck3wiki.build saves --out site   # one chronicle per run
 
 uv run python -m ck3parser.pipeline saves --title e_germany --dry-run 2>&1 >/dev/null
 # 3 snapshots oldest first, 37/19/51 vassals, 0 missing characters, exit 0

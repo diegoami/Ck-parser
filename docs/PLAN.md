@@ -135,7 +135,7 @@ The usable signals, from cheapest to most expensive:
 |---|---|---|---|
 | `random_seed` | gamestate line ~419 | decompress first few KB of the zip member | Same for the whole run (verified: `576691683` in all three saves, spanning six in-game years and a succession). Different runs from the same bookmark get different seeds. This is the primary key. |
 | `bookmark_date` | gamestate line ~416 | same | Constant. |
-| `game_rules`, `dlcs`, `version`, `ironman` | plaintext header | free | Constant in practice. `version` (`"1.6.1.2"` in all three saves) appears to be the game version at the **start** of the run, not at save time: the player reports the run was started long ago and carried through later patches, and the DLC list contains DLCs released well after 1.6. Not yet checked against a save from a freshly started game. Kept as a warning, not a key. |
+| `game_rules`, `dlcs`, `version`, `ironman` | plaintext header | free | Constant within a run. `version` is the game version at the **start** of the run, not at save time: the player reports this run was started long ago and carried through later patches, and the DLC list contains DLCs released well after 1.6. It is **part of the RunKey**: three real playthroughs on hand carry 1.6.1.2, 1.4.4 and 1.3.1. |
 | `played_character.name`, `player=1` | gamestate `played_character` block, far into the file | full stream | Constant (the Paradox account name). |
 | `played_character.legacy` | same block | full stream | Ordered list of `{character, date, …}` for every ruler the player controlled. Earlier snapshot's list is a **prefix** of the later one (verified on `(character, date)`: A lists 19 rulers, B and C list the same 19 plus Ludwig, so both the strict-prefix and the equal case are covered). The last entry is the ruler in play and has fewer fields than it will have once the ruler is succeeded; compare on `(character, date)` only. |
 | `meta_main_portrait.id` | header | free | Currently played character id; equals the last `legacy` entry's `character`. |
@@ -165,8 +165,14 @@ Fingerprint = {
   played_character_id (meta_main_portrait.id),
   game_rules_hash, dlcs_hash, ironman,
 }
-RunKey = (random_seed, bookmark_date, game_rules_hash, dlcs_hash)
+RunKey = (random_seed, version, bookmark_date, game_rules_hash, dlcs_hash)
 ```
+
+The **seed and the version** are what tell one playthrough from another, and
+they are what the wiki names a chronicle by (§8). `version` belongs in the key
+rather than being a warning beside it, because it is the version the run was
+*started* on (§5) and so cannot drift mid-run: two saves that disagree about it
+are two games, not one game that was patched.
 
 Group files by `RunKey`. Inside a group, order by `date`, then `random_count`,
 then file mtime.
@@ -588,8 +594,27 @@ parsed data, and reading saves directly keeps the site buildable by anyone with
 the save files and by CI, with no database to stand up. The graph remains the
 place for queries the site does not answer.
 
-Measured on the three real saves for `e_germany`: **1 021 pages** covering 68
-titles, 952 characters and 1 559 reigns, in 1 m 42 s, 4.4 MB on disk.
+### One chronicle per playthrough
+
+Saves are grouped into runs and each run becomes its own chronicle under
+`site/<seed>-<version>/`, with a landing page listing them. Nothing is
+configured: attaching a save from a different game to a Release adds a
+chronicle. Each chronicle's subject is the played character's **primary
+title**, which is the first entry of their `landed_data.domain` — checked
+across the sample run's succession, where all three snapshots give `e_germany`
+even though the ruler changed.
+
+Built from the five saves currently on the Releases, which are three parallel
+playthroughs:
+
+| Chronicle | Seed | Version | Saves | Titles | Characters |
+|---|---|---|---|---|---|
+| Germania | 576691683 | 1.6.1.2 | 3 | 68 | 952 |
+| Holy Roman Empire | 633048653 | 1.4.4 | 1 | 84 | 1 495 |
+| France | 1370892195 | 1.3.1 | 1 | 109 | 1 701 |
+
+4 412 pages in 2 m 34 s. France's subject is `x_x_5822`, a custom empire, so
+dynamic titles work as subjects too.
 
 ### What building it found
 

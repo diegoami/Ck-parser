@@ -1,22 +1,61 @@
 #!/bin/bash
-# Download the three sample saves (one CK3 run, three dates) from GitHub Releases.
+# Download every .ck3 save attached to this repository's Releases.
+#
+# The saves are not in git (they are tens of megabytes each), so this is how a
+# checkout gets them. Every release is read, not a fixed list, so attaching a
+# save from a new playthrough is all it takes to add a chronicle to the wiki.
+# Files that appear in more than one release are fetched once, and every
+# download is checked against the sha256 the API reports.
+#
 # Usage: scripts/fetch_saves.sh [DEST_DIR]   (default: ./saves, git-ignored)
 set -euo pipefail
+
 dest="${1:-saves}"
+repo="${GITHUB_REPOSITORY:-diegoami/Ck-parser}"
 mkdir -p "$dest"
-base="https://github.com/diegoami/Ck-parser/releases/download"
-while read -r tag name sha; do
+
+auth=()
+[ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+
+# name<TAB>sha256<TAB>url, one per save, deduplicated by checksum.
+assets=$(
+  curl -sS --retry 3 "${auth[@]}" \
+    "https://api.github.com/repos/$repo/releases?per_page=100" |
+  python3 -c '
+import json, sys
+seen = set()
+for release in json.load(sys.stdin):
+    if release.get("draft"):
+        continue
+    for asset in release.get("assets", []):
+        if not asset["name"].endswith(".ck3"):
+            continue
+        digest = (asset.get("digest") or "").removeprefix("sha256:")
+        key = digest or asset["name"]
+        if key in seen:
+            continue
+        seen.add(key)
+        print(asset["name"], digest, asset["browser_download_url"], sep="\t")
+'
+)
+
+if [ -z "$assets" ]; then
+  echo "no .ck3 assets found on any release of $repo" >&2
+  exit 1
+fi
+
+count=0
+while IFS=$'\t' read -r name digest url; do
+  [ -z "$name" ] && continue
   out="$dest/$name"
-  if [ -f "$out" ] && echo "$sha  $out" | sha256sum -c --quiet 2>/dev/null; then
+  if [ -f "$out" ] && [ -n "$digest" ] && echo "$digest  $out" | sha256sum -c --quiet 2>/dev/null; then
     echo "ok       $name"
-    continue
+  else
+    echo "fetching $name"
+    curl -L --retry 3 --fail -o "$out" "$url"
+    [ -n "$digest" ] && echo "$digest  $out" | sha256sum -c --quiet
   fi
-  echo "fetching $name"
-  curl -L --retry 3 -o "$out" "$base/$tag/$name"
-  echo "$sha  $out" | sha256sum -c --quiet
-done <<'LIST'
-0.0.4 Fylkir_Asa_of_Immasonian_Fylkirate_1358_09_13.ck3 69b78aaefc04833079c61d7ac5e7faef18fb46906b82e6e71041661996558b57
-0.0.3 Fylkir_Ludwig_of_Immasonian_Fylkirate_1361_01_17.ck3 a2b12bbb44e164537c8db7fe52c01b966665b2dc77a1634362c69191b892a37b
-0.0.2 Fylkir_Ludwig_of_Immasonian_Fylkirate_1364_03_10.ck3 919ad2c7e541cf2f178d71250fefb37ca7f11a917f5df5e671f319322dba946a
-LIST
-echo "saves in $dest/"
+  count=$((count + 1))
+done <<< "$assets"
+
+echo "$count save(s) in $dest/"

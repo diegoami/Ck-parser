@@ -75,7 +75,7 @@ def _two_snapshots(tmp_path, **later):
 def test_directory_loads_every_snapshot_oldest_first(tmp_path, capsys):
     assert main([str(_two_snapshots(tmp_path)), "--title", "k_testland", "--dry-run"]) == 0
     out, err = capsys.readouterr()
-    assert "run 7-867.1.1" in err and "2 snapshot(s), oldest first" in err
+    assert "run 7-1.6.1.2-867.1.1" in err and "2 snapshot(s), oldest first" in err
     assert err.index("a_1100.ck3") < err.index("b_1120.ck3")
     assert out.count("MERGE (s:Snapshot") == 2
     # the tenure open in 1100 is closed by the 1120 snapshot, on one relationship

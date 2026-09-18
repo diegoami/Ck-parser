@@ -1,8 +1,11 @@
 name: Wiki
 
-# Builds the static wiki from the saves attached to this repository's Releases
-# and publishes it to GitHub Pages. The saves are not in git, so the job fetches
-# and checksums them first (scripts/fetch_saves.sh).
+# Builds the static wikis from the saves attached to this repository's Releases
+# and publishes them to GitHub Pages. The saves are not in git, so the job
+# fetches and checksums them first (scripts/fetch_saves.sh).
+#
+# One chronicle per playthrough: saves are grouped by run, so attaching a save
+# from a different game adds a chronicle without touching this file.
 #
 # One-time setup: Settings -> Pages -> Build and deployment -> Source:
 # "GitHub Actions". Without that this workflow builds but cannot deploy.
@@ -17,8 +20,8 @@ on:
   workflow_dispatch:
     inputs:
       title:
-        description: "Title key to build the wiki around"
-        default: e_germany
+        description: "Force every chronicle onto one title (default: each run's own)"
+        required: false
 
 permissions:
   contents: read
@@ -40,11 +43,15 @@ jobs:
       - run: uv sync --group dev
       - name: Fetch the saves from Releases
         run: scripts/fetch_saves.sh saves
-      - name: Build the wiki
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Build the wikis
+        # No --title: each run's chronicle is about its own played character's
+        # primary title. Saves are grouped into runs automatically, so a save
+        # from a new playthrough becomes a new chronicle with no config change.
         run: |
-          uv run python -m ck3wiki.build saves \
-            --title "${{ inputs.title || 'e_germany' }}" \
-            --out site
+          uv run python -m ck3wiki.build saves --out site \
+            ${{ inputs.title && format('--title {0}', inputs.title) || '' }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

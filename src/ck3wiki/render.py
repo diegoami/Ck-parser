@@ -81,15 +81,16 @@ def e(value: object) -> str:
     return html.escape("" if value is None else str(value))
 
 
-def page(title: str, body: str, depth: int = 0, subtitle: str = "") -> str:
+def page(title: str, body: str, depth: int = 0, subtitle: str = "", top: bool = False) -> str:
     up = "../" * depth
+    crumb = f'<a class="home" href="{up}../index.html">All chronicles</a> · ' if top else ""
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{e(title)}</title>
 <link rel="stylesheet" href="{up}style.css">
 </head><body>
-<header><div class="inner"><a class="home" href="{up}index.html">CK3 Chronicle</a>
+<header><div class="inner">{crumb}<a class="home" href="{up}index.html">CK3 Chronicle</a>
 <h1>{e(title)}</h1>{f'<p class="sub">{e(subtitle)}</p>' if subtitle else ''}</div></header>
 <main>
 {body}
@@ -134,7 +135,7 @@ def tenure_rows(wiki: Wiki, title: WikiTitle, depth: int) -> str:
     return "".join(out)
 
 
-def render_title(wiki: Wiki, title: WikiTitle) -> str:
+def render_title(wiki: Wiki, title: WikiTitle, top: bool = False) -> str:
     heading = f'{TIER_WORD.get(title.tier or "", "Title")} of {title.name}'
     info = rows(
         [
@@ -165,10 +166,10 @@ def render_title(wiki: Wiki, title: WikiTitle) -> str:
             links = ", ".join(title_link(wiki, key, 1) for key in keys) or "none"
             body.append(f'<p><strong>{e(date)}</strong> — {len(keys)} held under it: {links}</p>')
     body.append("</div></div>")
-    return page(heading, "\n".join(body), depth=1, subtitle=f"{len(title.tenures)} recorded rulers")
+    return page(heading, "\n".join(body), depth=1, subtitle=f"{len(title.tenures)} recorded rulers", top=top)
 
 
-def render_character(wiki: Wiki, character: WikiCharacter, portrait: str | None) -> str:
+def render_character(wiki: Wiki, character: WikiCharacter, portrait: str | None, top: bool = False) -> str:
     held = wiki.held_by(character.id)
     info = rows(
         [
@@ -204,10 +205,13 @@ def render_character(wiki: Wiki, character: WikiCharacter, portrait: str | None)
     else:
         body.append("<p>This character holds none of the titles in this wiki.</p>")
     body.append("</div></div>")
-    return page(character.name or f"Character {character.id}", "\n".join(body), depth=1, subtitle=character.lifespan)
+    return page(
+        character.name or f"Character {character.id}", "\n".join(body), depth=1,
+        subtitle=character.lifespan, top=top,
+    )
 
 
-def render_index(wiki: Wiki) -> str:
+def render_index(wiki: Wiki, top: bool = False) -> str:
     root = wiki.root
     body = []
     if root:
@@ -241,7 +245,7 @@ def render_index(wiki: Wiki) -> str:
         )
     body.append("</tbody></table>")
     return page("CK3 Chronicle", "\n".join(body), depth=0,
-                subtitle=f"run {wiki.run_id}" if wiki.run_id else "")
+                subtitle=f"run {wiki.run_id}" if wiki.run_id else "", top=top)
 
 
 def find_portraits(directory: Path | None, ids: list[int]) -> dict[int, str]:
@@ -256,7 +260,7 @@ def find_portraits(directory: Path | None, ids: list[int]) -> dict[int, str]:
     return found
 
 
-def write_site(wiki: Wiki, out: Path, portraits: Path | None = None) -> int:
+def write_site(wiki: Wiki, out: Path, portraits: Path | None = None, top: bool = False) -> int:
     """Write the whole site. Returns the number of pages written."""
     (out / "titles").mkdir(parents=True, exist_ok=True)
     (out / "characters").mkdir(parents=True, exist_ok=True)
@@ -267,13 +271,50 @@ def write_site(wiki: Wiki, out: Path, portraits: Path | None = None) -> int:
         shutil.copytree(portraits, out / "portraits", dirs_exist_ok=True)
 
     pages = 1
-    (out / "index.html").write_text(render_index(wiki), encoding="utf-8")
+    (out / "index.html").write_text(render_index(wiki, top), encoding="utf-8")
     for title in wiki.titles.values():
-        (out / "titles" / f"{title.key}.html").write_text(render_title(wiki, title), encoding="utf-8")
+        (out / "titles" / f"{title.key}.html").write_text(render_title(wiki, title, top), encoding="utf-8")
         pages += 1
     for character in wiki.characters.values():
         (out / "characters" / f"{character.id}.html").write_text(
-            render_character(wiki, character, images.get(character.id)), encoding="utf-8"
+            render_character(wiki, character, images.get(character.id), top), encoding="utf-8"
         )
         pages += 1
     return pages
+
+
+def render_landing(entries: list[dict]) -> str:
+    """The page above the wikis: one row per run.
+
+    Runs are told apart by seed and game version, so that is what identifies a
+    chronicle here, not the title it happens to be about.
+    """
+    body = [
+        '<div class="card"><p>Each chronicle below is one playthrough, identified by'
+        " its random seed and the game version it was started on. A run's saves are"
+        " grouped automatically, so adding more saves to the Releases adds more"
+        " chronicles here.</p></div>"
+    ]
+    body.append(
+        "<h2>Chronicles</h2><table><thead><tr><th>Chronicle</th><th>Seed</th>"
+        "<th>Version</th><th class='num'>Saves</th><th class='num'>Titles</th>"
+        "<th class='num'>Characters</th></tr></thead><tbody>"
+    )
+    for entry in entries:
+        body.append(
+            f'<tr><td><a href="{e(entry["slug"])}/index.html">{e(entry["name"])}</a></td>'
+            f'<td class="num"><code>{e(entry["seed"])}</code></td>'
+            f'<td class="num">{e(entry["version"])}</td>'
+            f'<td class="num">{entry["snapshots"]}</td>'
+            f'<td class="num">{entry["titles"]}</td>'
+            f'<td class="num">{entry["characters"]}</td></tr>'
+        )
+    body.append("</tbody></table>")
+    return page("CK3 Chronicles", "\n".join(body), depth=0,
+                subtitle=f"{len(entries)} playthrough{'s' if len(entries) != 1 else ''}")
+
+
+def write_landing(out: Path, entries: list[dict]) -> None:
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "style.css").write_text(STYLE, encoding="utf-8")
+    (out / "index.html").write_text(render_landing(entries), encoding="utf-8")

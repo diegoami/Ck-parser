@@ -14,7 +14,7 @@ uv run python -m ck3parser.pipeline saves/<file>.ck3 --title e_germany --dry-run
 uv run python -m ck3parser.pipeline saves --title e_germany --dry-run   # whole run, oldest first
 uv run python -m ck3parser.sections saves/<file>.ck3 --verify           # top-level layout
 uv run python -m ck3parser.handoff saves --title e_germany --out handoff  # portrait harvester list
-uv run python -m ck3wiki.build saves --title e_germany --out site        # the wiki itself
+uv run python -m ck3wiki.build saves --out site                          # the wikis themselves
 ```
 
 ## Rules
@@ -35,6 +35,8 @@ uv run python -m ck3wiki.build saves --title e_germany --out site        # the w
   The wiki `ck3wiki` builds today is factual, generated straight from save data.
 - Character names in saves are localization keys with diacritics marked by an
   underscore. Drop the marker, never guess the letter (PLAN.md §8).
+- One wiki per playthrough. What separates them is the run, identified by seed
+  and game version, never the title the wiki is about.
 - `diegoami/ck_portrait_generator` is the companion tool. It consumes plain data
   files from here and imports no code; see PLAN.md §7 for what it needs. Read its
   `docs/DECISIONS.md` before assuming anything about portraits.

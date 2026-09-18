@@ -2,9 +2,9 @@ import re
 from pathlib import Path
 
 from ck3parser.pipeline import gather
-from ck3wiki.build import main
+from ck3wiki.build import discover, main, subject_of
 from ck3wiki.model import Tenure, Wiki, WikiCharacter, build_wiki, clean_name
-from ck3wiki.render import STYLE, e, find_portraits, render_index, write_site
+from ck3wiki.render import STYLE, e, find_portraits, render_index, render_landing, write_site
 from helpers import SUCCESSION_EDITS, make_save
 
 
@@ -138,21 +138,90 @@ def test_portraits_are_linked_only_when_present(tmp_path):
 # ---------------------------------------------------------------- the CLI
 
 
-def test_cli_builds_a_site_from_a_run(tmp_path, capsys):
+def test_cli_builds_one_chronicle_per_run(tmp_path, capsys):
     two_snapshots(tmp_path)
     out = tmp_path / "site"
     assert main([str(tmp_path), "--title", "k_testland", "--out", str(out)]) == 0
-    assert "wrote" in capsys.readouterr().err
+    assert "1 run(s) to build" in capsys.readouterr().err
+    # the landing page sits above the chronicles, which are keyed by seed+version
     assert (out / "index.html").is_file()
-    assert sorted(p.name for p in (out / "titles").iterdir()) == [
+    assert (out / "7-1-6-1-2" / "index.html").is_file()
+    assert sorted(p.name for p in (out / "7-1-6-1-2" / "titles").iterdir()) == [
         "c_test.html", "k_testland.html", "x_mc_0.html"
     ]
+    landing = (out / "index.html").read_text()
+    assert 'href="7-1-6-1-2/index.html"' in landing and "576691683" not in landing
+
+
+def test_two_runs_become_two_chronicles(tmp_path, capsys):
+    make_save(tmp_path / "one.ck3", date="1100.6.1", seed=7, random_count=100)
+    make_save(tmp_path / "two.ck3", date="1100.6.1", seed=8, random_count=100)
+    out = tmp_path / "site"
+    assert main([str(tmp_path), "--title", "k_testland", "--out", str(out)]) == 0
+    assert "2 run(s) to build" in capsys.readouterr().err
+    assert (out / "7-1-6-1-2" / "index.html").is_file()
+    assert (out / "8-1-6-1-2" / "index.html").is_file()
+    landing = (out / "index.html").read_text()
+    assert landing.count('/index.html">') == 2
+
+
+def test_the_same_seed_on_a_different_version_is_a_separate_chronicle(tmp_path):
+    make_save(tmp_path / "one.ck3", date="1100.6.1", seed=7, random_count=100)
+    make_save(tmp_path / "two.ck3", date="1100.6.1", seed=7, random_count=100, version='"1.7.0.0"')
+    out = tmp_path / "site"
+    assert main([str(tmp_path), "--title", "k_testland", "--out", str(out)]) == 0
+    assert (out / "7-1-6-1-2" / "index.html").is_file()
+    assert (out / "7-1-7-0-0" / "index.html").is_file()
+
+
+def test_a_chronicle_links_back_to_the_landing_page(tmp_path):
+    two_snapshots(tmp_path)
+    out = tmp_path / "site"
+    main([str(tmp_path), "--title", "k_testland", "--out", str(out)])
+    assert 'href="../index.html">All chronicles' in (out / "7-1-6-1-2" / "index.html").read_text()
+    assert 'href="../../index.html">All chronicles' in (
+        out / "7-1-6-1-2" / "titles" / "k_testland.html"
+    ).read_text()
 
 
 def test_cli_rejects_an_unknown_title(tmp_path, capsys):
     two_snapshots(tmp_path)
     assert main([str(tmp_path), "--title", "k_nope", "--out", str(tmp_path / "s")]) == 2
-    assert "not found in any" in capsys.readouterr().err
+    assert "no chronicles could be built" in capsys.readouterr().err
+
+
+def test_discover_finds_runs_from_a_file_or_a_directory(tmp_path):
+    early, _ = two_snapshots(tmp_path)
+    assert [r.slug for r in discover(str(early))] == ["7-1-6-1-2"]
+    assert [len(r.snapshots) for r in discover(str(tmp_path))] == [2]
+    assert [r.slug for r in discover(str(tmp_path), run_id="7-1-6-1-2")] == ["7-1-6-1-2"]
+
+
+def test_discover_complains_about_nothing_to_build(tmp_path):
+    import pytest as _pytest
+
+    with _pytest.raises(FileNotFoundError):
+        discover(str(tmp_path))
+    with _pytest.raises(FileNotFoundError):
+        discover(str(tmp_path / "nope.ck3"))
+
+
+def test_subject_defaults_to_the_played_characters_primary_title(tmp_path, capsys):
+    early, _ = two_snapshots(tmp_path)
+    run = discover(str(early))[0]
+    with quiet() as log:
+        # the fixture's played character holds k_testland
+        assert subject_of(run, None, log) == "k_testland"
+        assert subject_of(run, "c_test", log) == "c_test"
+
+
+def test_landing_page_names_what_separates_the_runs():
+    html = render_landing([
+        {"slug": "7-1-6-1-2", "name": "Testland", "seed": 7, "version": "1.6.1.2",
+         "snapshots": 2, "titles": 3, "characters": 5}
+    ])
+    assert "seed" in html.lower() and "version" in html.lower()
+    assert 'href="7-1-6-1-2/index.html"' in html and "Testland" in html
 
 
 def test_an_open_tenure_takes_the_latest_snapshots_end_date(tmp_path):

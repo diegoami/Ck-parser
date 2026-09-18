@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -45,11 +46,28 @@ class Fingerprint:
 
     @property
     def run_key(self) -> tuple:
-        return (self.random_seed, self.bookmark_date, self.rules_hash, self.dlcs_hash)
+        """What tells one playthrough from another.
+
+        The seed and the game version carry it: `version` is the version the run
+        was *started* on rather than the one it was last saved with (§5), so it
+        is a property of the run and cannot drift mid-run. The bookmark, rules
+        and DLC set are included because two runs that differ in any of them are
+        not the same playthrough either.
+        """
+        return (self.random_seed, self.version, self.bookmark_date, self.rules_hash, self.dlcs_hash)
 
     @property
     def run_id(self) -> str:
-        return f"{self.random_seed}-{self.bookmark_date}-{self.rules_hash[:6]}-{self.dlcs_hash[:6]}"
+        return (
+            f"{self.random_seed}-{self.version}-{self.bookmark_date}"
+            f"-{self.rules_hash[:6]}-{self.dlcs_hash[:6]}"
+        )
+
+    @property
+    def run_slug(self) -> str:
+        """A short, filesystem and URL safe name for this run: seed and version."""
+        version = re.sub(r"[^0-9A-Za-z]+", "-", str(self.version or "unknown")).strip("-")
+        return f"{self.random_seed}-{version}"
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)

@@ -33,8 +33,8 @@ import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from .container import open_gamestate_text
-from .parser import Block, PushbackLines, iter_children
+from .characters import living_characters
+from .parser import Block
 from .pipeline import gather, resolve_saves
 from .titles import TitleRecord
 
@@ -53,29 +53,6 @@ class HandoffCharacter:
 
     def row(self) -> dict[str, object]:
         return {k: ("" if v is None else v) for k, v in asdict(self).items()}
-
-
-def living_characters(save_path: str, wanted: set[int]) -> dict[int, Block]:
-    """The wanted ids that are in the ``living`` section and not marked dead.
-
-    Both conditions are needed: a character who died on the save's own date can
-    still sit in ``living`` carrying a ``dead_data`` block, and ``play`` would
-    fail on them.
-    """
-    found: dict[int, Block] = {}
-    if not wanted:
-        return found
-    with open_gamestate_text(save_path) as lines:
-        for cid, char in iter_children(PushbackLines(lines), ("living",)):
-            try:
-                cid_int = int(cid)
-            except (TypeError, ValueError):
-                continue
-            if cid_int in wanted and isinstance(char, Block) and char.get("dead_data") is None:
-                found[cid_int] = char
-                if len(found) == len(wanted):
-                    break
-    return found
 
 
 def _year(date: object) -> int | None:

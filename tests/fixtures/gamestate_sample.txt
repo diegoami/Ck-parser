@@ -140,6 +140,11 @@ living={
 			perk="a_perk"
 			perk="b_perk"
 		}
+		landed_data={
+			domain={ 0 2 3 }
+			domain_limit=5
+			realm_capital=1
+		}
 	}
 	201={
 		first_name="Vassal"
