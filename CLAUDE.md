@@ -14,6 +14,7 @@ uv run python -m ck3parser.pipeline saves/<file>.ck3 --title e_germany --dry-run
 uv run python -m ck3parser.pipeline saves --title e_germany --dry-run   # whole run, oldest first
 uv run python -m ck3parser.sections saves/<file>.ck3 --verify           # top-level layout
 uv run python -m ck3parser.handoff saves --title e_germany --out handoff  # portrait harvester list
+uv run python -m ck3wiki.build saves --title e_germany --out site        # the wiki itself
 ```
 
 ## Rules
@@ -31,6 +32,9 @@ uv run python -m ck3parser.handoff saves --title e_germany --out handoff  # port
 - Title liege fields are numeric indices into `landed_titles`, not keys. Resolve
   them through `ck3parser.titles.TitleIndex`.
 - No LLM SDK dependency yet; narrative generation is deferred (PLAN.md Phase 7).
+  The wiki `ck3wiki` builds today is factual, generated straight from save data.
+- Character names in saves are localization keys with diacritics marked by an
+  underscore. Drop the marker, never guess the letter (PLAN.md §8).
 - `diegoami/ck_portrait_generator` is the companion tool. It consumes plain data
   files from here and imports no code; see PLAN.md §7 for what it needs. Read its
   `docs/DECISIONS.md` before assuming anything about portraits.

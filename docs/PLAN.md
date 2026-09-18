@@ -562,3 +562,55 @@ contributes whoever was alive then. Their manifest has to be keyed on
 `(character, save date)` for the same reason this project's graph is.
 
 They stay decoupled: plain data files both ways, no imported code.
+
+---
+
+## 8. The wiki itself
+
+Everything up to here prepares data. `ck3wiki` is the first part that produces
+the deliverable:
+
+```
+python -m ck3wiki.build saves --title e_germany --out site
+```
+
+It reads every snapshot of a run, merges them the way the graph loader does,
+and writes a static site: an index, a page per title with its succession table
+and its vassals per snapshot, and a page per character with their reigns.
+
+**It is a factual wiki, not a narrative one.** Every page is generated from the
+save data directly. Phase 7's LLM-written prose is still gated on choosing a
+small local model, and nothing here depends on that choice: the prose, when it
+arrives, has a page to live on.
+
+**Why it is built from saves rather than from Neo4j.** Both derive from the same
+parsed data, and reading saves directly keeps the site buildable by anyone with
+the save files and by CI, with no database to stand up. The graph remains the
+place for queries the site does not answer.
+
+Measured on the three real saves for `e_germany`: **1 021 pages** covering 68
+titles, 952 characters and 1 559 reigns, in 1 m 42 s, 4.4 MB on disk.
+
+### What building it found
+
+Rendering the pages and looking at them exposed a merge bug that the graph's own
+Cypher had right and the model did not. When two snapshots both see a reign
+still open, the **later** snapshot has the better end date, because an open reign
+runs to whenever we last looked. Keeping the first one froze the current ruler's
+reign at an old save's date: Ludwig's reign read "1360.6.8 – 1361.1.17" on a
+wiki whose newest save is 1364.
+
+### Names are an approximation
+
+A save stores `first_name` as a localization *key*, not display text, and marks
+diacritics with an underscore: `FranC_ois` is François, `O_zgul` is Özgül,
+`Is_mail` is Ismāʿīl. Decoding that properly needs the game's localization
+files, which this project deliberately does not read (§2). `clean_name` drops
+the marker and never invents a letter, so the wiki shows "Francois" rather than
+a wrong guess. 2 070 of 20 000 sampled living characters carry one.
+
+### Portraits
+
+`--portraits DIR` folds in images harvested by the companion project, matched by
+the `<id>_<date>.png` names it writes (§7). Without it the pages simply have no
+portrait, so the two projects can progress independently.

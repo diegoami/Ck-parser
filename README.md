@@ -27,6 +27,10 @@ src/ck3parser/
 src/ck3graph/
   loader.py       Neo4j writes (idempotent MERGEs), holder-interval builder
   schema.cypher   unique constraints per node type
+src/ck3wiki/
+  model.py        one run's history, merged from all its snapshots
+  render.py       static HTML
+  build.py        `python -m ck3wiki.build` — the wiki itself
 tests/            pytest suite over a small hand-written gamestate fixture
 docs/PLAN.md      the plan
 ```
@@ -105,6 +109,18 @@ code is 0 when they agree and 1 when they do not. `--no-vassals` loads the
 title alone, `--no-check` skips the comparison, and `--run <id>` picks one run
 when a directory holds several. Drop `--dry-run` to write to Neo4j using the
 `.env` settings.
+
+Build the wiki, which is what all of this is for:
+
+```
+uv run python -m ck3wiki.build saves --title e_germany --out site
+```
+
+That writes a static site: an index, a page per title with its succession table,
+and a page per character with their reigns, merged across every snapshot of the
+run so it includes history the newest save has pruned. Open `site/index.html`,
+or let the `Wiki` workflow publish it to GitHub Pages. Pass `--portraits DIR` to
+fold in images harvested by the companion project.
 
 Write the character list for the companion portrait harvester, one file per
 snapshot of the run:

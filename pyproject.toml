@@ -18,7 +18,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ck3parser", "src/ck3graph"]
+packages = ["src/ck3parser", "src/ck3graph", "src/ck3wiki"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
