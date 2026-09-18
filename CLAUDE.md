@@ -7,7 +7,7 @@ Read `docs/HANDOVER.md` first (state of the project, next tasks), then
 
 ```
 uv sync --group dev              # install (the SessionStart hook does this on the web)
-uv run pytest -q                 # 133 tests, < 1 s, fixture only
+uv run pytest -q                 # 155 tests, < 1 s, fixture only
 scripts/fetch_saves.sh           # three real saves (~73 MB each) into ./saves, git-ignored
 uv run python -m ck3parser.runs verify saves --json saves/runs.json
 uv run python -m ck3parser.pipeline saves/<file>.ck3 --title e_germany --dry-run
@@ -16,6 +16,8 @@ uv run python -m ck3parser.sections saves/<file>.ck3 --verify           # top-le
 uv run python -m ck3parser.handoff saves --title e_germany --out handoff  # portrait harvester list
 uv run python -m ck3wiki.build saves --out site                          # the wikis themselves
 uv run python -m ck3wiki.build saves --out site --portraits harvested    # ... with images folded in
+uv run python -m ck3wiki.build saves --out site --no-family              # ... fast: skips the full character pass
+uv run python -m ck3wiki.build saves --out site --no-kin                 # ... title-holders only, no direct line
 ```
 
 ## Rules
