@@ -42,6 +42,12 @@ so a fresh session (any model) can continue without the conversation history.
   derives tiers including dynamic `x_` titles, and answers
   `immediate_vassals()` and `liege_chain()`. `normalize_history` turns a raw
   history block into `(date, holder, reason)` tuples.
+- **Hand-off** (`handoff.py`): writes the portrait harvester's character list,
+  one file per snapshot, via
+  `python -m ck3parser.handoff SAVES --title KEY --out DIR [--ids-only]`.
+  Selection is the lineage's ever-holders narrowed to those alive at that
+  snapshot's date, which needs both the `living` section **and** the absence of
+  `dead_data`. See PLAN.md §7 for the contract and the measured numbers.
 - **Sections** (`sections.py`): `section_index` reports where each top-level
   key of a gamestate starts and ends (4.8 s on a 280 MB save), `verify_parse`
   tokenizes the whole file and checks the braces balance, and
@@ -75,39 +81,32 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 | `pipeline saves/ --title e_germany` into a live Neo4j | 81 titles, 952 characters, 1 559 tenures, 132 vassal edges, ~1 m 54 s |
 | `sections SAVE` | 54 distinct top-level keys, 14 M lines, 4.8 s |
 | `sections SAVE --verify` | ~41 M tokens, balanced, max depth 7, ~38 s |
+| `handoff saves --title e_germany` | 26 / 2 / 25 harvestable per snapshot, 48 distinct across the run, ~2 m |
 
 ## What is not done, in the order I would do it
 
-The first two come from the companion project's decisions (PLAN.md §7) and are
-now the highest-value work, because the other tool is blocked on them.
-
-1. **Emit the character-id hand-off for the portrait harvester.** The companion
-   consumes "a plain character-id list and nothing more"; deciding *which*
-   characters are interesting and the file's shape are explicitly this
-   project's job. Constraints that fall out of their design: only **living**
-   characters can be harvested, so a list is scoped to one save's date, and
-   their manifest keys on `(character, save date)`, so emit one list per
-   snapshot rather than a union. The graph already knows who was alive in each
-   snapshot. Start by deciding what "interesting" means: title holders in the
-   lineage is the obvious v1, matching the wiki's own v1 scope.
-2. **Parse coat-of-arms definitions.** Their roadmap wants dynasty and title
-   arms composed offline from save data plus install textures, and says
-   extracting them is this project's job. `coat_of_arms` is 11% of a save
-   (1 541 870 lines) and titles already carry `coat_of_arms_id`, which the
-   title parser currently drops. `meta_data` also holds the player's own
-   `meta_coat_of_arms` and `meta_house_coat_of_arms` in readable form.
-3. **Character lookup speed.** A single-snapshot lineage load takes ~38 s,
-   nearly all of it three full passes over the character sections, so a
-   three-snapshot run takes ~1 m 54 s. The section index now gives line
-   ranges, so seeking to a section is cheap; what is still missing is an
-   id -> offset index within the character sections.
-4. **Culture and faith names.** Characters carry numeric `culture` / `faith`
+1. **Parse coat-of-arms definitions.** The companion's roadmap wants dynasty
+   and title arms composed offline from save data plus install textures, and
+   says extracting them is this project's job (PLAN.md §7). `coat_of_arms` is
+   11% of a save (1 541 870 lines) and titles already carry `coat_of_arms_id`,
+   which the title parser currently drops. `meta_data` also holds the player's
+   own `meta_coat_of_arms` and `meta_house_coat_of_arms` in readable form,
+   which is the cheapest place to start and shows the shape.
+2. **Character lookup speed.** A lineage load takes ~38 s per snapshot, nearly
+   all of it full passes over the character sections; the hand-off adds another
+   pass over `living`. The section index now gives line ranges, so what is
+   missing is an id -> offset index within the character sections.
+3. **Culture and faith names.** Characters carry numeric `culture` / `faith`
    ids; resolve them through `culture_manager` (122 126 lines) and `religion`.
-   Names also carry CK3 casing markup (`A_sa`, `GilbE_rt`) that nothing cleans
-   up yet. Culture matters to the companion too: it is their proxy for
-   ethnicity.
-5. **Dynasties and houses.** `House` nodes are bare ids; the `dynasties`
-   section (9.3% of a save) is never parsed.
+   The hand-off deliberately omits `culture` until this is done. Names also
+   carry CK3 casing markup (`A_sa`, `GilbE_rt`) that nothing cleans up yet.
+4. **Dynasties and houses.** `House` nodes are bare ids and the `dynasties`
+   section (9.3% of a save) is never parsed, which is also why the hand-off
+   emits `dynasty_house` rather than the `dynasty_id` the companion's optional
+   column means.
+5. **Widen what counts as "interesting".** v1 is the lineage's ever-holders.
+   Spouses, heirs and claimants are all in the graph's reach and none are
+   included yet.
 6. **Deeper lineages.** `immediate_vassals` is one level by design. A whole
    realm needs a recursive walk with a depth limit, and a decision about
    whether to store `VASSAL_OF` for every level or only the direct one.
@@ -162,6 +161,12 @@ now the highest-value work, because the other tool is blocked on them.
   855 with one holder between). That is the save's granularity, left as stated.
   `MATCH ()-[h:HELD_BY]->(c) WHERE c.death IS NOT NULL AND h.to > c.death`
   finds them.
+- A character can sit in the `living` section and still carry `dead_data`, if
+  they died on the save's own date. `handoff.living_characters` requires both
+  signals; anything else deciding who is alive should too.
+- The harvestable population swings hard between snapshots of one run (26, then
+  2, then 25 for the same lineage), because a ruler who has just inherited
+  holds everything directly. A small list is not evidence of a bug.
 - The top-level key set is not fixed even within one run: the 1361 save has a
   `player_event` section the other two lack. Never assume a section exists.
 - Per-character DNA is stored **packed** (87 727 `dna="…"` fields); readable
@@ -191,6 +196,9 @@ uv run pytest -q                                   # must stay green
 scripts/fetch_saves.sh                             # once
 uv run python -m ck3parser.runs verify saves       # one run, 19/20/20, exit 0
 uv run python -m ck3parser.sections saves/<file>.ck3 --verify   # balanced, 54 keys
+
+uv run python -m ck3parser.handoff saves --title e_germany --out handoff
+# 26 / 2 / 25 harvestable per snapshot, 48 distinct characters
 
 uv run python -m ck3parser.pipeline saves --title e_germany --dry-run 2>&1 >/dev/null
 # 3 snapshots oldest first, 37/19/51 vassals, 0 missing characters, exit 0

@@ -13,6 +13,7 @@ uv run python -m ck3parser.runs verify saves --json saves/runs.json
 uv run python -m ck3parser.pipeline saves/<file>.ck3 --title e_germany --dry-run
 uv run python -m ck3parser.pipeline saves --title e_germany --dry-run   # whole run, oldest first
 uv run python -m ck3parser.sections saves/<file>.ck3 --verify           # top-level layout
+uv run python -m ck3parser.handoff saves --title e_germany --out handoff  # portrait harvester list
 ```
 
 ## Rules
@@ -33,6 +34,10 @@ uv run python -m ck3parser.sections saves/<file>.ck3 --verify           # top-le
 - `diegoami/ck_portrait_generator` is the companion tool. It consumes plain data
   files from here and imports no code; see PLAN.md §7 for what it needs. Read its
   `docs/DECISIONS.md` before assuming anything about portraits.
+- Never write character names into the hand-off: the companion drops them on
+  principle. Only emit fields this project can resolve correctly.
+- A character is harvestable only if they are in `living` AND have no
+  `dead_data`; someone who died on the save's date satisfies only the first.
 - A save's top-level key set varies between saves of one run. Never assume a
   section exists.
 - Facts labelled "verified" in PLAN.md were checked on three real saves. Anything

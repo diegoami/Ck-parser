@@ -511,9 +511,45 @@ and nothing more."* So:
 
 | They need | Constraint | Status here |
 |---|---|---|
-| A character-id list per save | `play <id>` only works on a **living** character, so a list is scoped to whoever was alive at that save's date | not built |
-| Which characters are "interesting" | entirely this project's call | not defined |
+| A character-id list per save | `play <id>` only works on a **living** character, so a list is scoped to whoever was alive at that save's date | **built**, `ck3parser.handoff` |
+| Which characters are "interesting" | entirely this project's call | **defined** for v1, below |
 | Coat-of-arms definitions as data | *"Extracting them is tool 1's job"*; `coat_of_arms` is 11% of a save and titles carry `coat_of_arms_id` | not parsed |
+
+### The hand-off, as built
+
+"Interesting" in v1 is the lineage the wiki is built from: everyone who has ever
+held the target title or one of its immediate vassals, narrowed to those alive
+at that snapshot's date. `python -m ck3parser.handoff SAVES --title KEY --out DIR`
+writes one CSV per snapshot plus a `handoff.json` manifest, or bare id lists
+with `--ids-only`. The format is what their loader already reads: only
+`character_id` is required, and unknown columns land in its `extra`.
+
+Liveness needs **both** signals, not one: a character who died on the save's own
+date can still sit in the `living` section carrying a `dead_data` block, and
+`play` would fail on them.
+
+Measured on the three real saves for `e_germany`:
+
+| Snapshot | Titles in lineage | Distinct current holders | Ever-holders | Harvestable |
+|---|---|---|---|---|
+| 1358.9.13 | 38 | — | 490 | 26 |
+| 1361.1.17 | 20 | **1** | 174 | **2** |
+| 1364.3.10 | 52 | 16 | 666 | 25 |
+
+The 1361 dip is real and worth understanding: right after the 1360 succession
+Ludwig held all twenty lineage titles **directly**, so the lineage had exactly
+one current holder. Every current holder is alive in every snapshot, which is
+the sanity check that the liveness rule is not silently dropping people.
+
+Across the run that is **48 distinct characters in 53 rows**, and 5 of them
+appear in more than one snapshot. Those 5 are the ones who get a portrait at
+several ages, which is the feature their roadmap item 2 is about.
+
+Names are never written. Their loader drops `name` on principle, and `culture`
+is omitted too, because in the save it is a numeric id this project cannot yet
+resolve and emitting the raw number under that name would be wrong. `dynasty_house`
+is named for what it actually is, a house id, not the dynasty id their optional
+`dynasty_id` column means.
 
 **What this project does not owe them.** DNA, in either form. Their D6 retired
 DNA-driven rendering, so the packed `dna=` fields (§5) are not part of the

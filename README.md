@@ -21,6 +21,7 @@ src/ck3parser/
   runs.py         group saves into runs, order and verify them; CLI + runs.json
   titles.py       title records, liege/vassal structure, history normalisation
   sections.py     top-level layout of a gamestate, and a whole-file parse check
+  handoff.py      the character list the portrait harvester consumes
   consistency.py  tier-3 checks between two snapshots of one run
   pipeline.py     load a lineage from one save or from a whole run
 src/ck3graph/
@@ -104,6 +105,17 @@ code is 0 when they agree and 1 when they do not. `--no-vassals` loads the
 title alone, `--no-check` skips the comparison, and `--run <id>` picks one run
 when a directory holds several. Drop `--dry-run` to write to Neo4j using the
 `.env` settings.
+
+Write the character list for the companion portrait harvester, one file per
+snapshot of the run:
+
+```
+uv run python -m ck3parser.handoff saves --title k_papal_state --out handoff
+```
+
+Each file lists the characters of that lineage who were **alive** at that
+snapshot's date, which is what the harvester can switch to in-game. `--ids-only`
+writes bare ids instead. See [`docs/PLAN.md`](docs/PLAN.md) §7 for the contract.
 
 See what a save contains, and check the parser handles all of it:
 
