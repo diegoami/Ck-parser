@@ -469,7 +469,6 @@ def test_vassalage_never_claims_a_date_the_save_does_not_give(tmp_path):
 def test_family_reaches_the_character_pages(tmp_path):
     early, _ = two_snapshots(tmp_path)
     wiki = build_wiki(views(early), "k_testland")
-    child = wiki.characters[203] if 203 in wiki.characters else None
     parent = wiki.characters[200]
     assert parent.children == [203, 204] and parent.spouses == [202]
     assert parent.has_family
@@ -478,15 +477,50 @@ def test_family_reaches_the_character_pages(tmp_path):
     write_site(wiki, out)
     page_html = (out / "characters" / "200.html").read_text()
     assert "<h2>Family</h2>" in page_html and "Children" in page_html
-    # 202, 203 and 204 hold none of the lineage's titles, so they have no page;
-    # they are still named rather than shown as bare ids
-    assert "Spouse" in page_html and 'characters/202.html' not in page_html
-    assert child is None
+    assert "Spouse" in page_html
 
 
-def test_a_relative_without_a_page_is_named_not_numbered(tmp_path):
+def test_the_direct_line_is_promoted_to_pages_of_its_own(tmp_path):
+    # holding a title is what puts the others in; these are here by blood or
+    # marriage. 202 is a spouse, 203 and 204 are children, and none of them
+    # hold anything in this lineage.
     early, _ = two_snapshots(tmp_path)
     wiki = build_wiki(views(early), "k_testland")
+    for cid in (202, 203, 204):
+        assert cid in wiki.characters, cid
+    assert wiki.characters[203].parents == [200, 202]
+    assert wiki.characters[203].siblings == [204]
+
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    assert (out / "characters" / "202.html").is_file()
+    assert '../characters/202.html' in (out / "characters" / "200.html").read_text()
+
+
+def test_a_sibling_of_nobody_in_the_line_stays_page_less(tmp_path):
+    # siblings are named but not promoted: for Germania that would be 689 more
+    # pages, mostly dead ends
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland")
+    from ck3wiki.model import direct_line
+
+    assert 204 not in direct_line(wiki.characters[203])  # a sibling, not the line
+    assert 200 in direct_line(wiki.characters[203]) and 202 in direct_line(wiki.characters[203])
+
+
+def test_a_promoted_characters_house_is_resolved_too(tmp_path):
+    # houses used to be read before the promotion, so everyone it brought in
+    # showed a bare house id tagged "not in this wiki"
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland")
+    for record in wiki.characters.values():
+        if record.house is not None:
+            assert record.house in wiki.houses, record.id
+
+
+def test_kin_can_be_left_out_and_are_then_only_named(tmp_path):
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland", with_kin=False)
     assert 202 not in wiki.characters  # holds no title in this lineage
     assert wiki.relatives[202].name == "Spouse" and wiki.relatives[202].birth == "1062.2.2"
     assert wiki.named(202) == "Spouse"

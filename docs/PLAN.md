@@ -852,12 +852,43 @@ A marriage that ended appears under `spouse` in the older snapshot and
 `former_spouses` in the newer one, so the union must subtract: "former" is the
 later word on it, and listing the person under both names them twice.
 
-### Family reaches outside the lineage
+### Who gets a page
 
-The 1364 lineage's 666 characters are related to 3 235 people, of whom **2 784
-hold none of its titles** and so have no page. They are fetched once, from the
-newest save that still has them, and only far enough to be named. A name that is
-not a link is the honest rendering of someone the wiki knows of but not about.
+Holding a title is what put the ever-holders in. The **direct line** — parents,
+spouses, former spouses and children — is in by blood or marriage, and gets the
+same page and the same portrait rule. Siblings do not: they are named wherever
+they appear, and promoting them would buy 689 more pages for the Germania
+chronicle that are mostly dead ends.
+
+Measured on the Germania chronicle, across its three saves:
+
+| | pages |
+|---|---|
+| ever-holders alone | 952 |
+| **+ the direct line** | **5 550** |
+| + siblings as well | 6 251 |
+
+The portrait queue moves with it, but only for the living: 53 → **1 389**,
+because a ruler's spouse and children are usually alive when the ruler is,
+while the ever-holders are mostly long dead. Every one of those is capturable,
+which is the difference from the 1 330 the wiki asked for before liveness was
+enforced.
+
+Anyone the family still reaches who has no page — siblings, and the kin of kin —
+is fetched once, from the newest save that still has them, and only far enough
+to be named. A name that is not a link is the honest rendering of someone the
+wiki knows of but not about.
+
+Promotion happens **before** houses are resolved, because it brings in
+characters whose houses must be looked up too. `--no-kin` turns it off.
+
+### One pass, not two
+
+Promoting needs the promoted characters' own parents and children, which would
+be a second full inversion if the first one were narrowed to what was asked for.
+It is not: `FamilyIndex` keeps the whole map, 201 498 children and 164 612
+parents, for about 80 MB. Their spouses come from the records fetched to promote
+them, which are needed anyway.
 
 ### The cost, and the way out
 

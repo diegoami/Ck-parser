@@ -164,9 +164,12 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
    had no push access to that repository. Nothing here is blocked on it — the
    wiki already links every image by the derived name — but the companion
    cannot find its work queue until it reads `portraits.json`.
-7. **Widen what counts as "interesting".** Spouses, heirs and claimants are now
-   *named* on character pages (PLAN.md §10) but still get no page of their own
-   and no portrait, because the lineage is still what decides who is in.
+7. **Widen further, or stop here.** The direct line — parents, spouses,
+   children — now gets pages and portraits (PLAN.md §10), taking Germania from
+   952 to 5 550 character pages and its portrait queue from 53 to 1 389.
+   Siblings are still named-only; promoting them would add 689 pages. Beyond
+   that lies the second hop (a spouse's parents), which needs no new pass but
+   does need a decision about where a chronicle stops.
 8. **Deeper lineages**, then **full-save scale** (PLAN.md Phase 6). Vassalage
    now has bounded stretches (PLAN.md §9), but still only one level down: a
    county under a vassal duchy is not loaded.

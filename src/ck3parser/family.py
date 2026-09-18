@@ -68,7 +68,7 @@ def _ints(values: list) -> list[int]:
     return out
 
 
-def _own(cid: int, family: Block) -> Family:
+def own_family(cid: int, family: Block) -> Family:
     primary = family.get("primary_spouse")
     real_father = family.get("real_father")
     spouses = _ints(family.getall("spouse"))
@@ -82,17 +82,46 @@ def _own(cid: int, family: Block) -> Family:
     )
 
 
-def read_family(save_path: str, wanted: set[int]) -> dict[int, Family]:
-    """The immediate family of each wanted character, in one pass per section.
+@dataclass
+class FamilyIndex:
+    """Who claimed whom, for everyone in one save, plus the wanted ones' records.
+
+    The inversion is kept **whole** rather than narrowed to the characters asked
+    for. That costs about 80 MB on a 280 MB save -- 201 498 children and 164 612
+    parents -- and it is what lets the wiki widen afterwards without paying a
+    second full pass: once someone is promoted to a page of their own, their
+    parents, children and siblings are already here.
+    """
+
+    #: parent -> the children they claim
+    brood: dict[int, list[int]] = field(default_factory=dict)
+    #: child -> whoever claimed them
+    parents: dict[int, list[int]] = field(default_factory=dict)
+    #: the records asked for by name; a promoted character has none until fetched
+    own: dict[int, Family] = field(default_factory=dict)
+
+    def family_of(self, cid: int) -> Family:
+        """One character's family, from their own record where there is one.
+
+        Spouses live only on a character's own record, so someone the index was
+        not asked about has none here. Their parents, children and siblings come
+        from the inversion and are complete.
+        """
+        record = self.own.get(cid) or Family(id=cid, children=list(self.brood.get(cid, [])))
+        record.parents = sorted(self.parents.get(cid, []))
+        kin = {sib for parent in record.parents for sib in self.brood.get(parent, [])}
+        kin.discard(cid)
+        record.siblings = sorted(kin)
+        return record
+
+
+def read_index(save_path: str, wanted: set[int]) -> FamilyIndex:
+    """Invert every child list in one pass per section, keeping the whole map.
 
     The pass cannot stop early: a parent is only found by reading the record
     that claims the child, and that record may be anywhere.
     """
-    found: dict[int, Family] = {cid: Family(id=cid) for cid in wanted}
-    if not wanted:
-        return found
-    #: parent id -> every child they claim, kept only when one of them is wanted
-    brood: dict[int, list[int]] = {}
+    index = FamilyIndex()
     for section in SECTIONS:
         with open_gamestate_text(save_path) as lines:
             for key, char in iter_children(PushbackLines(lines), section):
@@ -105,20 +134,20 @@ def read_family(save_path: str, wanted: set[int]) -> dict[int, Family]:
                     cid = int(key)
                 except (TypeError, ValueError):
                     continue
-                if cid in found:
-                    own = _own(cid, family)
-                    own.parents = found[cid].parents  # anything already inverted
-                    found[cid] = own
+                if cid in wanted:
+                    index.own[cid] = own_family(cid, family)
                 children = _ints(family.getall("child"))
-                if any(kid in found for kid in children):
-                    brood[cid] = children
-                    for kid in children:
-                        if kid in found and cid not in found[kid].parents:
-                            found[kid].parents.append(cid)
+                if not children:
+                    continue
+                index.brood[cid] = children
+                for kid in children:
+                    index.parents.setdefault(kid, []).append(cid)
+    return index
 
-    for cid, record in found.items():
-        record.parents.sort()
-        kin = {sib for parent in record.parents for sib in brood.get(parent, [])}
-        kin.discard(cid)
-        record.siblings = sorted(kin)
-    return found
+
+def read_family(save_path: str, wanted: set[int]) -> dict[int, Family]:
+    """The immediate family of each wanted character, in one pass per section."""
+    if not wanted:
+        return {}
+    index = read_index(save_path, wanted)
+    return {cid: index.family_of(cid) for cid in wanted}

@@ -22,7 +22,7 @@ from pathlib import Path
 from ck3graph.loader import holder_intervals
 from ck3parser.characters import find_characters
 from ck3parser.dynasties import Dynasty, House, arms_id, find_dynasties, find_houses, house_name
-from ck3parser.family import Family, read_family
+from ck3parser.family import Family, own_family, read_index
 from ck3parser.parser import Block, date_key
 from ck3parser.pipeline import SnapshotView
 from ck3parser.portraits import arms_name, portrait_name, save_checksum
@@ -396,7 +396,12 @@ def _merge_title(wiki: Wiki, record: TitleRecord, view: SnapshotView) -> WikiTit
     return title
 
 
-def build_wiki(views: list[SnapshotView], title_key: str, with_family: bool = True) -> Wiki:
+def build_wiki(
+    views: list[SnapshotView],
+    title_key: str,
+    with_family: bool = True,
+    with_kin: bool = True,
+) -> Wiki:
     """Merge snapshots, oldest first, into one picture of the lineage."""
     views = sorted(views, key=lambda v: date_key(v.fp.date))
     wiki = Wiki(run_id=views[0].fp.run_id if views else "", title_key=title_key)
@@ -415,9 +420,11 @@ def build_wiki(views: list[SnapshotView], title_key: str, with_family: bool = Tr
             {"file": Path(view.fp.file).name, "checksum": save_checksum(view.fp.file), "date": view.fp.date}
         )
     _load_vassalage(wiki, views)
-    _load_houses(wiki, views)
     if with_family:
-        _load_family(wiki, views)
+        _load_family(wiki, views, with_kin=with_kin)
+    # after the family, never before it: promoting the direct line brings in
+    # characters of its own, and their houses have to be resolved too
+    _load_houses(wiki, views)
     return wiki
 
 
@@ -437,22 +444,66 @@ def _merge_family(record: WikiCharacter, family: Family) -> None:
     record.real_father = family.real_father or record.real_father
 
 
-def _load_family(wiki: Wiki, views: list[SnapshotView]) -> None:
-    """Read each snapshot's family, then name everyone it reaches.
+def direct_line(record: WikiCharacter) -> set[int]:
+    """Parents, spouses and children: the people a dynastic chronicle is about.
+
+    Siblings are deliberately left out. They are named on the page either way,
+    and giving each one a page of their own buys 689 more for the Germania
+    chronicle that are mostly dead ends (docs/PLAN.md §10).
+    """
+    kin = {*record.parents, *record.spouses, *record.former_spouses, *record.children}
+    if record.real_father is not None:
+        kin.add(record.real_father)
+    return kin
+
+
+def _load_family(wiki: Wiki, views: list[SnapshotView], with_kin: bool = True) -> None:
+    """Read each snapshot's family, promote the direct line, name the rest.
 
     This is the expensive part of a build: parents exist in the save only as
     other people's child lists, so finding them means reading every character
-    record, with no early exit (:mod:`ck3parser.family`). One pass per snapshot.
+    record, with no early exit (:mod:`ck3parser.family`). One pass per snapshot
+    and no more, because the inversion is kept whole: promoting someone to a
+    page afterwards needs no second read.
     """
-    wanted = set(wiki.characters)
-    if not wanted:
+    if not wiki.characters:
+        return
+    indexes = {view.fp.date: read_index(view.fp.file, set(wiki.characters)) for view in views}
+    for view in views:
+        index = indexes[view.fp.date]
+        for cid in list(wiki.characters):
+            _merge_family(wiki.characters[cid], index.family_of(cid))
+
+    if with_kin:
+        _promote(wiki, views, indexes)
+    _name_the_rest(wiki, views)
+
+
+def _promote(wiki: Wiki, views: list[SnapshotView], indexes: dict) -> None:
+    """Give the direct line pages of their own, and portraits where they lived.
+
+    Holding a title is what put the others in; these are here by blood or
+    marriage, so they get the same page and the same portrait rule -- a slot
+    only for the saves they were alive in.
+    """
+    kin: set[int] = set()
+    for record in list(wiki.characters.values()):
+        kin |= direct_line(record)
+    kin -= wiki.characters.keys()
+    if not kin:
         return
     for view in views:
-        for cid, family in read_family(view.fp.file, wanted).items():
-            _merge_family(wiki.characters[cid], family)
+        index = indexes[view.fp.date]
+        for cid, char in find_characters(view.fp.file, kin).items():
+            _merge_character(wiki, cid, char, view.fp.date, view.fp.file)
+            family = char.get("family_data")
+            if isinstance(family, Block):
+                _merge_family(wiki.characters[cid], own_family(cid, family))
+            _merge_family(wiki.characters[cid], index.family_of(cid))
 
-    # everyone the family reaches who has no page: fetched once, from the
-    # newest save that still has them, and only to be named
+
+def _name_the_rest(wiki: Wiki, views: list[SnapshotView]) -> None:
+    """Everyone the family still reaches who has no page: named, nothing more."""
     outside: set[int] = set()
     for record in wiki.characters.values():
         outside.update(
