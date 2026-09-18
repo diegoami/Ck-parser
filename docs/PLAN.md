@@ -268,19 +268,28 @@ So roughly 500 characters a year vanish from the file, and the only source for
 them is an earlier snapshot. Destroyed dynamic titles vanish the same way. Older
 snapshots recover pruned history.
 
-Rules:
+Rules (implemented in `pipeline.run` over a directory of saves):
 
 - Graph gets `(:Run {run_id})` and `(:Snapshot {date, file})-[:OF]->(:Run)` nodes.
 - Load snapshots **oldest to newest**, upserting by id (`MERGE` on
   `Character.id`, `Title.key`, `Dynasty.id`). A later snapshot overwrites scalar
   properties; it never deletes nodes.
 - Every node gets `first_seen` and `last_seen` (snapshot dates) for provenance.
-- `HELD_BY` intervals are rebuilt from the newest snapshot that contains the title;
-  earlier snapshots only add intervals for titles absent later (destroyed titles
-  keep their `history`, so this is rare).
-- Character ids are stable within a run (verified indirectly: the `legacy` chain
-  references ids across five centuries and they resolve in the current save), so
-  merging by id is safe within a run and only within a run.
+- `HELD_BY` merges on `(title, from)`, so the same tenure seen in several
+  snapshots stays one relationship: a tenure still open in an early snapshot
+  (`to` = that snapshot's date, `open`) is closed in place by a later one that
+  records its end.
+- Character ids are stable within a run, and so are title indices: of the 12 904
+  title keys shared by the 1358 and 1364 saves, **all** sit at the same index.
+  Code still resolves by key, because indices carry no meaning across runs.
+- Consecutive snapshots are compared as they load (tier 3, §3.3). Disagreements
+  are reported and set the exit code; they never stop the load, and a record
+  present early and absent later is not a disagreement, since that is pruning.
+
+Known limitation: `VASSAL_OF` records vassalage **as of** a snapshot, not as an
+interval. A title that changed liege between snapshots ends up with an edge to
+each liege, distinguished by `as_of`. Modelling vassalage as intervals the way
+`HELD_BY` does is future work.
 
 ---
 
@@ -349,6 +358,24 @@ Character records also carry `landed_data.domain={ … }`, the list of title
 indices a character holds directly, which is a second route to the same
 structure and is not used yet.
 
+### Loading the whole run (three snapshots, one lineage)
+
+Loading `e_germany` from all three saves oldest first takes 1 m 39 s and writes
+3 snapshots, 2 324 tenures and 208 vassal edges, with **zero** tier-3
+disagreements: every history entry and death date the earlier snapshots record
+survives unchanged into the later ones.
+
+The lineage itself churns across the 1360 succession, which is game history
+rather than a parsing artifact:
+
+| Snapshot | Holder | Immediate vassals |
+|---|---|---|
+| 1358.9.13 | Åsa (33747696) | 37 |
+| 1361.1.17 | Ludwig (50544311) | 19 |
+| 1364.3.10 | Ludwig (50544311) | 51 |
+
+Between 1358 and 1364 the empire kept 21 vassal titles, lost 16 and gained 30.
+
 Still open:
 
 1. Whether newer CK3 versions add a `playthrough_id`; if so, use it as the
@@ -374,10 +401,10 @@ Still open:
    ordering, prefix check, and divergence split. **Done**: `verify` on the three
    real saves reports one clean run in about 11 s.
 5. Phase 3 + 5: one lineage from all snapshots of one run in Neo4j with
-   `Run`/`Snapshot` provenance. **Phase 3 done**: a lineage is now a title plus
-   its immediate de facto vassals, written as `Run`/`Snapshot`/`Title`/
-   `Character`/`HELD_BY`/`VASSAL_OF`, traced with `--dry-run` (the sample's
-   empire: 51 vassals, 1 184 tenures, 100 vassal edges, 666 characters, 33 s).
-   The multi-snapshot merge loop is the remaining part of Phase 5.
+   `Run`/`Snapshot` provenance. **Done** against `--dry-run`: pointing the
+   pipeline at a directory loads every snapshot of its run oldest first, with
+   tier-3 checks between consecutive pairs (three real saves: 2 324 tenures,
+   208 vassal edges, 0 disagreements, 1 m 39 s). Still to do: run it against a
+   live Neo4j, which no session has done yet.
 6. Phase 6 full-save scale; Phase 7 narrative generation once the local LLM is
    chosen.

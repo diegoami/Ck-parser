@@ -11,6 +11,7 @@ uv run pytest -q                 # 30 tests, < 1 s, fixture only
 scripts/fetch_saves.sh           # three real saves (~73 MB each) into ./saves, git-ignored
 uv run python -m ck3parser.runs verify saves --json saves/runs.json
 uv run python -m ck3parser.pipeline saves/<file>.ck3 --title e_germany --dry-run
+uv run python -m ck3parser.pipeline saves --title e_germany --dry-run   # whole run, oldest first
 ```
 
 ## Rules
