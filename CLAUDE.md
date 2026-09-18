@@ -7,11 +7,12 @@ Read `docs/HANDOVER.md` first (state of the project, next tasks), then
 
 ```
 uv sync --group dev              # install (the SessionStart hook does this on the web)
-uv run pytest -q                 # 161 tests, < 1 s, fixture only
+uv run pytest -q                 # 169 tests, < 1 s, fixture only
 scripts/fetch_saves.sh           # three real saves (~73 MB each) into ./saves, git-ignored
 uv run python -m ck3parser.runs verify saves --json saves/runs.json
 uv run python -m ck3parser.pipeline saves/<file>.ck3 --title e_germany --dry-run
 uv run python -m ck3parser.pipeline saves --title e_germany --dry-run   # whole run, oldest first
+uv run python -m ck3parser.pipeline saves --title e_germany --people    # ... plus every character and their family edges
 uv run python -m ck3parser.sections saves/<file>.ck3 --verify           # top-level layout
 uv run python -m ck3parser.handoff saves --title e_germany --out handoff  # portrait harvester list
 uv run python -m ck3wiki.build saves --out site                          # the wikis themselves
@@ -34,6 +35,20 @@ uv run python -m ck3wiki.build saves --out site --no-kin                 # ... t
 - `Block` subclasses `list`. Test for `Block` before `list` in any isinstance chain.
 - Title liege fields are numeric indices into `landed_titles`, not keys. Resolve
   them through `ck3parser.titles.TitleIndex`.
+- The graph writes `PARENT_OF` straight off each record's own child list and
+  never inverts anything: Cypher walks an edge both ways, so the 80 MB
+  inversion `ck3parser.family` needs is pure Python overhead (PLAN.md §12).
+  `REAL_FATHER_OF` stays a separate edge, as `real_father` stays out of
+  `parents`.
+- The population pass filters nobody. `ck3parser.filter` is for pages; a
+  filler character is still somebody's parent, and dropping them cuts the
+  paths the graph exists to walk.
+- Never write character properties with `SET c += $props`. Neo4j *removes* a
+  property a map sets to null, so an older snapshot loaded after a newer one
+  would erase a death date. Merge each property by hand; what can only ever
+  be learnt keeps the first non-null answer.
+- The stretch logic lives in `ck3parser.vassalage`, not in the wiki: the wiki
+  imports `ck3graph.loader`, so the graph cannot import the wiki back.
 - A save has **no vassalage history**: it says who a title's liege *is*, never
   who it has been. A liege change is only ever known to have happened between
   two snapshots, and must be shown as bounds ("between X and Y"), never as a

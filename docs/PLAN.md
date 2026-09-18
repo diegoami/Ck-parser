@@ -306,10 +306,26 @@ range query over history is silently wrong. All 64 876 distinct dates in the
 sample saves are valid calendar dates between year 3 and the 9999 "never"
 sentinel, so the conversion is lossless.
 
-Known limitation: `VASSAL_OF` records vassalage **as of** a snapshot, not as an
-interval. A title that changed liege between snapshots ends up with an edge to
-each liege, distinguished by `as_of`. Modelling vassalage as intervals the way
-`HELD_BY` does is future work.
+`VASSAL_OF` is one edge per **stretch** of snapshots that saw the same liege,
+carrying `first`/`last` (the window it was seen in) and `after`/`before` (the
+snapshots that bound a change on either side). It used to be one edge per save
+keeping only the latest `as_of`, which lost when a link changed; §9 says why a
+stretch is the most a save can honestly support. Merging widens the observation
+window and tightens the ignorance windows, so the result is order independent
+like everything else here. `first` is part of the edge's identity, so a later
+load that sees the same liege *earlier* adds a second, overlapping stretch
+rather than moving the first — the price of a loader that never deletes, and one
+the CLI never pays because it loads a run whole.
+
+Independence is the **absence** of an edge, never an edge to nobody. A title we
+saw answering to no one is told from a title we did not see at all by the node's
+own `first_seen`/`last_seen`, because absence from a save means destroyed or
+pruned and never independence (§3).
+
+De jure and de facto are both written in full, including where they name the
+same liege. Dropping the coinciding rungs would be smaller and would break the
+thing the edges are for: a de jure tree walk needs every rung of its own
+hierarchy, not only the ones that differ from de facto.
 
 ---
 
@@ -1038,3 +1054,90 @@ composed offline from the game's texture files — which is what the companion's
 own roadmap wanted before portraits went the screenshot route — instead of being
 captured one at a time in-game. Portraits still have to be screenshotted; arms
 do not.
+
+---
+
+## 12. What the graph holds, and the one thing it does not need
+
+The graph is a destination in its own right, not a way to make the wiki cheaper.
+The wiki needs no database and §"where the graph is not needed" in
+`docs/HANDOVER.md` says so plainly. What the graph is for is questions nobody
+wrote a function for, composed by a local LM: *how many cousins has X, how
+closely are X and Y related, give me the vassal tree of X as of 1361*. Those are
+variable-length paths, which is the one shape Cypher is genuinely better at than
+Python.
+
+### Parentage needs no inversion here
+
+A save stores parentage **downward only**: `family_data` lists `child` and never
+`father` or `mother` (§10). The wiki therefore inverts every child list, a full
+pass costing about 80 MB, purely so Python can look *up* from a child.
+
+A graph does not need that. `(:Character)-[:PARENT_OF]->(:Character)` is written
+straight off each record's own child list, and Cypher walks the edge in either
+direction:
+
+```cypher
+MATCH (c)<-[:PARENT_OF]-(parent)                     // up, nothing inverted
+MATCH (x)<-[:PARENT_OF*2]-(gp)-[:PARENT_OF*2]->(y)   // cousins, both ways at once
+```
+
+So `ck3graph.people` streams the character sections once and holds one record at
+a time, where `ck3parser.family` has to hold the whole map. This is the clearest
+case in the project of the storage engine removing work rather than adding it.
+
+`PARENT_OF` carries no dates. A tenure and a vassalage link are observations that
+can change between snapshots; who your father was cannot, so there is nothing to
+bracket. `REAL_FATHER_OF` is kept apart from it, exactly as `ck3parser.family`
+keeps `real_father` out of `parents`: the game states a bastard's descent twice
+on purpose, and merging the two would quietly rewrite a lineage.
+
+`SPOUSE_OF` is written from the lower id to the higher and queried undirected,
+because both spouses' records name each other and the pair must not become two
+edges pointing opposite ways. `former` is sticky for the same reason a closed
+tenure stays closed.
+
+### Nobody is filtered out
+
+The lineage load drops filler characters (`ck3parser.filter`) because a page for
+one would be empty. The population pass does not: a filler is still somebody's
+parent, and dropping them cuts the very paths the graph exists to walk — a
+cousin two hops up and two back down usually leaves the lineage on the way.
+
+Measured on the 1364 save, one pass, `python -m ck3parser.pipeline … --people`:
+
+| Written | Rows |
+|---|---|
+| `Character` nodes | 281 916 |
+| `MEMBER_OF` a house | 241 646 |
+| `PARENT_OF` | 389 639 |
+| `SPOUSE_OF` | 471 646 |
+| `REAL_FATHER_OF` | 17 246 |
+
+**Rows are not edges.** Both spouses name each other, so a marriage is written
+twice and `MERGE`s into one edge: 471 646 rows are about 235 800 marriages. The
+parent rows are claims and each is its own edge — 389 639 over the 201 498
+children of §10, most of whom the save gives two parents. One pass takes ~54 s
+per save and holds one record at a time; the rows go out in `UNWIND` batches of
+1 000, so the whole save is about 1 400 statements.
+
+### Houses are named by the same rule the wiki uses
+
+`load_house` calls `ck3parser.dynasties.house_name` and `arms_id`, the same two
+functions the wiki and the hand-off call, and stores the arms **file name** —
+derived from the recipe digest (§11) — never the save's `coat_of_arms_id`, which
+indexes one save and names no picture. A page linking one image while the graph
+names another would be two answers to one question.
+
+### Measured on the Germania run
+
+`python -m ck3parser.pipeline saves --title e_germany --dry-run`, three
+snapshots, ~2 m 22 s:
+
+| | |
+|---|---|
+| vassalage stretches | 183 (117 de facto, 66 de jure) |
+| titles with a de facto stretch | 67 |
+| ... seen under more than one liege | 48 |
+| stretches a later snapshot closed | 50 |
+| houses wanted / resolved | 276 / 276 |

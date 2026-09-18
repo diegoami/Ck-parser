@@ -34,9 +34,15 @@ so a fresh session (any model) can continue without the conversation history.
   monotonic checks; tier-2 `played_character.legacy` prefix check; divergence
   splits the run and adds a warning; `runs.json` manifest with incremental
   rescans; CLI `scan` / `verify`. Exit code 1 when any warning exists.
-- **Graph loader** (`ck3graph/loader.py`): env config, `DryRunSession`,
-  `holder_intervals` (handles `date=holder` and `date={type=...}`),
-  MERGE writers for Run / Snapshot / Title / Character / House / HELD_BY.
+- **Graph loader** (`ck3graph/loader.py`, `ck3graph/people.py`): env config,
+  `DryRunSession`, `holder_intervals` (handles `date=holder` and
+  `date={type=...}`), MERGE writers for Run / Snapshot / Title / Character /
+  House / Dynasty / HELD_BY / MEMBER_OF / OF_DYNASTY / HEADED_BY, vassalage as
+  bounded stretches, and the family edges PARENT_OF / REAL_FATHER_OF /
+  SPOUSE_OF. `--people` adds every character in the save: one streaming pass,
+  ~54 s, 281 916 nodes and 389 639 parent links, written in `UNWIND` batches.
+  The graph needs no inversion — Cypher walks a parent edge both ways
+  (PLAN.md §12).
 - **Titles** (`titles.py`): streams `landed_titles` into a compact
   `TitleIndex` (12 915 records, 107 328 history entries, 1.9 s on the sample),
   resolves the numeric `de_facto_liege` / `de_jure_liege` pointers to keys,
@@ -125,7 +131,8 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 | `runs verify saves` | legacy 19 → 20 → 20, no warnings, ~11 s |
 | `pipeline … --title k_papal_state --dry-run` | 1 vassal, 139 characters, 0 missing |
 | `pipeline … --title e_germany --dry-run` | 51 vassals, 1 184 tenures, 100 vassal edges, 666 characters, ~33 s |
-| `pipeline saves/ --title e_germany --dry-run` | 3 snapshots oldest first, 2 324 tenures, 208 vassal edges, 0 disagreements, ~1 m 39 s |
+| `pipeline saves/ --title e_germany --dry-run` | 3 snapshots oldest first, 2 324 tenures, 183 vassalage stretches, 276 houses, 0 disagreements, ~2 m 22 s |
+| `pipeline … --people` on the 1364 save | 281 916 characters, 389 639 parent links, 471 646 spouse rows, ~54 s |
 | `pipeline saves/ --title e_germany` into a live Neo4j | 81 titles, 952 characters, 1 559 tenures, 132 vassal edges, ~1 m 54 s |
 | `sections SAVE` | 54 distinct top-level keys, 14 M lines, 4.8 s |
 | `sections SAVE --verify` | ~41 M tokens, balanced, max depth 7, ~38 s |
@@ -136,97 +143,16 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 
 ## What is not done, in the order I would do it
 
-1. **The graph is a destination, not a means — and it is currently behind.**
-   `ck3graph` still writes what it wrote before family and vassalage existed:
-   `HELD_BY`, `VASSAL_OF` and the title/character/house nodes.
+**The wiki comes first.** The graph is a milestone and an interesting artifact
+in its own right (PLAN.md §12), but the published chronicle is the deliverable,
+and in a first pass it outranks everything the graph could answer.
 
-   Read the rest of this item with the motivation stated plainly, because it
-   changes what "good" means: **building something real on Neo4j is itself a
-   goal here**, not a way to make some other feature cheaper. Nothing below is a
-   claim that the wiki needs a graph database — it does not, and §"where the
-   graph is not needed" says so. The graph is meant to be the interesting
-   artifact in its own right, paired with a local LM, answering questions the
-   wiki's pages cannot:
-
-   > *How many cousins has X? How much common genes have X and Y? Give me the
-   > vassal tree of X.*
-
-   Those three questions are the **design spec** for the schema. Two need no new
-   parsing at all — only that the graph persists more than the wiki keeps — and
-   all three are the shape Cypher is actually better at than Python: variable
-   length paths.
-
-   ```cypher
-   MATCH (x:Character {id: $id})<-[:PARENT_OF*2]-(gp)-[:PARENT_OF*2]->(y)
-   MATCH (t:Title {key: $key})<-[:VASSAL_OF* {kind: 'de_facto'}]-(v)
-   ```
-
-   A single cousin query is thirty lines of Python; so is a single vassal tree.
-   The argument for Cypher is never one query, it is that an LM can compose a
-   query nobody wrote a function for.
-
-   | Question | What answers it | Status |
-   |---|---|---|
-   | cousins | two hops up the parent map and two back down | the map exists; the wiki throws most of it away |
-   | vassal tree | recursion through de facto liege, as of a snapshot | the tree exists; `lineage()` stops at depth 1 |
-   | common genes | *two different questions* — see below | one is free, one is real work |
-
-   **Cousins.** `ck3parser.family.FamilyIndex` already inverts the **whole**
-   save — 201 498 children and 164 612 parents, about 80 MB — and the wiki then
-   keeps only the direct line. The graph should persist the map itself. Nothing
-   new to read.
-
-   **Vassal tree.** `TitleIndex.vassals` holds the full de facto tree for a save;
-   `lineage()` takes one level because loading every character under it is
-   expensive. A tree is per snapshot by nature, since vassalage is only ever
-   known as of a save (§9), so a query has to name a date or accept bounds.
-
-   **Common genes is ambiguous and the two readings differ enormously:**
-
-   - *Genealogical relatedness* — a kinship coefficient from shared ancestry.
-     Computable from the same parent map as cousins, with no new parsing. This
-     is what a chronicle usually means by "related".
-   - *Actual shared genes* — needs the packed `dna="…"` field decoded, 87 727 of
-     them per save (§5). This project has never touched it. The companion
-     project **has solved that format** and retired it only as a portrait
-     mechanism, so their codec is the place to start rather than the CK3 wiki.
-
-   **Settled: genealogical relatedness is what is meant, not DNA.** The packed
-   `dna=` field stays untouched. PLAN.md §7's "we do not owe the companion DNA"
-   still holds, and nothing in this project needs to decode it.
-
-   ### Where the graph is *not* needed
-
-   Worth stating so nobody later mistakes enthusiasm for necessity. Relatedness,
-   cousins, "vassals who are my kin" and "vassals in my house" are all
-   computable today from `FamilyIndex` plus the wiki model, with no database:
-   they are set intersections and walks over a dict. Some of them arguably
-   belong on a **page** rather than in a query — "vassals who share my house" is
-   a chronicle fact, the difference between a realm held by kin and one held by
-   strangers, and it could be rendered at build time.
-
-   The division that holds up:
-
-   | | Where it belongs |
-   |---|---|
-   | asked constantly, same shape | a section on a page |
-   | asked once, specific | an ad-hoc script over `FamilyIndex` |
-   | asked unpredictably, in words | graph + LM |
-
-   ### What catching up means
-
-   In rough order, since the queries above name their own requirements:
-
-   - `(:Character)-[:PARENT_OF]->(:Character)` from the **whole** inversion, not
-     the wiki's direct-line slice. This is the one that unlocks cousins and
-     relatedness, and the data is already built and thrown away each run.
-   - `SPOUSE_OF`, and `MEMBER_OF` to a `House`, which the wiki has and the graph
-     does not.
-   - Vassalage as bounded stretches (§9) rather than a single `as_of` edge, so a
-     tree query can be asked as of a date.
-2. **Narrative prose.** The wiki is factual; Phase 7's LLM-written text is still
+1. **Narrative prose.** The wiki is factual; Phase 7's LLM-written text is still
    gated on choosing a small local model. Everything it would need now exists:
    succession, vassalage with honest bounds, family, houses and arms.
+2. **Culture and faith names.** Numeric ids resolved through `culture_manager`
+   and `religion`. Both the hand-off and the wiki omit culture until then, and
+   it is the most visible blank left on a character page.
 3. **Character lookup speed, and incremental builds.** A lineage load is ~34 s
    per snapshot and the family inversion another ~37 s, all of it full passes
    over the character sections. The full three-chronicle build takes ~8 minutes
@@ -234,21 +160,53 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
    separable fixes: an id -> offset index within the character sections (the
    section index already gives line ranges), and caching a built chronicle so
    only new saves are read.
-4. **Culture and faith names.** Numeric ids resolved through `culture_manager`
-   and `religion`. Both the hand-off and the wiki omit culture until then.
-5. **Widen further, or stop here.** The direct line — parents, spouses,
+4. **Widen further, or stop here.** The direct line — parents, spouses,
    children — has pages and portraits (PLAN.md §10). Siblings are still
    named-only; promoting them would add 689 pages to Germania. Beyond that lies
    the second hop (a spouse's parents), which needs no new pass but does need a
    decision about where a chronicle stops.
-6. **Deeper lineages**, then **full-save scale** (PLAN.md Phase 6). Vassalage
+5. **Deeper lineages**, then **full-save scale** (PLAN.md Phase 6). Vassalage
    has bounded stretches (§9) but still only one level down: a county under a
    vassal duchy is not loaded.
-7. **Move the saves to ck_wiki's Releases.** They are still on this
+6. **Move the saves to ck_wiki's Releases.** They are still on this
    repository's. `fetch_saves.sh` already reads `SAVES_REPO`, so it is an upload
    plus one environment variable in ck_wiki's workflow — no code change.
+7. **The graph, once the wiki is where it should be.** It now holds what the
+   wiki knows and more (PLAN.md §12), so the remaining work is the *query* side,
+   not the loading side: pairing it with a local LM and seeing whether Cypher it
+   composes actually answers *how many cousins has X*, *how closely are X and Y
+   related*, *the vassal tree of X as of 1361*. Relatedness is genealogical, not
+   DNA: the packed `dna=` field stays untouched.
+
+   Two things to know before touching it. `VASSAL_OF` stretches are identified
+   by where they start, so loading a strict subset of a run's snapshots after
+   the whole run can leave an overlapping stretch — the price of a loader that
+   never deletes, and one the CLI never pays. And the graph has no page-sized
+   notion of who matters: `--people` loads all 281 916 characters on purpose,
+   because a cousin two hops up and two back down usually leaves the lineage on
+   the way.
+
+   Worth restating so nobody later mistakes enthusiasm for necessity:
+   relatedness, cousins, "vassals who are my kin" and "vassals in my house" are
+   all computable today from `FamilyIndex` plus the wiki model, with no
+   database. Some of them arguably belong on a **page** rather than in a query —
+   "vassals who share my house" is a chronicle fact, the difference between a
+   realm held by kin and one held by strangers.
+
+   | | Where it belongs |
+   |---|---|
+   | asked constantly, same shape | a section on a page |
+   | asked once, specific | an ad-hoc script over `FamilyIndex` |
+   | asked unpredictably, in words | graph + LM |
 
 ### Done since this list was last written
+
+- **The graph has caught up with the wiki.** It was writing what it wrote before
+  family and vassalage existed. It now holds `PARENT_OF`, `REAL_FATHER_OF`,
+  `SPOUSE_OF`, named `House` and `Dynasty` nodes with their arms, and vassalage
+  as bounded stretches instead of a single `as_of` edge. Germania: 183 stretches
+  over 67 titles, 48 of them seen under more than one liege, 276 houses
+  resolved. `--people` adds the whole population.
 
 - **Coat-of-arms definitions are parsed** (`ck3parser.arms`), titles included:
   all 12 915 titles of the 1364 save carry a `coat_of_arms_id` the parser used

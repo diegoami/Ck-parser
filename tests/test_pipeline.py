@@ -11,9 +11,11 @@ def test_traced_dry_run_loads_title_with_vassals(tmp_path, capsys):
     assert "5 referenced, 5 found, 5 kept, 0 missing" in err
     # four tenures of the kingdom plus one each for the two vassals
     assert out.count("HELD_BY") == 6
-    # both vassals get a de facto edge; c_test is also de jure under the kingdom,
-    # which is the same liege, so no separate de jure edge is written for it
-    assert out.count("VASSAL_OF") == 2
+    # both vassals get a de facto stretch, and c_test a de jure one as well --
+    # kept even though it names the same liege, because a de jure tree walk
+    # needs every rung of its own hierarchy, not only the rungs that differ
+    assert out.count("VASSAL_OF") == 3
+    assert "'kind': 'de_facto'" in out and "'kind': 'de_jure'" in out
 
 
 def test_no_vassals_flag_narrows_to_one_title(tmp_path, capsys):
@@ -29,8 +31,11 @@ def test_de_jure_edge_written_when_it_differs(tmp_path, capsys):
     assert main([str(p), "--title", "c_test", "--dry-run"]) == 0
     out, _ = capsys.readouterr()
     # c_far is de facto under c_test but de jure under d_empty
-    assert out.count("VASSAL_OF") == 2
+    assert out.count("VASSAL_OF") == 4
     assert "'liege': 'd_empty'" in out and "'kind': 'de_jure'" in out
+    # the subject's own liege is recorded too, not only its vassals': a title is
+    # asked of every snapshot who it answered to, however it got into the load
+    assert "'vassal': 'c_test'" in out
 
 
 def test_missing_title_exits_two(tmp_path, capsys):
