@@ -7,8 +7,15 @@ name: Wiki
 # One chronicle per playthrough: saves are grouped by run, so attaching a save
 # from a different game adds a chronicle without touching this file.
 #
-# Pages does not need enabling by hand: configure-pages is asked to enable it,
-# which it can because this job holds `pages: write`.
+# ONE-TIME SETUP, and it cannot be automated: a repository ADMIN must set
+# Settings -> Pages -> Build and deployment -> Source to "GitHub Actions".
+# Until then this workflow builds the site and then fails at configure-pages
+# with "Get Pages site failed ... Not Found".
+#
+# `enablement: true` on configure-pages was tried and does not work here:
+# creating a Pages site needs admin rights, and GITHUB_TOKEN tops out at write,
+# so it fails with "Resource not accessible by integration" instead. Only a
+# personal access token with admin rights, or the settings page, can do it.
 
 on:
   push:
@@ -53,11 +60,6 @@ jobs:
           uv run python -m ck3wiki.build saves --out site \
             ${{ inputs.title && format('--title {0}', inputs.title) || '' }}
       - uses: actions/configure-pages@v5
-        # Turns Pages on if it is not already, rather than failing with
-        # "Get Pages site failed". The job has `pages: write`, so it can, and
-        # it means publishing needs no setting changed by hand.
-        with:
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

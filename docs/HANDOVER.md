@@ -98,11 +98,16 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 
 ## What is not done, in the order I would do it
 
-1. **Confirm the first deploy landed.** The `Wiki` workflow's first run built
-   all three chronicles (4 412 pages) but could not publish: the Pages API
-   returned Not Found, so `configure-pages` now runs with `enablement: true`
-   and turns Pages on itself. Check that the next run deploys and that
-   https://diegoami.github.io/Ck-parser/ serves the landing page.
+1. **Pages must be enabled by the repository owner, by hand.** The `Wiki`
+   workflow builds correctly in CI: both runs so far produced all three
+   chronicles, 4 412 pages, from the saves on the Releases. Neither could
+   publish. `has_pages` is false on the repository, so no Pages site exists,
+   and it has to be created in Settings → Pages → Source → "GitHub Actions".
+   Automating it does not work and should not be tried again: creating a Pages
+   site needs **admin** rights and `GITHUB_TOKEN` tops out at write, so
+   `enablement: true` fails with "Resource not accessible by integration".
+   Only the settings page or a PAT with admin scope can do it. The repository
+   is public and user-owned, so nothing policy-wise is in the way.
 2. **Narrative prose.** The wiki is factual; Phase 7's LLM-written text is still
    gated on choosing a small local model. The pages are the place it would go.
 3. **Parse coat-of-arms definitions.** The companion's roadmap wants dynasty and
@@ -178,6 +183,9 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 - What separates one wiki from another is the **run**, identified by seed and
   game version, not the title it is about. Three real playthroughs are on the
   Releases and they differ in seed, version and bookmark date.
+- This container cannot reach `diegoami.github.io`; the egress proxy refuses
+  it. The published site therefore cannot be verified from a session here,
+  only the workflow run that produced it.
 - A run's subject title can be a dynamic one: France's is `x_x_5822`, a custom
   empire, so anything assuming a static key prefix will break on it.
 - A character can sit in the `living` section and still carry `dead_data`, if
