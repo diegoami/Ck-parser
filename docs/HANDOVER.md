@@ -76,9 +76,13 @@ so a fresh session (any model) can continue without the conversation history.
   snapshot, order independence and the date types.
 - **Houses and dynasties** (`dynasties.py`): a character's `dynasty_house`
   resolves to a house, its dynasty, and the dynasty's `coat_of_arms_id`, all
-  streamed by id out of sections holding ~50 000 records each. The wiki gives
-  every house a page with its members, motto key and founding date, and the
-  hand-off writes a `houses_<date>.csv` beside each snapshot's characters.
+  streamed by id out of sections holding ~50 000 records each. A house may
+  carry its own `coat_of_arms_id`, and then it wins; `arms_id` and `house_name`
+  are the one rule each, because the wiki and the hand-off disagreeing means
+  the image a page links is not the image the companion is asked for. The wiki
+  gives every house a page with its members, head, motto key and founding date,
+  and the hand-off writes a `houses_<date>.csv` beside each snapshot's
+  characters.
 - **Image names and the manifest** (`portraits.py`, `ck3wiki/manifest.py`):
   both projects derive the same file name from the save's base name and the id,
   so nothing has to be negotiated. Every character page carries a portrait slot
@@ -105,7 +109,7 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 | `pipeline saves/ --title e_germany` into a live Neo4j | 81 titles, 952 characters, 1 559 tenures, 132 vassal edges, ~1 m 54 s |
 | `sections SAVE` | 54 distinct top-level keys, 14 M lines, 4.8 s |
 | `sections SAVE --verify` | ~41 M tokens, balanced, max depth 7, ~38 s |
-| `handoff saves --title e_germany` | 26 / 2 / 25 harvestable per snapshot, 48 distinct across the run, ~2 m |
+| `handoff saves --title e_germany --run <germany>` | 26 / 2 / 25 harvestable per snapshot, 48 distinct across the run, 22 / 1 / 21 houses, all with arms, ~2 m |
 | `ck3wiki.build saves` on all five release saves | 3 chronicles, 5 516 pages (houses included), 5 630 images wanted, ~2 m 51 s |
 | `runs scan` on all five | 3 runs: seeds 576691683 / 633048653 / 1370892195 on versions 1.6.1.2 / 1.4.4 / 1.3.1 |
 
