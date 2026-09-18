@@ -40,7 +40,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .characters import living_characters
-from .dynasties import House, find_dynasties, find_houses
+from .dynasties import Dynasty, House, arms_id, find_dynasties, find_houses, house_name
 from .parser import Block
 from .portraits import arms_name, portrait_name
 from .pipeline import gather, resolve_saves
@@ -52,7 +52,7 @@ COLUMNS = ("character_id", "birth_year", "sex", "dynasty_house", "save_date", "p
 
 #: Columns of the house list written beside each snapshot's characters.
 HOUSE_COLUMNS = (
-    "house_id", "dynasty_id", "coat_of_arms_id", "name", "prefix",
+    "house_id", "dynasty_id", "coat_of_arms_id", "name", "dynasty_name",
     "found_date", "motto", "save_date", "arms_file",
 )
 
@@ -76,7 +76,7 @@ class HandoffHouse:
     dynasty_id: int | None
     coat_of_arms_id: int | None
     name: str
-    prefix: str
+    dynasty_name: str
     found_date: str | None
     motto: str
     save_date: str
@@ -105,13 +105,16 @@ def describe(cid: int, char: Block, save_date: str, save_path: str = "") -> Hand
     )
 
 
-def describe_house(house: House, arms: int | None, save_date: str, save_path: str) -> HandoffHouse:
+def describe_house(
+    house: House, dynasty: Dynasty | None, save_date: str, save_path: str
+) -> HandoffHouse:
+    arms = arms_id(house, dynasty)
     return HandoffHouse(
         house_id=house.id,
         dynasty_id=house.dynasty,
         coat_of_arms_id=arms,
-        name=house.display_name,
-        prefix=house.prefix,
+        name=house_name(house, dynasty),
+        dynasty_name=dynasty.display_name if dynasty else "",
         found_date=house.founded,
         motto=house.motto,
         save_date=save_date,
@@ -130,7 +133,7 @@ def houses_of(save_path: str, characters: list[HandoffCharacter], save_date: str
     for house_id in sorted(houses):
         house = houses[house_id]
         dynasty = dynasties.get(house.dynasty) if house.dynasty is not None else None
-        out.append(describe_house(house, dynasty.coat_of_arms_id if dynasty else None, save_date, save_path))
+        out.append(describe_house(house, dynasty, save_date, save_path))
     return out
 
 

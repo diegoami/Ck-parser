@@ -1,10 +1,12 @@
 from ck3parser.dynasties import (
     Dynasty,
+    arms_id,
     House,
     clean_key,
     find_dynasties,
     find_houses,
     from_house_key,
+    house_name,
 )
 from ck3parser.portraits import CHECKSUM_LENGTH, arms_name, portrait_name, save_checksum
 from helpers import make_save
@@ -73,6 +75,22 @@ def test_a_localized_name_wins_over_the_key():
     assert Dynasty(id=1, name="Test", prefix="of").display_name == "of Test"
     assert House(id=1).display_name == ""
     assert from_house_key("house_von_habsburg") == "Von Habsburg"
+
+
+def test_a_house_shows_its_own_arms_and_falls_back_to_its_dynastys():
+    # one rule, so the image a wiki page links is the image the companion is
+    # asked for; they disagreed once and nobody noticed
+    dynasty = Dynasty(id=50, name="Test", coat_of_arms_id=900)
+    assert arms_id(House(id=1, coat_of_arms_id=901), dynasty) == 901
+    assert arms_id(House(id=1), dynasty) == 900
+    assert arms_id(House(id=1), None) is None
+
+
+def test_a_house_falls_back_to_its_dynastys_name():
+    dynasty = Dynasty(id=50, name="Test")
+    assert house_name(House(id=1, name="Own"), dynasty) == "Own"
+    assert house_name(House(id=1), dynasty) == "Test"
+    assert house_name(House(id=1), None) == "House 1"
 
 
 # ---------------------------------------------------------------- naming

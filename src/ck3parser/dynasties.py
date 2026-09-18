@@ -112,6 +112,24 @@ def _motto(raw: object) -> str:
     return str(raw or "") if isinstance(raw, (str, int)) else ""
 
 
+def arms_id(house: House, dynasty: Dynasty | None) -> int | None:
+    """Which coat of arms a house shows: its own if it has one, else its dynasty's.
+
+    The one place this is decided. The wiki and the hand-off must agree, or the
+    image a page links is not the image the companion is asked for.
+    """
+    if house.coat_of_arms_id is not None:
+        return house.coat_of_arms_id
+    return dynasty.coat_of_arms_id if dynasty else None
+
+
+def house_name(house: House, dynasty: Dynasty | None) -> str:
+    """What to call a house: its own name, else its dynasty's, else its id."""
+    own = house.display_name
+    inherited = dynasty.display_name if dynasty else ""
+    return own or inherited or f"House {house.id}"
+
+
 def find_houses(save_path: str, wanted: set[int]) -> dict[int, House]:
     """The wanted houses, streaming ``dynasties.dynasty_house`` once."""
     found: dict[int, House] = {}

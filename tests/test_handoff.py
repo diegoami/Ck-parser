@@ -6,6 +6,7 @@ from ck3parser.handoff import (
     HOUSE_COLUMNS,
     HandoffCharacter,
     describe,
+    describe_house,
     houses_of,
     interesting_ids,
     living_characters,
@@ -13,6 +14,7 @@ from ck3parser.handoff import (
     select,
     slug,
 )
+from ck3parser.dynasties import find_dynasties, find_houses
 from ck3parser.portraits import arms_name, portrait_name
 from ck3parser.parser import parse_text
 from ck3parser.titles import build_index
@@ -82,6 +84,17 @@ def test_houses_are_handed_off_with_their_arms(tmp_path):
     assert house.name == "of Test" and house.found_date == "1040.3.2"
     assert house.motto == "motto_x_under_y_king"
     assert house.arms_file == arms_name(save, 900)
+    assert house.dynasty_name == "Test"
+
+
+def test_a_handed_off_house_uses_its_own_arms_when_it_has_them(tmp_path):
+    # house 502's own 901 beats dynasty 50's 900, exactly as the wiki page does
+    save = str(make_save(tmp_path / "a.ck3"))
+    house = find_houses(save, {502})[502]
+    described = describe_house(house, find_dynasties(save, {50})[50], "1100.6.1", save)
+    assert described.coat_of_arms_id == 901
+    assert described.arms_file == arms_name(save, 901)
+    assert described.name == "Munso"
 
 
 def test_slug_makes_a_filename_safe_date():

@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ck3graph.loader import holder_intervals
-from ck3parser.dynasties import Dynasty, House, find_dynasties, find_houses
+from ck3parser.dynasties import Dynasty, House, arms_id, find_dynasties, find_houses, house_name
 from ck3parser.parser import Block, date_key
 from ck3parser.pipeline import SnapshotView
 from ck3parser.portraits import arms_name, portrait_name, save_checksum
@@ -144,9 +144,7 @@ class WikiHouse:
 
     @property
     def name(self) -> str:
-        own = self.house.display_name
-        inherited = self.dynasty.display_name if self.dynasty else ""
-        return own or inherited or f"House {self.house.id}"
+        return house_name(self.house, self.dynasty)
 
     @property
     def head(self) -> int | None:
@@ -325,11 +323,7 @@ def _load_houses(wiki: Wiki, views: list[SnapshotView]) -> None:
         )
         for house_id, house in found.items():
             dynasty = dynasties.get(house.dynasty) if house.dynasty is not None else None
-            # a house's own arms win; only a house without any inherits the
-            # dynasty's, which is what most houses do
-            coat = house.coat_of_arms_id
-            if coat is None and dynasty is not None:
-                coat = dynasty.coat_of_arms_id
+            coat = arms_id(house, dynasty)
             arms = None
             if coat is not None:
                 arms = Arms(
