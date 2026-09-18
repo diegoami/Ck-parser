@@ -17,10 +17,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from ck3graph.loader import holder_intervals
+from ck3parser.dynasties import Dynasty, House, find_dynasties, find_houses
 from ck3parser.parser import Block, date_key
 from ck3parser.pipeline import SnapshotView
+from ck3parser.portraits import arms_name, portrait_name, save_checksum
 from ck3parser.titles import TitleRecord
 
 _DIACRITIC = re.compile(r"([A-Za-z])_")
@@ -51,6 +54,48 @@ class Tenure:
 
 
 @dataclass
+class Image:
+    """One image the companion project is expected to harvest.
+
+    The wiki links it whether or not it exists yet: `file` is a name both
+    projects derive from the save's name (:mod:`ck3parser.portraits`), never a
+    path, so neither side has to be told where the other put anything.
+    """
+
+    file: str
+    save: str  #: the save it must be captured from, by base name
+    checksum: str
+
+    @property
+    def subject(self) -> str:
+        return ""
+
+
+@dataclass
+class Portrait(Image):
+    """A character's portrait as of one save. Three saves, three portraits."""
+
+    character: int = 0
+    save_date: str = ""
+
+    @property
+    def subject(self) -> str:
+        return f"character {self.character}"
+
+
+@dataclass
+class Arms(Image):
+    """A house's coat of arms, numbered as the save it was read from numbers it."""
+
+    coat_of_arms_id: int = 0
+    house: int = 0
+
+    @property
+    def subject(self) -> str:
+        return f"house {self.house}"
+
+
+@dataclass
 class WikiCharacter:
     id: int
     name: str = ""
@@ -60,6 +105,7 @@ class WikiCharacter:
     female: bool = False
     house: int | None = None
     seen: list[str] = field(default_factory=list)  #: snapshot dates this record came from
+    portraits: list[Portrait] = field(default_factory=list)
 
     @property
     def alive_at_last_sight(self) -> bool:
@@ -93,12 +139,67 @@ class WikiTitle:
 
 
 @dataclass
+class WikiHouse:
+    """A house as the wiki shows it: its dynasty, and its arms to be harvested.
+
+    A house can have no name of its own — 4 809 of the 1364 save's do not — and
+    then the dynasty's name is the one to show.
+    """
+
+    house: House
+    dynasty: Dynasty | None = None
+    arms: Arms | None = None
+
+    @property
+    def id(self) -> int:
+        return self.house.id
+
+    @property
+    def name(self) -> str:
+        own = self.house.display_name
+        inherited = self.dynasty.display_name if self.dynasty else ""
+        return own or inherited or f"House {self.house.id}"
+
+    @property
+    def head(self) -> int | None:
+        """Its own head if it has one, else the dynasty's."""
+        if self.house.head is not None:
+            return self.house.head
+        return self.dynasty.head if self.dynasty else None
+
+
+@dataclass
 class Wiki:
     run_id: str
     title_key: str
     snapshots: list[str] = field(default_factory=list)
     titles: dict[str, WikiTitle] = field(default_factory=dict)
     characters: dict[int, WikiCharacter] = field(default_factory=dict)
+    houses: dict[int, WikiHouse] = field(default_factory=dict)
+    saves: list[dict] = field(default_factory=list)  #: {file, checksum, date} per snapshot
+
+    def members_of(self, house_id: int) -> list[WikiCharacter]:
+        """The house's members, eldest first. Dates sort as dates, not as text."""
+        return sorted(
+            (c for c in self.characters.values() if c.house == house_id),
+            key=lambda c: (date_key(c.birth) if c.birth else (0, 0, 0), c.id),
+        )
+
+    @property
+    def wanted_portraits(self) -> list[Portrait]:
+        """Every portrait the wiki links, in character then save order."""
+        return [p for c in sorted(self.characters) for p in self.characters[c].portraits]
+
+    @property
+    def wanted_arms(self) -> list[Arms]:
+        """Every coat of arms the wiki links, in house order."""
+        return [
+            self.houses[h].arms for h in sorted(self.houses) if self.houses[h].arms is not None
+        ]
+
+    def house_of(self, character_id: int) -> WikiHouse | None:
+        character = self.characters.get(character_id)
+        return self.houses.get(character.house) if character and character.house else None
 
     @property
     def root(self) -> WikiTitle | None:
@@ -120,7 +221,7 @@ class Wiki:
         return character.name if character and character.name else f"Character {character_id}"
 
 
-def _merge_character(wiki: Wiki, cid: int, char: Block, date: str) -> None:
+def _merge_character(wiki: Wiki, cid: int, char: Block, date: str, save_file: str = "") -> None:
     dead = char.get("dead_data")
     existing = wiki.characters.get(cid)
     record = existing or WikiCharacter(id=cid)
@@ -135,6 +236,19 @@ def _merge_character(wiki: Wiki, cid: int, char: Block, date: str) -> None:
         record.death_reason = str(reason) if reason else record.death_reason
     if date not in record.seen:
         record.seen.append(date)
+    name = Path(save_file).name
+    if name and not any(p.save == name for p in record.portraits):
+        # one portrait per save the character appears in: the same person at
+        # three dates is three images, which is the point (docs/PLAN.md §7)
+        record.portraits.append(
+            Portrait(
+                file=portrait_name(save_file, cid),
+                save=name,
+                checksum=save_checksum(save_file),
+                character=cid,
+                save_date=date,
+            )
+        )
     wiki.characters[cid] = record
 
 
@@ -195,5 +309,50 @@ def build_wiki(views: list[SnapshotView], title_key: str) -> Wiki:
         root = wiki.titles[view.target.key]
         root.vassals[view.fp.date] = [r.key for r in view.vassals]
         for cid, char in view.characters.items():
-            _merge_character(wiki, cid, char, view.fp.date)
+            _merge_character(wiki, cid, char, view.fp.date, view.fp.file)
+        wiki.saves.append(
+            {"file": Path(view.fp.file).name, "checksum": save_checksum(view.fp.file), "date": view.fp.date}
+        )
+    _load_houses(wiki, views)
     return wiki
+
+
+def _load_houses(wiki: Wiki, views: list[SnapshotView]) -> None:
+    """Resolve the houses the wiki's characters belong to, and their dynasties.
+
+    Newest save first, then older ones for whatever it could not resolve: a run
+    prunes, so a house every living member has left may only still be in an old
+    snapshot. Each house records the save it was read from, because a
+    `coat_of_arms_id` is an index inside that save, not a global one.
+    """
+    wanted = {c.house for c in wiki.characters.values() if c.house is not None}
+    if not wanted or not views:
+        return
+    houses: dict[int, WikiHouse] = {}
+    for view in reversed(views):
+        missing = wanted - houses.keys()
+        if not missing:
+            break
+        save_file = view.fp.file
+        found = find_houses(save_file, missing)
+        dynasties = find_dynasties(
+            save_file, {h.dynasty for h in found.values() if h.dynasty is not None}
+        )
+        for house_id, house in found.items():
+            dynasty = dynasties.get(house.dynasty) if house.dynasty is not None else None
+            # a house's own arms win; only a house without any inherits the
+            # dynasty's, which is what most houses do
+            coat = house.coat_of_arms_id
+            if coat is None and dynasty is not None:
+                coat = dynasty.coat_of_arms_id
+            arms = None
+            if coat is not None:
+                arms = Arms(
+                    file=arms_name(save_file, coat),
+                    save=Path(save_file).name,
+                    checksum=save_checksum(save_file),
+                    coat_of_arms_id=coat,
+                    house=house_id,
+                )
+            houses[house_id] = WikiHouse(house=house, dynasty=dynasty, arms=arms)
+    wiki.houses = dict(sorted(houses.items()))

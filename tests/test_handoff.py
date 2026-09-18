@@ -3,14 +3,17 @@ import json
 
 from ck3parser.handoff import (
     COLUMNS,
+    HOUSE_COLUMNS,
     HandoffCharacter,
     describe,
+    houses_of,
     interesting_ids,
     living_characters,
     main,
     select,
     slug,
 )
+from ck3parser.portraits import arms_name, portrait_name
 from ck3parser.parser import parse_text
 from ck3parser.titles import build_index
 from helpers import SUCCESSION_EDITS, fixture_text, make_save
@@ -57,7 +60,28 @@ def test_select_returns_only_the_living_lineage(tmp_path, capsys):
 
 def test_row_blanks_missing_values():
     row = HandoffCharacter(1, None, None, None, "1100.6.1").row()
-    assert row == {"character_id": 1, "birth_year": "", "sex": "", "dynasty_house": "", "save_date": "1100.6.1"}
+    assert row == {
+        "character_id": 1, "birth_year": "", "sex": "", "dynasty_house": "",
+        "save_date": "1100.6.1", "portrait_file": "",
+    }
+
+
+def test_the_handoff_carries_the_portrait_name_the_wiki_links(tmp_path):
+    save = make_save(tmp_path / "a.ck3")
+    chosen = select(str(save), "k_testland")
+    assert chosen[0].portrait_file == portrait_name(str(save), 200)
+
+
+def test_houses_are_handed_off_with_their_arms(tmp_path):
+    save = str(make_save(tmp_path / "a.ck3"))
+    chosen = select(save, "k_testland")
+    houses = houses_of(save, chosen, "1100.6.1")
+    assert [h.house_id for h in houses] == [500]
+    house = houses[0]
+    assert house.dynasty_id == 50 and house.coat_of_arms_id == 900
+    assert house.name == "of Test" and house.found_date == "1040.3.2"
+    assert house.motto == "motto_x_under_y_king"
+    assert house.arms_file == arms_name(save, 900)
 
 
 def test_slug_makes_a_filename_safe_date():
@@ -86,6 +110,17 @@ def test_cli_writes_one_file_per_snapshot(tmp_path):
     assert rows[0]["birth_year"] == "1060" and rows[0]["sex"] == "male"
 
 
+def test_cli_writes_the_houses_beside_the_characters(tmp_path):
+    out = tmp_path / "out"
+    assert main([str(_run_dir(tmp_path)), "--title", "k_testland", "--out", str(out)]) == 0
+    snapshot = json.loads((out / "handoff.json").read_text())["snapshots"][0]
+    assert snapshot["houses_file"] == "houses_1100_6_1.csv" and snapshot["houses"] == 1
+    rows = list(csv.DictReader((out / "houses_1100_6_1.csv").open()))
+    assert list(rows[0]) == list(HOUSE_COLUMNS)
+    assert rows[0]["house_id"] == "500" and rows[0]["coat_of_arms_id"] == "900"
+    assert rows[0]["arms_file"].endswith("_arms_900.png")
+
+
 def test_the_list_changes_with_the_snapshot(tmp_path):
     out = tmp_path / "out"
     main([str(_run_dir(tmp_path)), "--title", "k_testland", "--out", str(out)])
@@ -100,7 +135,9 @@ def test_ids_only_writes_the_bare_form(tmp_path):
     assert json.loads((out / "handoff.json").read_text())["snapshots"][0]["file"].endswith(".txt")
 
 
-def test_no_names_are_ever_written(tmp_path):
+def test_no_character_names_are_ever_written(tmp_path):
+    # a house's name is not a person's name, and the house list keeps it; the
+    # character list still carries no name column at all
     out = tmp_path / "out"
     main([str(_run_dir(tmp_path)), "--title", "k_testland", "--out", str(out)])
     text = (out / "characters_1100_6_1.csv").read_text()

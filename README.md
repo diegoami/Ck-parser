@@ -23,7 +23,9 @@ src/ck3parser/
   runs.py         group saves into runs, order and verify them; CLI + runs.json
   titles.py       title records, liege/vassal structure, history normalisation
   sections.py     top-level layout of a gamestate, and a whole-file parse check
-  handoff.py      the character list the portrait harvester consumes
+  dynasties.py    houses, their dynasties, and the dynasty's coat-of-arms id
+  portraits.py    the image names both this project and the companion derive
+  handoff.py      the character and house lists the portrait harvester consumes
   consistency.py  tier-3 checks between two snapshots of one run
   pipeline.py     load a lineage from one save or from a whole run
 src/ck3graph/
@@ -32,9 +34,11 @@ src/ck3graph/
 src/ck3wiki/
   model.py        one run's history, merged from all its snapshots
   render.py       static HTML
+  manifest.py     portraits.json: every image the wiki wants, and what is missing
   build.py        `python -m ck3wiki.build` — the wikis themselves
 tests/            pytest suite over a small hand-written gamestate fixture
 docs/PLAN.md      the plan
+docs/COMPANION_PROPOSAL.md  the image contract, as filed with the companion
 ```
 
 ## Setup

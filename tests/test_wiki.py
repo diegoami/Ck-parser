@@ -1,10 +1,20 @@
+import json
 import re
 from pathlib import Path
 
 from ck3parser.pipeline import gather
+from ck3parser.portraits import arms_name, portrait_name
 from ck3wiki.build import discover, main, subject_of
+from ck3wiki.manifest import chronicle_manifest
 from ck3wiki.model import Tenure, Wiki, WikiCharacter, build_wiki, clean_name
-from ck3wiki.render import STYLE, e, find_portraits, render_index, render_landing, write_site
+from ck3wiki.render import (
+    STYLE,
+    e,
+    harvested,
+    render_index,
+    render_landing,
+    write_site,
+)
 from helpers import SUCCESSION_EDITS, make_save
 
 
@@ -111,7 +121,7 @@ def test_write_site_produces_a_page_per_entity(tmp_path):
     wiki = build_wiki(views(early, late), "k_testland")
     out = tmp_path / "site"
     pages = write_site(wiki, out)
-    assert pages == 1 + len(wiki.titles) + len(wiki.characters)
+    assert pages == 1 + len(wiki.titles) + len(wiki.characters) + len(wiki.houses)
     assert (out / "index.html").is_file() and (out / "style.css").read_text() == STYLE
     title_page = (out / "titles" / "k_testland.html").read_text()
     assert "Succession" in title_page and "../characters/200.html" in title_page
@@ -120,19 +130,105 @@ def test_write_site_produces_a_page_per_entity(tmp_path):
     assert "880.5.5" in character_page and "../titles/k_testland.html" in character_page
 
 
-def test_portraits_are_linked_only_when_present(tmp_path):
+def test_a_portrait_is_linked_whether_or_not_it_has_been_harvested(tmp_path):
     early, _ = two_snapshots(tmp_path)
     wiki = build_wiki(views(early), "k_testland")
+    wanted = wiki.characters[200].portraits[0].file
+    assert wanted == portrait_name(str(early), 200)  # both projects derive this
+
+    out = tmp_path / "site"
+    write_site(wiki, out)  # nothing harvested yet
+    page_html = (out / "characters" / "200.html").read_text()
+    assert f'src="../portraits/{wanted}"' in page_html  # the link is there first
+    assert "awaited" in page_html
+
     shots = tmp_path / "shots"
     shots.mkdir()
-    (shots / "200_1100_6_1.png").write_bytes(b"\x89PNG")
-    assert find_portraits(shots, [200, 201]) == {200: "200_1100_6_1.png"}
-    assert find_portraits(None, [200]) == {}
-    out = tmp_path / "site"
+    (shots / wanted).write_bytes(b"\x89PNG")
+    (shots / "another-run.png").write_bytes(b"\x89PNG")  # belongs to another chronicle
+    assert harvested(shots) == {wanted, "another-run.png"} and harvested(None) == set()
     write_site(wiki, out, shots)
-    assert "../portraits/200_1100_6_1.png" in (out / "characters" / "200.html").read_text()
-    assert "<img" not in (out / "characters" / "201.html").read_text()
-    assert (out / "portraits" / "200_1100_6_1.png").is_file()
+    page_html = (out / "characters" / "200.html").read_text()
+    assert f'src="../portraits/{wanted}"' in page_html  # unchanged, as promised
+    assert "awaited" not in page_html
+    assert (out / "portraits" / wanted).is_file()
+    # one directory can hold every run's images; a chronicle copies only its own
+    assert not (out / "portraits" / "another-run.png").exists()
+
+
+def test_a_character_gets_one_portrait_per_save_they_appear_in(tmp_path):
+    early, late = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early, late), "k_testland")
+    shots = wiki.characters[200].portraits
+    assert [p.save_date for p in shots] == ["1100.6.1", "1120.1.1"]
+    assert [p.save for p in shots] == ["a_1100.ck3", "b_1120.ck3"]
+    assert len({p.file for p in shots}) == 2  # a different image per save
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    page_html = (out / "characters" / "200.html").read_text()
+    assert "<h2>Portraits</h2>" in page_html
+    for shot in shots:
+        assert shot.file in page_html
+
+
+def test_houses_are_read_from_the_save_and_get_a_page(tmp_path):
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland")
+    house = wiki.houses[500]
+    assert house.name == "of Test"  # the name key, with its prefix key
+    assert house.dynasty is not None and house.dynasty.id == 50
+    # eldest first, and 830.1.1 is before 1060.1.1: dates sort as dates
+    assert [c.id for c in wiki.members_of(500)] == [100, 101, 102, 201, 200]
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    house_page = (out / "houses" / "500.html").read_text()
+    assert "of Test" in house_page and "../characters/200.html" in house_page
+    assert "1040.3.2" in house_page  # founded
+    assert '<a href="../houses/500.html">' in (out / "characters" / "200.html").read_text()
+    assert 'href="houses/500.html"' in (out / "index.html").read_text()
+
+
+def test_a_houses_arms_are_wanted_too_and_scoped_to_the_save(tmp_path):
+    early, _ = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early), "k_testland")
+    arms = wiki.houses[500].arms
+    assert arms is not None and arms.file == arms_name(str(early), 900)
+    assert arms.coat_of_arms_id == 900 and arms.house == 500
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    assert f'src="../portraits/{arms.file}"' in (out / "houses" / "500.html").read_text()
+    entry = next(
+        p for p in chronicle_manifest(wiki, "s", have=set())["portraits"] if p["file"] == arms.file
+    )
+    assert entry["kind"] == "arms" and entry["page"] == "houses/500.html" and not entry["have"]
+
+
+def test_the_manifest_lists_every_wanted_image_and_what_is_missing(tmp_path):
+    early, late = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early, late), "k_testland")
+    one = wiki.characters[200].portraits[0].file
+    manifest = chronicle_manifest(wiki, "7-1-6-1-2", have={one})
+    assert manifest["chronicle"] == "7-1-6-1-2" and manifest["images"] == "portraits"
+    assert [s["file"] for s in manifest["saves"]] == ["a_1100.ck3", "b_1120.ck3"]
+    entry = next(p for p in manifest["portraits"] if p["file"] == one)
+    assert entry["kind"] == "portrait" and entry["character"] == 200 and entry["have"]
+    assert entry["save"] == "a_1100.ck3" and entry["page"] == "characters/200.html"
+    assert manifest["wanted"] == len(manifest["portraits"])
+    assert manifest["missing"] == manifest["wanted"] - 1
+    # names are never handed off; the companion drops them on principle
+    assert "name" not in entry and "Test" not in json.dumps(manifest)
+
+
+def test_the_build_writes_a_manifest_the_companion_can_scan(tmp_path):
+    two_snapshots(tmp_path)
+    out = tmp_path / "site"
+    assert main([str(tmp_path), "--title", "k_testland", "--out", str(out)]) == 0
+    root = json.loads((out / "portraits.json").read_text())
+    assert root["chronicles"][0]["manifest"] == "7-1-6-1-2/portraits.json"
+    assert root["missing"] == root["wanted"] > 0
+    chronicle = json.loads((out / "7-1-6-1-2" / "portraits.json").read_text())
+    assert chronicle["schema"] == root["schema"]
+    assert all(not p["have"] for p in chronicle["portraits"])
 
 
 # ---------------------------------------------------------------- the CLI

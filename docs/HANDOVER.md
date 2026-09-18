@@ -74,6 +74,19 @@ so a fresh session (any model) can continue without the conversation history.
   `CK3_TEST_NEO4J_URI`; it WIPES that database, so point it at a throwaway one.
   It covers schema, idempotent reloads, a tenure closed in place by a later
   snapshot, order independence and the date types.
+- **Houses and dynasties** (`dynasties.py`): a character's `dynasty_house`
+  resolves to a house, its dynasty, and the dynasty's `coat_of_arms_id`, all
+  streamed by id out of sections holding ~50 000 records each. The wiki gives
+  every house a page with its members, motto key and founding date, and the
+  hand-off writes a `houses_<date>.csv` beside each snapshot's characters.
+- **Image names and the manifest** (`portraits.py`, `ck3wiki/manifest.py`):
+  both projects derive the same file name from the save's base name and the id,
+  so nothing has to be negotiated. Every character page carries a portrait slot
+  per save it appears in and every house page a slot for its arms, linked
+  whether or not the file exists; missing ones render as *awaiting harvest*.
+  `portraits.json`, at the site root and in each chronicle, is the
+  machine-readable list of what is still wanted. On the five release saves that is
+  5 630 images across 3 chronicles, none harvested yet.
 - **Pipeline** (`pipeline.py`): a lineage (title plus its immediate de facto
   vassals) end to end. Given a directory it loads every snapshot of that run
   oldest first, checking consecutive pairs as it goes. `--no-vassals`,
@@ -93,7 +106,7 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 | `sections SAVE` | 54 distinct top-level keys, 14 M lines, 4.8 s |
 | `sections SAVE --verify` | ~41 M tokens, balanced, max depth 7, ~38 s |
 | `handoff saves --title e_germany` | 26 / 2 / 25 harvestable per snapshot, 48 distinct across the run, ~2 m |
-| `ck3wiki.build saves` on all five release saves | 3 chronicles, 4 412 pages, ~2 m 34 s |
+| `ck3wiki.build saves` on all five release saves | 3 chronicles, 5 516 pages (houses included), 5 630 images wanted, ~2 m 51 s |
 | `runs scan` on all five | 3 runs: seeds 576691683 / 633048653 / 1370892195 on versions 1.6.1.2 / 1.4.4 / 1.3.1 |
 
 ## What is not done, in the order I would do it
@@ -105,10 +118,12 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
    https://diegoami.github.io/Ck-parser/ serves the landing page.
 2. **Narrative prose.** The wiki is factual; Phase 7's LLM-written text is still
    gated on choosing a small local model. The pages are the place it would go.
-3. **Parse coat-of-arms definitions.** The companion's roadmap wants dynasty and
-   title arms composed offline from save data plus install textures, and says
-   extracting them is this project's job (PLAN.md §7). `coat_of_arms` is 11% of
-   a save and titles carry `coat_of_arms_id`, which the title parser drops.
+3. **Parse coat-of-arms definitions.** Houses now resolve to a dynasty and an
+   arms **id**, and the wiki asks for the image by name, but the `coat_of_arms`
+   section (11% of a save) that actually defines the emblem is still unparsed,
+   and titles carry a `coat_of_arms_id` the title parser drops. Composing arms
+   offline from save data plus install textures is the companion's roadmap item
+   (PLAN.md §7); either they capture them from the window or we extract them.
    Arms would also be the obvious thing to put on a title page.
 4. **Character lookup speed.** A lineage load takes ~34 s per snapshot, nearly
    all of it full passes over the character sections; the wiki and the hand-off
@@ -116,9 +131,11 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
    an id -> offset index within the character sections.
 5. **Culture and faith names.** Numeric ids resolved through `culture_manager`
    and `religion`. Both the hand-off and the wiki omit culture until then.
-6. **Dynasties and houses.** The wiki shows a bare house id because the
-   `dynasties` section (9.3% of a save) is never parsed. House pages are the
-   obvious next page type.
+6. **File the companion proposal.** `docs/COMPANION_PROPOSAL.md` is written and
+   ready to open as a PR against `diegoami/ck_portrait_generator`; this session
+   had no push access to that repository. Nothing here is blocked on it — the
+   wiki already links every image by the derived name — but the companion
+   cannot find its work queue until it reads `portraits.json`.
 7. **Widen what counts as "interesting".** Spouses, heirs and claimants are all
    in reach and none are included.
 8. **Deeper lineages**, **vassalage as intervals**, then **full-save scale**

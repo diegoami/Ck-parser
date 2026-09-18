@@ -9,6 +9,11 @@ name: Wiki
 #
 # Pages does not need enabling by hand: configure-pages is asked to enable it,
 # which it can because this job holds `pages: write`.
+#
+# Portraits and coats of arms come from the same place, attached to a Release by
+# the companion project. They are optional: every image is linked by a derived
+# name whether or not the file exists, so a build with none still publishes and
+# the missing slots say so.
 
 on:
   push:
@@ -16,6 +21,7 @@ on:
     paths:
       - "src/**"
       - "scripts/fetch_saves.sh"
+      - "scripts/fetch_portraits.sh"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
     inputs:
@@ -45,12 +51,19 @@ jobs:
         run: scripts/fetch_saves.sh saves
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      - name: Fetch whatever portraits have been harvested
+        # The companion project attaches the images it has captured to a
+        # Release; anything not there yet simply renders as awaiting harvest,
+        # so this never fails the build.
+        run: scripts/fetch_portraits.sh portraits
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Build the wikis
         # No --title: each run's chronicle is about its own played character's
         # primary title. Saves are grouped into runs automatically, so a save
         # from a new playthrough becomes a new chronicle with no config change.
         run: |
-          uv run python -m ck3wiki.build saves --out site \
+          uv run python -m ck3wiki.build saves --out site --portraits portraits \
             ${{ inputs.title && format('--title {0}', inputs.title) || '' }}
       - uses: actions/configure-pages@v5
         # Turns Pages on if it is not already, rather than failing with

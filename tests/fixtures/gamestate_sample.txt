@@ -110,13 +110,37 @@ dynasties={
 		500={
 			key="house_test"
 			name="dynn_Test"
+			prefix="dynnp_of"
 			dynasty=50
+			found_date=1040.3.2
+			motto={
+				key="motto_x_under_y_king"
+				variables={
+{
+						key="1"
+						value="motto_perseverance"
+					}
+ }
+			}
+		}
+		501={
+			dynasty=50
+			found_date=9999.1.1
+			motto="motto_plain"
+		}
+		502={
+			key="house_munso"
+			dynasty=50
+			coat_of_arms_id=901
+			head_of_house=201
 		}
 	}
 	dynasties={
 		50={
 			key="dynasty_test"
 			name="dynn_Test"
+			coat_of_arms_id=900
+			dynasty_head=200
 		}
 	}
 }
