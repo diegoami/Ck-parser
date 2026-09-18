@@ -38,6 +38,16 @@ uv sync --group dev
 uv run pytest
 ```
 
+The suite runs against a recorded-Cypher stub and needs no database. To exercise
+the loader against a real one (this **wipes** the target database, so point it at
+a throwaway):
+
+```
+CK3_TEST_NEO4J_URI=bolt://localhost:7687 \
+    NEO4J_USER=neo4j NEO4J_PASSWORD="$YOUR_TEST_PASSWORD" \
+    uv run pytest tests/test_integration_neo4j.py
+```
+
 Neo4j Community Edition running locally; copy `.env.example` to `.env` and
 fill in `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` (and optionally
 `NEO4J_DATABASE`). Apply the schema once:

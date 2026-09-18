@@ -9,6 +9,15 @@ from ck3parser.container import write_save
 
 FIXTURE = Path(__file__).with_name("fixtures") / "gamestate_sample.txt"
 
+#: Edits that turn the fixture into the same run a little later, after the
+#: kingdom passed from 200 to 201. A real save moves `holder` and `date` along
+#: with the history entry, and the loader trusts those two over the history.
+SUCCESSION_EDITS = (
+    ("1090.2.1=200 }", "1090.2.1=200 1110.5.5=201 }"),
+    ("holder=200", "holder=201"),
+    ("date=1090.2.1\n\tde_jure_vassals", "date=1110.5.5\n\tde_jure_vassals"),
+)
+
 
 def fixture_text() -> str:
     return FIXTURE.read_text(encoding="utf-8")

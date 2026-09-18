@@ -123,7 +123,9 @@ def load_view(session, view: SnapshotView) -> None:
     """Write one snapshot's lineage. Every statement is a ``MERGE``."""
     load_snapshot(session, view.fp)
     for record in view.titles:
-        intervals = holder_intervals(record.history, end_date=view.fp.date, current_holder=record.holder)
+        intervals = holder_intervals(
+            record.history, end_date=view.fp.date, current_holder=record.holder, holder_since=record.date
+        )
         holders = {iv["holder"] for iv in intervals}
         load_title(
             session,

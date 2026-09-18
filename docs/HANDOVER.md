@@ -47,6 +47,11 @@ so a fresh session (any model) can continue without the conversation history.
   snapshot, and nobody may un-die or change death date. Pure functions over
   parsed data. A record present early and absent later is pruning, not a
   disagreement.
+- **Live Neo4j** is proven, not just reviewed. `tests/test_integration_neo4j.py`
+  runs the real loader against a real database, opt in through
+  `CK3_TEST_NEO4J_URI`; it WIPES that database, so point it at a throwaway one.
+  It covers schema, idempotent reloads, a tenure closed in place by a later
+  snapshot, order independence and the date types.
 - **Pipeline** (`pipeline.py`): a lineage (title plus its immediate de facto
   vassals) end to end. Given a directory it loads every snapshot of that run
   oldest first, checking consecutive pairs as it goes. `--no-vassals`,
@@ -62,27 +67,27 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 | `pipeline … --title k_papal_state --dry-run` | 1 vassal, 139 characters, 0 missing |
 | `pipeline … --title e_germany --dry-run` | 51 vassals, 1 184 tenures, 100 vassal edges, 666 characters, ~33 s |
 | `pipeline saves/ --title e_germany --dry-run` | 3 snapshots oldest first, 2 324 tenures, 208 vassal edges, 0 disagreements, ~1 m 39 s |
+| `pipeline saves/ --title e_germany` into a live Neo4j | 81 titles, 952 characters, 1 559 tenures, 132 vassal edges, ~1 m 54 s |
 
 ## What is not done, in the order I would do it
 
-1. **Run it against a live Neo4j.** Everything so far is `--dry-run`. No
-   session has ever executed the Cypher, so the schema, the `MERGE` semantics
-   and the driver plumbing are reviewed but unproven. Start Neo4j, apply
-   `schema.cypher`, load one lineage from one save, then load the whole run
-   over the top and confirm the second pass refines rather than duplicates.
-2. **Whole-file parser pass and section index** (PLAN.md Phase 2 milestone 3).
+1. **Whole-file parser pass and section index** (PLAN.md Phase 2 milestone 3).
    Stream an entire 280 MB `gamestate` through `iter_top_level(only=set())`
    once and confirm it reaches EOF with balanced braces; record the top-level
    keys and line numbers. Sections still untouched: `provinces`, `dynasties`,
    `religion`, `culture_manager`, `wars`, `coat_of_arms`, and the many
    `triggered_event` blocks (a repeated top-level key).
-3. **Character lookup speed.** A single-snapshot lineage load takes ~33 s,
+2. **Character lookup speed.** A single-snapshot lineage load takes ~38 s,
    nearly all of it three full passes over the character sections, so a
-   three-snapshot run takes ~1 m 39 s. Build an id -> section index once per
+   three-snapshot run takes ~1 m 54 s. Build an id -> section index once per
    save, or parse the character sections a single time and keep only
    referenced ids.
-4. **Culture and faith names.** Characters carry numeric `culture` / `faith`
+3. **Culture and faith names.** Characters carry numeric `culture` / `faith`
    ids; resolve them through `culture_manager` and `religion` (not parsed yet).
+   Names also carry CK3 casing markup (`A_sa`, `GilbE_rt`) that nothing
+   cleans up yet.
+4. **Dynasties and houses.** `House` nodes are bare ids; the `dynasties`
+   section is never parsed.
 5. **Deeper lineages.** `immediate_vassals` is one level by design. A whole
    realm needs a recursive walk with a depth limit, and a decision about
    whether to store `VASSAL_OF` for every level or only the direct one.
@@ -129,6 +134,21 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 - A default argument like `log=sys.stderr` binds at import time and escapes
   pytest's capture. `gather` and `resolve_saves` resolve the stream at call
   time instead.
+- Neo4j cannot `MERGE` a relationship on a null property. A tenure with no
+  start date is dropped rather than written, which is why `holder_intervals`
+  filters its own output.
+- 21 of the 1 559 tenures in the empire load run past their holder's recorded
+  death, because pre-bookmark history is sparse (`c_bithynia` jumps from 752 to
+  855 with one holder between). That is the save's granularity, left as stated.
+  `MATCH ()-[h:HELD_BY]->(c) WHERE c.death IS NOT NULL AND h.to > c.death`
+  finds them.
+- 671 titles have two history entries on the same date, so a title can have two
+  tenures starting the same day, one of them zero length. Anything assuming one
+  tenure per (title, start date) is wrong; the graph keys them by holder too.
+- No local Neo4j install is needed to run the integration suite here: Maven
+  Central is reachable and `org.neo4j.test:neo4j-harness` starts an in-process
+  server with Bolt. Docker has no daemon in this environment and
+  `dist.neo4j.org` is blocked by the proxy.
 - `filter.is_filler` drops unreferenced characters without a `dynasty_house`.
   On the real traces nothing is dropped, because every character the pipeline
   asks for is referenced by construction; the filler rule has only been
@@ -147,6 +167,11 @@ scripts/fetch_saves.sh                             # once
 uv run python -m ck3parser.runs verify saves       # one run, 19/20/20, exit 0
 uv run python -m ck3parser.pipeline saves --title e_germany --dry-run 2>&1 >/dev/null
 # 3 snapshots oldest first, 37/19/51 vassals, 0 missing characters, exit 0
+
+# against a throwaway database (this WIPES it):
+CK3_TEST_NEO4J_URI=bolt://127.0.0.1:7687 \
+    NEO4J_USER=neo4j NEO4J_PASSWORD="$YOUR_TEST_PASSWORD" \
+    uv run pytest tests/test_integration_neo4j.py     # 8 passed
 ```
 
 ## Conventions

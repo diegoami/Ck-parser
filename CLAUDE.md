@@ -20,8 +20,11 @@ uv run python -m ck3parser.pipeline saves --title e_germany --dry-run   # whole 
 - The parser is brace-driven. Never rely on indentation: title entries sit at column 0.
 - Everything that touches the real `gamestate` streams it (`iter_children`,
   `read_top_level`). Do not read a whole section into memory.
-- Neo4j writes are idempotent `MERGE`s; nothing deletes. Tests use `DryRunSession`,
-  never a live database.
+- Neo4j writes are idempotent `MERGE`s and order independent; nothing deletes.
+  The default suite uses `DryRunSession`. `tests/test_integration_neo4j.py` runs
+  against a real database, opt in via `CK3_TEST_NEO4J_URI`, and WIPES it.
+- Game dates go into the graph as real `date` values, never strings: save dates
+  sort wrongly as text (`"99.1.1"` after `"948.3.25"`).
 - `Block` subclasses `list`. Test for `Block` before `list` in any isinstance chain.
 - Title liege fields are numeric indices into `landed_titles`, not keys. Resolve
   them through `ck3parser.titles.TitleIndex`.

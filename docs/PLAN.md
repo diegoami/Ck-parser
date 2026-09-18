@@ -286,6 +286,18 @@ Rules (implemented in `pipeline.run` over a directory of saves):
   are reported and set the exit code; they never stop the load, and a record
   present early and absent later is not a disagreement, since that is pruning.
 
+All of the above is **order independent**, which running it for real proved
+necessary: loading one save and then the whole run over the top corrupted
+`first_seen` until the writers were changed to move it only earlier and
+`last_seen` only later. A tenure one snapshot saw open and another saw closed
+stays closed whichever order they load in.
+
+Game dates are written as real `date` values, never strings. Save dates sort
+wrongly as text, so `"99.1.1"` lands after `"948.3.25"` and every ordering or
+range query over history is silently wrong. All 64 876 distinct dates in the
+sample saves are valid calendar dates between year 3 and the 9999 "never"
+sentinel, so the conversion is lossless.
+
 Known limitation: `VASSAL_OF` records vassalage **as of** a snapshot, not as an
 interval. A title that changed liege between snapshots ends up with an edge to
 each liege, distinguished by `as_of`. Modelling vassalage as intervals the way
@@ -358,6 +370,31 @@ Character records also carry `landed_data.domain={ … }`, the list of title
 indices a character holds directly, which is a second route to the same
 structure and is not used yet.
 
+### Who holds a title, and since when
+
+The title's own `holder` and `date` beat its `history` for the tenure in
+progress, because in real saves they disagree:
+
+| Case | Count in save C |
+|---|---|
+| Held titles with **no** history at all | 6 079 |
+| Held titles whose history ends with the current holder | 3 979 |
+| Held titles whose `date` is later than the last history entry | 341 |
+
+In every one of those 341 the current holder differs from the last history
+entry, and every one of those entries is `type=leased_out`: a theocratic lease
+changes hands without an entry being appended. So `date` is "current holder
+holds since", and the loader opens the final tenure from it whenever the
+history does not already end with the current holder. A tenure that still has
+no start date is dropped, because Neo4j cannot `MERGE` a relationship on a null
+property and `Title.holder` already records who holds it.
+
+Data characteristic worth knowing: pre-bookmark history is sparse, so 21 of the
+1 559 tenures in the empire load run past their holder's recorded death. For
+example `c_bithynia` has consecutive entries at 752 and 855 with one holder
+between them. That is the save's own granularity, not a loader artifact, and it
+is left as the save states it.
+
 ### Loading the whole run (three snapshots, one lineage)
 
 Loading `e_germany` from all three saves oldest first takes 1 m 39 s and writes
@@ -401,10 +438,12 @@ Still open:
    ordering, prefix check, and divergence split. **Done**: `verify` on the three
    real saves reports one clean run in about 11 s.
 5. Phase 3 + 5: one lineage from all snapshots of one run in Neo4j with
-   `Run`/`Snapshot` provenance. **Done** against `--dry-run`: pointing the
-   pipeline at a directory loads every snapshot of its run oldest first, with
-   tier-3 checks between consecutive pairs (three real saves: 2 324 tenures,
-   208 vassal edges, 0 disagreements, 1 m 39 s). Still to do: run it against a
-   live Neo4j, which no session has done yet.
+   `Run`/`Snapshot` provenance. **Done, against a live database.** The empire
+   lineage over all three snapshots writes 81 titles, 952 characters, 1 559
+   tenures and 132 vassal edges in 1 m 54 s. The multi-snapshot design pays
+   off measurably there: 286 of those characters and 16 of those vassal links
+   exist **only** in the oldest snapshot, having been pruned from the newest.
+   An opt-in integration suite (`tests/test_integration_neo4j.py`) pins the
+   behaviour.
 6. Phase 6 full-save scale; Phase 7 narrative generation once the local LLM is
    chosen.

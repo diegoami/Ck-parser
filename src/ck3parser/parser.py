@@ -26,6 +26,7 @@ Assumptions still to check against more saves: no ``#`` comments inside
 
 from __future__ import annotations
 
+import datetime
 import re
 from typing import Any, Iterable, Iterator, TextIO
 
@@ -332,3 +333,18 @@ def date_key(date: str) -> tuple[int, int, int]:
     """``"867.1.1"`` -> ``(867, 1, 1)`` for ordering."""
     y, m, d = (int(x) for x in str(date).split("."))
     return y, m, d
+
+
+def to_date(value: Any) -> datetime.date | None:
+    """``"867.1.1"`` -> ``date(867, 1, 1)``; None or an unparseable value -> None.
+
+    Save dates run from year 3 to the 9999 "never" sentinel and every one of the
+    64 876 distinct dates in the sample saves is a real calendar date, so this
+    conversion is lossless (docs/PLAN.md §5).
+    """
+    if value is None:
+        return None
+    try:
+        return datetime.date(*date_key(value))
+    except (TypeError, ValueError):
+        return None
