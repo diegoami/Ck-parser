@@ -133,7 +133,9 @@ def test_write_site_produces_a_page_per_entity(tmp_path):
     wiki = build_wiki(views(early, late), "k_testland")
     out = tmp_path / "site"
     pages = write_site(wiki, out)
-    assert pages == 1 + len(wiki.titles) + len(wiki.characters) + len(wiki.houses)
+    assert pages == 1 + len(wiki.titles) + len(wiki.characters) + len(wiki.houses) + len(
+        wiki.cultures
+    ) + len(wiki.faiths)
     assert (out / "index.html").is_file() and (out / "style.css").read_text() == STYLE
     title_page = (out / "titles" / "k_testland.html").read_text()
     assert "Succession" in title_page and "../characters/200.html" in title_page
@@ -620,3 +622,66 @@ def test_title_arms_are_a_different_picture_from_the_houses(tmp_path):
     early, _ = two_snapshots(tmp_path)
     wiki = build_wiki(views(early), "k_testland")
     assert wiki.titles["k_testland"].arms.file != wiki.houses[500].arms.file
+
+
+# ------------------------------------------------------- cultures and faiths
+
+
+def test_a_character_page_says_the_culture_and_faith(tmp_path):
+    early, late = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early, late), "k_testland")
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    page = (out / "characters" / "200.html").read_text()
+    assert "<th>Culture</th>" in page and "<th>Faith</th>" in page
+    assert "../cultures/1.html" in page and "../faiths/1.html" in page
+    assert "Testish-Farrish" in page and "Testarianism" in page
+
+
+def test_a_faith_founded_in_the_run_says_so_on_its_page(tmp_path):
+    early, late = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early, late), "k_testland")
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    page = (out / "faiths" / "1.html").read_text()
+    assert "founded during the run" in page
+    # 102 holds a title, so he has a page of his own to link
+    assert "../characters/102.html" in page
+    # and the faith it was reformed out of is named, since both share a template
+    assert "test_pagan" in page
+
+
+def test_a_templated_culture_says_its_name_is_a_key(tmp_path):
+    early, late = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early, late), "k_testland")
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    keyed = (out / "cultures" / "0.html").read_text()
+    assert "localization key" in keyed and "Testish" in keyed
+    # and it does not claim that a template says when the culture began
+    assert "can still have emerged during this run" in keyed
+    made = (out / "cultures" / "1.html").read_text()
+    assert "no template for this culture" in made
+    # a created culture shows where it came from, and the parent is a link
+    assert "../cultures/0.html" in made
+
+
+def test_the_newest_save_decides_a_characters_culture_and_faith(tmp_path):
+    # a character can convert or assimilate, so this follows the same rule as
+    # the house: the newest save's answer wins
+    early = make_save(tmp_path / "a_1100.ck3", date="1100.6.1", seed=7, random_count=100)
+    late = make_save(
+        tmp_path / "b_1120.ck3", date="1120.1.1", seed=7, random_count=200,
+        edits=[("\t\tculture=1\n\t\tfaith=1\n", "\t\tculture=0\n\t\tfaith=0\n")],
+    )
+    wiki = build_wiki(views(early, late), "k_testland")
+    assert wiki.characters[200].culture == 0 and wiki.characters[200].faith == 0
+
+
+def test_the_index_lists_cultures_and_faiths(tmp_path):
+    early, late = two_snapshots(tmp_path)
+    wiki = build_wiki(views(early, late), "k_testland")
+    page = render_index(wiki)
+    assert "<h2>Cultures</h2>" in page and "<h2>Faiths</h2>" in page
+    # a culture with the 1.1.1 sentinel says so in words, not as a date
+    assert "from the start" in page and "1.1.1" not in page

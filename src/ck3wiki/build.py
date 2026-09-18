@@ -110,6 +110,10 @@ def build_one(
     )
     return {
         "slug": run.slug,
+        # what write_site actually wrote, not a re-derivation: the summary used
+        # to add up titles, characters and houses, which silently went wrong the
+        # moment cultures and faiths got pages too
+        "pages": pages,
         "name": root.name if root else subject,
         "seed": run.random_seed,
         "version": run.version,
@@ -159,7 +163,7 @@ def run_build(
         return 2
     write_landing(out, entries)
     write_root_manifest(out, [e["images"] for e in entries])
-    total = sum(e["titles"] + e["characters"] + e["houses"] + 1 for e in entries)
+    total = sum(e["pages"] for e in entries)
     missing = sum(e["images"]["missing"] for e in entries)
     print(f"wrote {len(entries)} chronicle(s), {total} pages, to {out}/", file=log)
     print(f"{missing} image(s) still to harvest; see {out}/portraits.json", file=log)

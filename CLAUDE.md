@@ -7,7 +7,7 @@ Read `docs/HANDOVER.md` first (state of the project, next tasks), then
 
 ```
 uv sync --group dev              # install (the SessionStart hook does this on the web)
-uv run pytest -q                 # 169 tests, < 1 s, fixture only
+uv run pytest -q                 # 179 tests, < 1 s, fixture only
 scripts/fetch_saves.sh           # three real saves (~73 MB each) into ./saves, git-ignored
 uv run python -m ck3parser.runs verify saves --json saves/runs.json
 uv run python -m ck3parser.pipeline saves/<file>.ck3 --title e_germany --dry-run
@@ -113,6 +113,17 @@ uv run python -m ck3wiki.build saves --out site --no-kin                 # ... t
   early exit — the one genuinely expensive thing a build does (PLAN.md §10).
 - `family_data` mixes shapes: `spouse` repeats as its own key while `child` is a
   list. Use `Block.getall`, never `get`, or you will silently read one spouse.
+- A culture's `name` is a localization key when the culture has a
+  `culture_template` and the game's own text when it has none; a faith's is
+  text when it has a `name` at all and a key otherwise. Transcribe a key,
+  never guess it, and never show the two the same way (PLAN.md §13).
+- `culture_template` says whether the *name* is a key. It does **not** say
+  the game shipped the culture: 10 of the 1364 save's 190 templated cultures
+  were created during that very run. `created` is the separate question, and
+  `1.1.1` in it is a sentinel meaning "from the start", never a date to show.
+- A faith whose `tag` is `dynamic_faith_*` was founded during the run and
+  carries a `founder`. That is how the wiki can say the Germania run's own
+  Folmar founded the faith the Immasonian Fylkirate is named after.
 - A save's top-level key set varies between saves of one run. Never assume a
   section exists.
 - Facts labelled "verified" in PLAN.md were checked on three real saves. Anything

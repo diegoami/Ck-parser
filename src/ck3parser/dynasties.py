@@ -41,6 +41,17 @@ def clean_key(raw: object, *prefixes: str) -> str:
     return text.replace("_", " ").strip()
 
 
+def titled(raw: object, *prefixes: str) -> str:
+    """``heritage_east_african`` -> ``East African``. Cleans a key and capitalises.
+
+    The key is lower case where the real name is not, so the words are
+    capitalised. That is the same order of approximation as dropping a diacritic
+    from a character name, and for the same reason: the game's localization
+    files are not read here. Cultures, faiths and house keys all want it.
+    """
+    return clean_key(raw, *prefixes).title()
+
+
 def _named(name: str, prefix: str) -> str:
     return f"{prefix} {name}".strip() if prefix else name
 
@@ -53,7 +64,7 @@ def from_house_key(key: str) -> str:
     order of approximation as dropping diacritics from a character name, and
     for the same reason: the game's localization files are not read here.
     """
-    return clean_key(key, "house_").title()
+    return titled(key, "house_")
 
 
 @dataclass

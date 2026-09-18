@@ -176,6 +176,34 @@ def house_link(wiki: Wiki, house_id: int | None, depth: int) -> str:
     return f'<a href="{up}houses/{house_id}.html">{e(known.name)}</a>'
 
 
+def culture_link(wiki: Wiki, culture_id: int | None, depth: int) -> str:
+    if culture_id is None:
+        return ""
+    up = "../" * depth
+    known = wiki.cultures.get(culture_id)
+    if known is None:
+        return f'<code>{culture_id}</code> <span class="tag">not in this wiki</span>'
+    return f'<a href="{up}cultures/{culture_id}.html">{e(known.display_name)}</a>'
+
+
+def faith_link(wiki: Wiki, faith_id: int | None, depth: int) -> str:
+    if faith_id is None:
+        return ""
+    up = "../" * depth
+    known = wiki.faiths.get(faith_id)
+    if known is None:
+        return f'<code>{faith_id}</code> <span class="tag">not in this wiki</span>'
+    return f'<a href="{up}faiths/{faith_id}.html">{e(known.display_name)}</a>'
+
+
+def holders_of(wiki: Wiki, attr: str, value: int) -> list[WikiCharacter]:
+    """The wiki's characters with this culture or faith, eldest first."""
+    return sorted(
+        (c for c in wiki.characters.values() if getattr(c, attr) == value),
+        key=lambda c: (date_key(c.birth) if c.birth else (0, 0, 0), c.id),
+    )
+
+
 def image_slot(
     image: Image | None, depth: int, alt: str, caption: str, have: set[str], kind: str = "portrait"
 ) -> str:
@@ -339,6 +367,8 @@ def render_character(wiki: Wiki, character: WikiCharacter, have: set[str], top: 
             ("Cause", e(character.death_reason.replace("death_", "").replace("_", " ")) if character.death_reason else ""),
             ("Sex", "female" if character.female else "male"),
             ("House", house_link(wiki, character.house, 1)),
+            ("Culture", culture_link(wiki, character.culture, 1)),
+            ("Faith", faith_link(wiki, character.faith, 1)),
             ("Parents", ", ".join(person_link(wiki, p, 1) for p in character.parents)),
             ("Dynasty", e(house.dynasty.display_name) if house and house.dynasty else ""),
             ("Id", f"<code>{character.id}</code>"),
@@ -450,6 +480,100 @@ def render_house(wiki: Wiki, house: WikiHouse, have: set[str], top: bool = False
     return page(house.name, "\n".join(body), depth=1, subtitle=subtitle, top=top)
 
 
+def _people_table(wiki: Wiki, people: list[WikiCharacter], nobody: str) -> str:
+    if not people:
+        return f"<p>{e(nobody)}</p>"
+    lines = "".join(
+        f"<tr><td>{character_link(wiki, person.id, 1)}</td>"
+        f'<td class="num">{e(person.lifespan)}</td>'
+        f'<td class="num">{len(wiki.held_by(person.id))}</td></tr>'
+        for person in people
+    )
+    return (
+        "<table><thead><tr><th>Name</th><th class='num'>Lived</th>"
+        f"<th class='num'>Reigns</th></tr></thead><tbody>{lines}</tbody></table>"
+    )
+
+
+def render_culture(wiki: Wiki, culture, have: set[str], top: bool = False) -> str:
+    """A culture's page: what it is made of, and who in the chronicle holds it.
+
+    A culture the players made during the run has a founding date and the
+    cultures it came out of; one the game shipped has neither, and says so
+    rather than showing a sentinel.
+    """
+    people = holders_of(wiki, "culture", culture.id)
+    parents = ", ".join(culture_link(wiki, parent, 1) or "" for parent in culture.parents)
+    info = rows(
+        [
+            ("Heritage", e(culture.heritage)),
+            ("Language", e(culture.language)),
+            ("Ethos", e(culture.ethos)),
+            ("Martial custom", e(culture.martial_custom)),
+            ("Founded", e(culture.founded) if culture.founded else "from the start"),
+            ("Came from", parents),
+            ("Head", person_link(wiki, culture.head, 1) if culture.head else ""),
+            ("Culture id", f"<code>{culture.id}</code>"),
+            ("Template", f"<code>{e(culture.template)}</code>" if culture.template else ""),
+            ("Here", str(len(people))),
+        ]
+    )
+    body = [f'<div class="page"><aside class="infobox card"><table>{info}</table></aside>',
+            '<div class="content">']
+    if culture.templated:
+        body.append(
+            "<p>The game has a template for this culture, so its name is a"
+            " localization key transcribed here rather than the game's own text."
+            " That says nothing about when it came into being: a templated"
+            " culture can still have emerged during this run.</p>"
+        )
+    else:
+        body.append(
+            "<p>The game has no template for this culture — it was made during the"
+            " run, out of the cultures above — so the game had to write its name"
+            " out, and it is shown exactly as it stands.</p>"
+        )
+    body.append("<h2>Who holds it</h2>")
+    body.append(_people_table(wiki, people, "Nobody in this chronicle holds this culture."))
+    body.append("</div></div>")
+    subtitle = f"{len(people)} character{'s' if len(people) != 1 else ''} in this chronicle"
+    return page(culture.display_name, "\n".join(body), depth=1, subtitle=subtitle, top=top)
+
+
+def render_faith(wiki: Wiki, faith, have: set[str], top: bool = False) -> str:
+    """A faith's page. A faith founded during the run names who founded it."""
+    people = holders_of(wiki, "faith", faith.id)
+    info = rows(
+        [
+            ("Founder", person_link(wiki, faith.founder, 1) if faith.founder else ""),
+            ("Adjective", e(faith.adjective)),
+            ("Adherents", e(faith.adherent)),
+            ("Reformed from", f"<code>{e(faith.template)}</code>" if faith.founded_in_run else ""),
+            ("Faith id", f"<code>{faith.id}</code>"),
+            ("Tag", f"<code>{e(faith.tag)}</code>" if faith.tag else ""),
+            ("Here", str(len(people))),
+        ]
+    )
+    body = [f'<div class="page"><aside class="infobox card"><table>{info}</table></aside>',
+            '<div class="content">']
+    if faith.founded_in_run:
+        who = person_link(wiki, faith.founder, 1) if faith.founder else "somebody"
+        body.append(
+            f"<p>This faith was founded during the run, by {who}, out of"
+            f" <code>{e(faith.template)}</code>.</p>"
+        )
+    elif not faith.name:
+        body.append(
+            "<p>Nobody in this run named this faith, so what is shown is its"
+            " localization key transcribed, not the game's own text.</p>"
+        )
+    body.append("<h2>Who holds it</h2>")
+    body.append(_people_table(wiki, people, "Nobody in this chronicle holds this faith."))
+    body.append("</div></div>")
+    subtitle = f"{len(people)} character{'s' if len(people) != 1 else ''} in this chronicle"
+    return page(faith.display_name, "\n".join(body), depth=1, subtitle=subtitle, top=top)
+
+
 def render_index(wiki: Wiki, have: set[str] | None = None, top: bool = False) -> str:
     root = wiki.root
     have = have or set()
@@ -482,11 +606,14 @@ def render_index(wiki: Wiki, have: set[str] | None = None, top: bool = False) ->
     body.append("</tbody></table>")
 
     body.append("<h2>Characters</h2><table><thead><tr><th>Name</th><th>House</th>"
+                "<th>Culture</th><th>Faith</th>"
                 "<th class='num'>Lived</th><th class='num'>Reigns</th></tr></thead><tbody>")
     for character in sorted(wiki.characters.values(), key=lambda c: (c.name or "", c.id)):
         body.append(
             f"<tr><td>{character_link(wiki, character.id, 0)}</td>"
             f"<td>{house_link(wiki, character.house, 0) or '—'}</td>"
+            f"<td>{culture_link(wiki, character.culture, 0) or '—'}</td>"
+            f"<td>{faith_link(wiki, character.faith, 0) or '—'}</td>"
             f'<td class="num">{e(character.lifespan)}</td>'
             f'<td class="num">{len(wiki.held_by(character.id))}</td></tr>'
         )
@@ -502,6 +629,32 @@ def render_index(wiki: Wiki, have: set[str] | None = None, top: bool = False) ->
                 f"<tr><td>{house_link(wiki, house.id, 0)}</td><td>{e(dynasty)}</td>"
                 f'<td class="num">{e(house.house.founded) or "—"}</td>'
                 f'<td class="num">{len(wiki.members_of(house.id))}</td></tr>'
+            )
+        body.append("</tbody></table>")
+
+    if wiki.cultures:
+        body.append("<h2>Cultures</h2><table><thead><tr><th>Culture</th><th>Heritage</th>"
+                    "<th>Language</th><th class='num'>Founded</th>"
+                    "<th class='num'>Here</th></tr></thead><tbody>")
+        for culture in sorted(wiki.cultures.values(), key=lambda c: (c.display_name, c.id)):
+            # 1.1.1 is a sentinel, not a date anyone wants to read: it means the
+            # culture was there before the game's own history starts
+            body.append(
+                f"<tr><td>{culture_link(wiki, culture.id, 0)}</td><td>{e(culture.heritage)}</td>"
+                f"<td>{e(culture.language)}</td>"
+                f'<td class="num">{e(culture.founded) if culture.founded else "from the start"}</td>'
+                f'<td class="num">{len(holders_of(wiki, "culture", culture.id))}</td></tr>'
+            )
+        body.append("</tbody></table>")
+
+    if wiki.faiths:
+        body.append("<h2>Faiths</h2><table><thead><tr><th>Faith</th><th>Founder</th>"
+                    "<th class='num'>Here</th></tr></thead><tbody>")
+        for faith in sorted(wiki.faiths.values(), key=lambda f: (f.display_name, f.id)):
+            founder = person_link(wiki, faith.founder, 0) if faith.founder else "—"
+            body.append(
+                f"<tr><td>{faith_link(wiki, faith.id, 0)}</td><td>{founder}</td>"
+                f'<td class="num">{len(holders_of(wiki, "faith", faith.id))}</td></tr>'
             )
         body.append("</tbody></table>")
     return page("CK3 Chronicle", "\n".join(body), depth=0,
@@ -521,7 +674,7 @@ def harvested(directory: Path | None) -> set[str]:
 
 def write_site(wiki: Wiki, out: Path, portraits: Path | None = None, top: bool = False) -> int:
     """Write the whole site. Returns the number of pages written."""
-    for folder in ("titles", "characters", "houses"):
+    for folder in ("titles", "characters", "houses", "cultures", "faiths"):
         (out / folder).mkdir(parents=True, exist_ok=True)
     (out / "style.css").write_text(STYLE, encoding="utf-8")
 
@@ -549,6 +702,16 @@ def write_site(wiki: Wiki, out: Path, portraits: Path | None = None, top: bool =
     for house in wiki.houses.values():
         (out / "houses" / f"{house.id}.html").write_text(
             render_house(wiki, house, have, top), encoding="utf-8"
+        )
+        pages += 1
+    for culture in wiki.cultures.values():
+        (out / "cultures" / f"{culture.id}.html").write_text(
+            render_culture(wiki, culture, have, top), encoding="utf-8"
+        )
+        pages += 1
+    for faith in wiki.faiths.values():
+        (out / "faiths" / f"{faith.id}.html").write_text(
+            render_faith(wiki, faith, have, top), encoding="utf-8"
         )
         pages += 1
     return pages
