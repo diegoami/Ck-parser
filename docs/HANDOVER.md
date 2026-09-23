@@ -174,11 +174,7 @@ and in a first pass it outranks everything the graph could answer.
 4. **Deeper lineages**, then **full-save scale** (PLAN.md Phase 6). Vassalage
    has bounded stretches (§9) but still only one level down: a county under a
    vassal duchy is not loaded.
-5. **Delete the .ck3 assets from this repository's Releases.** They are copied
-   to ck_wiki and verified byte-identical, and `fetch_saves.sh` no longer looks
-   here, so the ones on releases 0.0.2 / 0.0.3 / 0.0.4 are now duplicates. This
-   needs a person: the GitHub tools in a session have no delete-release call.
-6. **The graph, once the wiki is where it should be.** It now holds what the
+5. **The graph, once the wiki is where it should be.** It now holds what the
    wiki knows and more (PLAN.md §12), so the remaining work is the *query* side,
    not the loading side: pairing it with a local LM and seeing whether Cypher it
    composes actually answers *how many cousins has X*, *how closely are X and Y
@@ -215,8 +211,8 @@ and in a first pass it outranks everything the graph could answer.
 - **The saves moved to ck_wiki's Releases**, tagged by run seed
   (`1370892195`, `633048653`, `576691683`) rather than by batch number.
   `fetch_saves.sh` defaults there; all five checksums verified against the
-  copies this repository's releases held. The old assets are still on this
-  repository's releases and want deleting by hand.
+  copies this repository's releases held. This repository now has no releases
+  at all, so the duplicates are gone too.
 
 - **Siblings have pages.** A succession is usually a quarrel between them, so
   the brother who was passed over is worth one (PLAN.md §10). `--no-siblings`
