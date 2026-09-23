@@ -167,7 +167,7 @@ def character_facts(wiki: Wiki, cid: int) -> dict:
             "until": None if tenure.open else _date(tenure.end),
             # not "at the last save": a title can leave the lineage, and then
             # the last word on it is older than the chronicle's end
-            "held_when_title_last_seen": _date(title.last_seen) if tenure.open else None,
+            "held_when_title_last_seen": _date(title.last_recorded) if tenure.open else None,
             "how_gained": _tidy(tenure.reason),
             "previous_holder": previous,
             "passed_to": None if tenure.open else following,
@@ -219,7 +219,7 @@ def title_facts(wiki: Wiki, key: str) -> dict:
                 "ruler": wiki.named(t.holder),
                 "from": _date(t.start),
                 "until": None if t.open else _date(t.end),
-                "held_when_title_last_seen": _date(title.last_seen) if t.open else None,
+                "held_when_title_last_seen": _date(title.last_recorded) if t.open else None,
                 "how_gained": _tidy(t.reason),
             }
             for t in title.tenures

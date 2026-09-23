@@ -257,12 +257,24 @@ def vassalage_rows(wiki: Wiki, stretches: list[Vassalage], depth: int) -> str:
     return "".join(out)
 
 
+def tenure_mark(wiki: Wiki, title: WikiTitle, tenure) -> str:
+    """`current` only when the newest save says so.
+
+    A tenure can also be open because its title is in no later save (destroyed
+    or pruned, the save does not say which); then all that is known is that it
+    was held when the title was last seen, and the tag says exactly that.
+    """
+    if not tenure.open:
+        return ""
+    if wiki.is_current(title, tenure):
+        return ' <span class="tag">current</span>'
+    return f' <span class="tag">held when last seen, {e(title.last_recorded)}</span>'
+
+
 def tenure_rows(wiki: Wiki, title: WikiTitle, depth: int) -> str:
     out = []
     for tenure in title.tenures:
-        span = f'{e(tenure.start or "?")} – {e(tenure.end or "?")}'
-        if tenure.open:
-            span += ' <span class="tag">current</span>'
+        span = f'{e(tenure.start or "?")} – {e(tenure.end or "?")}' + tenure_mark(wiki, title, tenure)
         reason = e(tenure.reason.replace("_", " ")) if tenure.reason else ""
         out.append(
             f'<tr><td class="num">{span}</td>'
@@ -406,7 +418,7 @@ def render_character(
         lines = []
         for title, tenure in held:
             span = f'{e(tenure.start or "?")} – {e(tenure.end or "?")}'
-            mark = ' <span class="tag">current</span>' if tenure.open else ""
+            mark = tenure_mark(wiki, title, tenure)
             # two titles can share a display name (a duchy and a kingdom of
             # Pomerania), so the tier is what tells them apart
             tier = e(TIER_WORD.get(title.tier or "", title.tier or ""))

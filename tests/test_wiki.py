@@ -772,3 +772,55 @@ def test_a_page_says_what_its_character_held_outside_the_chronicle(tmp_path):
     nephew = (out / "characters" / "206.html").read_text()
     assert "<h2>Titles held elsewhere</h2>" in nephew and "Empty Duchy" in nephew
     assert "Titles held elsewhere" not in (out / "characters" / "200.html").read_text()
+
+
+# ---------------------------------------------------------------- following a title
+
+_COMPANY = '3={\n\tkey="x_mc_0"\n\tholder=201\n\tname="Test Company"\n\tdate=1080.1.1\n\tde_facto_liege=0\n}\n'
+
+#: The company leaves the lineage (now under c_test, not the kingdom) and, in
+#: the same later save, passes from 201 to 205 -- which only its own history,
+#: read outside the lineage, can tell.
+LEAVES_AND_PASSES = ((
+    _COMPANY,
+    '3={\n\tkey="x_mc_0"\n\tholder=205\n\tname="Test Company"\n\tdate=1110.1.1\n'
+    "\thistory={ 1080.1.1=201 1110.1.1=205 }\n\tde_facto_liege=2\n}\n",
+),)
+
+#: The company is in no later save at all: destroyed or pruned, never said which.
+VANISHES = ((_COMPANY, ""),)
+
+
+def test_a_title_that_leaves_the_lineage_is_still_followed(tmp_path):
+    # Asa "still held Denmark" four years dead, because Denmark left the lineage
+    # after the first save and nothing later was read about it
+    early = make_save(tmp_path / "a_1100.ck3", date="1100.6.1", seed=7, random_count=100)
+    late = make_save(tmp_path / "b_1120.ck3", date="1120.1.1", seed=7, random_count=200,
+                     edits=LEAVES_AND_PASSES)
+    wiki = build_wiki(views(early, late), "k_testland", with_kin=False)
+    company = wiki.titles["x_mc_0"]
+    assert company.last_seen == "1100.6.1"  # in the lineage only then
+    assert company.last_recorded == "1120.1.1"  # but in the save still
+    first, second = company.tenures
+    assert (first.holder, first.end, first.open) == (201, "1110.1.1", False)
+    assert second.holder == 205 and wiki.is_current(company, second)
+    assert company.holder == 205
+    # the holder it found held a title of this wiki: an ever-holder, with a page,
+    # even with kin switched off
+    assert 205 in wiki.characters and wiki.held_by(205)
+
+
+def test_a_title_gone_from_later_saves_is_held_when_last_seen_not_current(tmp_path):
+    early = make_save(tmp_path / "a_1100.ck3", date="1100.6.1", seed=7, random_count=100)
+    late = make_save(tmp_path / "b_1120.ck3", date="1120.1.1", seed=7, random_count=200,
+                     edits=VANISHES)
+    wiki = build_wiki(views(early, late), "k_testland")
+    company = wiki.titles["x_mc_0"]
+    tenure = company.tenures[-1]
+    # absence is never an ending: the tenure stays open, and says how old that is
+    assert tenure.open and not wiki.is_current(company, tenure)
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    page = (out / "titles" / "x_mc_0.html").read_text()
+    assert "held when last seen, 1100.6.1" in page and ">current<" not in page
+    assert "held when last seen, 1100.6.1" in (out / "characters" / "201.html").read_text()

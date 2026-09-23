@@ -157,12 +157,12 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 in its own right (PLAN.md §12), but the published chronicle is the deliverable,
 and in a first pass it outranks everything the graph could answer.
 
-1. **Decide which pages get prose, and where it is written.** The model is
-   chosen: `deepseek-v4-flash` on OpenCode Zen, ~$0.001 a page, nothing wrong
-   on the trial pages (PLAN.md §15). Still open: rulers only or every
-   ever-holder (~$0.80 and ~2 h sequential for Germania), whether requests
-   go in parallel, and whether ck_wiki's workflow writes it from an
-   `OPENCODE_API_KEY` secret into its own `prose/`.
+1. **Prose in ck_wiki's workflow — postponed by the owner.** Decided: the
+   model is `deepseek-v4-flash` on OpenCode Zen (~$0.001 a page), and prose is
+   written by **ck_wiki's own workflow** from an `OPENCODE_API_KEY` secret, into
+   its `prose/` beside `images/` (PLAN.md §15). Not started until the owner
+   picks it up again; the plan is diegoami/ck_wiki#1, and what this side still
+   needs — which pages, parallel requests, a spend cap — is #25.
 2. **Cache the other sections too, if a build is still too slow.** The
    character digest (PLAN.md §14) took the five character passes down to one
    read. What is left uncached is `landed_titles` (~2 s a save), the dynasties
@@ -200,6 +200,13 @@ and in a first pass it outranks everything the graph could answer.
    | asked unpredictably, in words | graph + LM |
 
 ### Done since this list was last written
+
+- **Titles are followed outside the lineage.** A title's history now comes from
+  every save that has it, so a ruler no longer "holds" a title years after
+  death because it left the lineage. On Germania: Denmark reads Asa → Ludwig →
+  Margareta, 16 titles followed, 30 new ever-holders, no open tenure left with
+  a dead holder. `current` now means open in the newest save; otherwise the page
+  says "held when last seen" (PLAN.md §9).
 
 - **Narrative prose has a pipeline, not yet a model.** Each page gets a fact
   sheet; prose is written from it alone, stored with its digest, left out when
@@ -258,11 +265,9 @@ and in a first pass it outranks everything the graph could answer.
 
 ## Known gaps and gotchas
 
-- A tenure still open when its title leaves the lineage is tagged `current`
-  on the pages, though the last word on it may be years old: Denmark shows
-  Asa as its current holder, four years after her death, because Denmark was
-  in the lineage only in the 1358 save. The prose fact sheet already says
-  "when the title was last seen" instead; the pages do not yet.
+- The graph loader reads a title only from snapshots where it is in the
+  lineage, so a title that leaves it keeps an open `HELD_BY` — the flaw the
+  wiki had with Denmark (PLAN.md §9). Filed as #24.
 
 - `version="1.6.1.2"` in all three saves while the DLC list contains DLCs
   released well after 1.6. The player started this run on 1.6.1.2 and carried

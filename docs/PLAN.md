@@ -862,6 +862,38 @@ but `lineage()` takes the subject plus its immediate vassals, so a county under
 a vassal duchy is not loaded. Deepening it multiplies the character load (666 at
 one level in 1364) and is left for later.
 
+### Following a title outside the lineage
+
+The lineage decides which titles the wiki is *about*; it must not decide which
+saves are *read* about them. Read only where it sat in the lineage, a title
+that left the lineage froze at its last lineage snapshot: Denmark was an
+immediate vassal of Germania only in the 1358 save, so Asa's tenure stayed
+open, and the page called her its current holder four years after her death.
+The 1361 and 1364 saves still held Denmark, whole history included.
+
+So every title of the wiki is now read from **every snapshot that has it**,
+lineage or not (`_follow_titles`), for its history and its holder only:
+`first_seen`/`last_seen` still mean "in the lineage", and vassalage is still
+observed only where the title was in it. `last_recorded` is the newest snapshot
+that had the title at all. Denmark now reads Asa → Ludwig (1360.6.8) →
+Margareta (1361.1.17, current).
+
+Measured on the Germania run: 16 of its 68 titles are read outside the lineage;
+open tenures held by the dead went from 1 to 0; 30 new holders turned up, and
+since they held a title of the wiki they are ever-holders with pages (7 618 →
+7 656 pages, 3 010 → 3 081 images). The other two runs have one save each, so
+there is nothing to follow yet — but every run with more saves will have these.
+
+A title **absent** from a later save is a different case: destroyed or pruned,
+and the save does not say which (§5), so absence is never read as an ending.
+Its last tenure stays open and the page says what is known — "held when last
+seen, 1358.9.13" — while `current` is kept for a tenure open in the newest
+snapshot (`Wiki.is_current`). The prose fact sheet dates an open tenure the
+same way, by `last_recorded`.
+
+The graph loader still reads titles from the lineage only, and has the same
+flaw; it is filed as an issue rather than fixed here.
+
 ---
 
 ## 10. Family, and why parents cost a full pass

@@ -254,6 +254,7 @@ def test_an_open_tenure_is_dated_by_when_its_title_was_last_seen(tmp_path):
     wiki.characters[1] = WikiCharacter(id=1, name="Asa", death="1360.6.8")
     wiki.titles["k_a"] = WikiTitle(key="k_a", name="Denmark", tier="kingdom",
                                    first_seen="1358.9.13", last_seen="1358.9.13",
+                                   last_recorded="1358.9.13",
                                    tenures=[Tenure(1, "1323.7.5", "1358.9.13", None, True)])
     reign = page_facts(wiki, "characters", "1")["titles_held_in_this_chronicle"][0]
     assert reign["held_when_title_last_seen"] == "13 September 1358" and reign["until"] is None
