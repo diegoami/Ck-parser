@@ -153,9 +153,8 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 
 ## What is not done, in the order I would do it
 
-Open issues, in the order I would take them: #27 (two portrait queues that
-disagree — needs the owner's decision), #28 (warn on unknown history reasons),
-#29 (parser: detect comments and multi-line strings), #30 (a DLC toggled
+Open issues, in the order I would take them: #27's last step (delete
+`ck3parser.handoff` once the companion reads `portraits.json`), #30 (a DLC toggled
 mid-run splits it), #31 (localization, needs a decision about the game's
 files), #24 (the graph's two title flaws), #25 with diegoami/ck_wiki#1 (prose in
 ck_wiki's workflow, postponed). The companion has not answered
@@ -210,6 +209,14 @@ and in a first pass it outranks everything the graph could answer.
    | asked unpredictably, in words | graph + LM |
 
 ### Done since this list was last written
+
+- **One harvest queue** (#27, option A). `portraits.json` is it, schema
+  `ck3-images/3`, with `role`, `sex` and `birth` per portrait; `ck3wiki.queue`
+  writes the companion's per-save id files and renames its captures to the names
+  pages link. The hand-off retires once the companion reads the JSON.
+- **Unknown history types warn** (#28) and **the parser reads strings that span
+  lines** (#29): ~1 090 per Germania save, which it had been cutting into stray
+  words. Independent review by another model is now a rule (CLAUDE.md, *Process*).
 
 - **A reign ends at its holder's death** (#26). 316 tenures ran past their
   holder's death on sparse pre-bookmark history — Heinrich held the HRE 26

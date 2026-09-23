@@ -371,10 +371,23 @@ a `houses_<date>.csv` beside its `characters_<date>.csv`, carrying the house id,
 dynasty id, arms id, name, dynasty name, motto key, founding date and the
 derived `arms_file`.
 
-**The manifest is the work queue; the CSVs are context.** If the two ever
-disagree about a file name, the manifest is right and we have a bug. The CSVs
-stay because they carry per-snapshot detail the manifest does not, and because
-`--ids-only` still writes the bare id list your `--ids-file` takes.
+**The manifest is the one work queue, and the CSVs are retiring** (decided in
+diegoami/Ck-parser#27, schema `ck3-images/3`). They had come to list different
+people: the CSVs the lineage's rulers, 48 on Germania, the manifest everyone
+with a page, ~2 000. A portrait entry now carries what the CSVs gave besides —
+`sex`, `birth`, `house` — and a **`role`**: `ever-holder`, `kin` or
+`titled-kin`, so you can capture the rulers first (239 across the five saves,
+of 4 158 portraits).
+
+Until you read the manifest yourself, two commands bridge it to what you run
+today:
+
+    python -m ck3wiki.queue ids ck_wiki/portraits.json --out ids/ [--role ever-holder]
+    python -m ck3wiki.queue collect ck_wiki/portraits.json --from <your output> --to ck_wiki/images/
+
+`ids` writes one `<save>.ids` per save for your `--ids-file`, rulers first.
+`collect` copies your `<id>_<save date>.png` captures to the names the wiki
+links — today those differ, so without it a harvest lands where no page looks.
 
 ## What we are not asking for
 
@@ -385,8 +398,8 @@ direction — this stays plain data files both ways, as it has been.
 ## If you implement only one thing
 
 Read `ck_wiki/portraits.json`, filter to `kind == "portrait"` and `have == false`,
-group by `save`, capture, and push the files to `ck_wiki/images/` under the
-names given. Everything else in this document is either the reasoning behind
+group by `save`, capture (`role == "ever-holder"` first), and push the files to
+`ck_wiki/images/` under the names given. Everything else in this document is either the reasoning behind
 that or an offer to do less work.
 
 ## Reference

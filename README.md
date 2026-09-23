@@ -31,7 +31,7 @@ src/ck3parser/
   arms.py         coat-of-arms recipes, and the digest that names their image
   digest.py       per-save character cache: what makes a rebuild incremental
   portraits.py    the image names both this project and the companion derive
-  handoff.py      the character and house lists the portrait harvester consumes
+  handoff.py      the old per-save harvest lists, retiring in favour of the queue (#27)
   consistency.py  tier-3 checks between two snapshots of one run
   pipeline.py     load a lineage from one save or from a whole run
 src/ck3graph/
@@ -44,6 +44,7 @@ src/ck3wiki/
   manifest.py     portraits.json: every image the wiki wants, and what is missing
   build.py        `python -m ck3wiki.build` — the wikis themselves
   prose.py        `python -m ck3wiki.prose` — paragraphs written from each page's facts
+  queue.py        `python -m ck3wiki.queue` — portraits.json to the harvester's id files, and back
 tests/            pytest suite over a small hand-written gamestate fixture
 docs/PLAN.md      the plan
 docs/COMPANION_PROPOSAL.md  the image contract, as filed with the companion

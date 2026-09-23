@@ -31,7 +31,10 @@ from .model import Wiki
 #: 2: an arms `file` is named after the coat of arms' recipe rather than the
 #:    save and id, so the same key means a different thing; `definition` added.
 #:    Portrait names are unchanged.
-SCHEMA = "ck3-images/2"
+#: 3: this is now **the** queue, the hand-off CSVs retiring (#27). A portrait
+#:    carries `role` (why the character has a page, so the harvest can take
+#:    rulers first), `sex` and `birth`. Nothing earlier changed meaning.
+SCHEMA = "ck3-images/3"
 
 #: The manifest's name, in each chronicle and at the root.
 MANIFEST = "portraits.json"
@@ -53,6 +56,7 @@ def wanted_images(wiki: Wiki, have: set[str]) -> list[dict]:
     """Every image the wiki links, portraits first, each flagged with `have`."""
     out: list[dict] = []
     for portrait in wiki.wanted_portraits:
+        character = wiki.characters[portrait.character]
         out.append(
             {
                 "file": portrait.file,
@@ -61,7 +65,10 @@ def wanted_images(wiki: Wiki, have: set[str]) -> list[dict]:
                 "checksum": portrait.checksum,
                 "save_date": portrait.save_date,
                 "character": portrait.character,
-                "house": wiki.characters[portrait.character].house,
+                "role": character.role,
+                "sex": "female" if character.female else "male",
+                "birth": character.birth,
+                "house": character.house,
                 "page": f"characters/{portrait.character}.html",
                 "have": portrait.file in have,
             }

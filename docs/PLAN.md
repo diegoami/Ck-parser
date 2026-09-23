@@ -611,6 +611,25 @@ hand-off is a contract and widening it is their call, not this project's.
 is named for what it actually is, a house id, not the dynasty id their optional
 `dynasty_id` column means.
 
+### One queue (#27)
+
+The hand-off CSVs and `portraits.json` had come to list different people: the
+hand-off selects through `pipeline.gather`, the lineage's ever-holders alive
+at a save (48 on Germania); the manifest lists everyone with a page alive in a
+save (2 068). And the companion read neither: it takes an id list and writes
+`<id>_<save date>.png`, where the wiki links `<sha(save name)>_<id>.png`, so a
+harvest would have matched no page. Decided: the manifest is the one queue,
+schema `ck3-images/3`. A portrait carries `role` (`ever-holder`, `kin`,
+`titled-kin`, `WikiCharacter.role`, set by what put the character in), `sex`
+and `birth`, and the file name to deliver under, so the companion needs no
+naming rule at all.
+
+`ck3wiki.queue` bridges it to the companion as it is today: `ids` writes a
+`<save>.ids` per save, rulers first, for `--ids-file`; `collect` copies the
+captures to the names the wiki links, never overwriting. On the five release
+saves: 4 158 portraits, 239 of them ever-holders — the first harvest. The
+hand-off is deleted once the companion reads the manifest itself.
+
 ### Image names, and the manifest
 
 Both projects have to arrive at the same file name for the same image without
