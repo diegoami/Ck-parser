@@ -16,7 +16,7 @@ from ck3parser.parser import date_key
 from ck3parser.portraits import IMAGE_DIR
 from ck3parser.vassalage import Vassalage
 
-from .model import Image, Wiki, WikiCharacter, WikiHouse, WikiTitle
+from .model import Gap, Image, Wiki, WikiCharacter, WikiHouse, WikiTitle
 
 STYLE = """\
 :root {
@@ -273,7 +273,13 @@ def tenure_mark(wiki: Wiki, title: WikiTitle, tenure) -> str:
 
 def tenure_rows(wiki: Wiki, title: WikiTitle, depth: int) -> str:
     out = []
-    for tenure in title.tenures:
+    for tenure in wiki.succession(title):
+        if isinstance(tenure, Gap):
+            out.append(
+                f'<tr><td class="num">{e(tenure.start)} – {e(tenure.end)}</td>'
+                '<td colspan="2"><span class="tag">no holder recorded</span></td></tr>'
+            )
+            continue
         span = f'{e(tenure.start or "?")} – {e(tenure.end or "?")}' + tenure_mark(wiki, title, tenure)
         reason = e(tenure.reason.replace("_", " ")) if tenure.reason else ""
         out.append(

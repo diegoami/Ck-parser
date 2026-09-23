@@ -824,3 +824,46 @@ def test_a_title_gone_from_later_saves_is_held_when_last_seen_not_current(tmp_pa
     page = (out / "titles" / "x_mc_0.html").read_text()
     assert "held when last seen, 1100.6.1" in page and ">current<" not in page
     assert "held when last seen, 1100.6.1" in (out / "characters" / "201.html").read_text()
+
+
+
+# ---------------------------------------------------------------- reigns end at death
+
+#: 102 dies ten years before the next entry in the kingdom's history, and 100
+#: one day before his successor's entry, the handover the game always records.
+DIES_EARLY = (
+    ("\t\t\tdate=1090.2.1\n\t\t\treason=\"death_old_age\"",
+     "\t\t\tdate=1080.1.1\n\t\t\treason=\"death_old_age\""),
+    ("\t\t\tdate=880.5.5\n\t\t\treason=\"death_natural_causes\"",
+     "\t\t\tdate=880.5.4\n\t\t\treason=\"death_natural_causes\""),
+)
+
+
+def test_a_reign_ends_at_the_holders_death_and_the_rest_is_a_gap(tmp_path):
+    # Heinrich "held" the HRE until 962, 26 years dead: the history's next entry
+    # came that late, and nobody is recorded in between
+    wiki = build_wiki(views(make_save(tmp_path / "a.ck3", edits=DIES_EARLY)), "k_testland")
+    kingdom = wiki.titles["k_testland"]
+    third = next(t for t in kingdom.tenures if t.holder == 102)
+    assert third.end == "1080.1.1" and third.recorded_end == "1090.2.1"
+    gap = wiki.gap_after(kingdom, third)
+    assert (gap.start, gap.end) == ("1080.1.1", "1090.2.1")
+
+    # a one-day handover is the game's convention, not a gap
+    first = next(t for t in kingdom.tenures if t.holder == 100)
+    assert first.end == "880.5.4" and wiki.gap_after(kingdom, first) is None
+
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    page = (out / "titles" / "k_testland.html").read_text()
+    assert "1080.1.1 – 1090.2.1</td><td colspan=\"2\"><span class=\"tag\">no holder recorded" in page
+
+
+def test_the_prose_is_told_nobody_came_next(tmp_path):
+    from ck3wiki.prose import page_facts
+
+    wiki = build_wiki(views(make_save(tmp_path / "a.ck3", edits=DIES_EARLY)), "k_testland")
+    reign = next(r for r in page_facts(wiki, "characters", "102")["titles_held_in_this_chronicle"]
+                 if r["title"] == wiki.titles["k_testland"].name)
+    assert reign["until"] == "1 January 1080"
+    assert reign["next_holder_recorded_from"] == "1 February 1090"

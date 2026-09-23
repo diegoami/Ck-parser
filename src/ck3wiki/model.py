@@ -25,7 +25,7 @@ from ck3parser.cultures import Culture, find_cultures
 from ck3parser.dynasties import Dynasty, House, arms_id, find_dynasties, find_houses, house_name
 from ck3parser.faiths import Faith, find_faiths
 from ck3parser.family import Family, own_family
-from ck3parser.parser import Block, date_key
+from ck3parser.parser import Block, date_key, to_date
 from ck3parser.pipeline import SnapshotView
 from ck3parser.portraits import arms_name, portrait_name, save_checksum
 from ck3parser.titles import TitleRecord
@@ -58,9 +58,24 @@ class Tenure:
     end: str | None
     reason: str | None
     open: bool
+    #: the end the title's history gave, when the holder's death came first and
+    #: `end` was brought back to it; None when the two agree
+    recorded_end: str | None = None
 
     def sort_key(self) -> tuple[int, int, int]:
         return date_key(self.start) if self.start else (0, 0, 0)
+
+
+@dataclass
+class Gap:
+    """A stretch between two tenures of a title with no holder recorded.
+
+    Never filled in: a save's history before the bookmark is sparse, and the
+    successor it skips is not ours to guess (docs/PLAN.md §9).
+    """
+
+    start: str
+    end: str
 
 
 @dataclass
@@ -308,6 +323,35 @@ class Wiki:
         """Open in the newest snapshot, not merely open when the title was last seen."""
         return tenure.open and title.last_recorded == (self.snapshots[-1] if self.snapshots else None)
 
+    def succession(self, title: WikiTitle) -> list[Tenure | Gap]:
+        """The title's tenures in order, with a `Gap` wherever nobody is recorded.
+
+        A handover the next day is the game's own convention -- a ruler dies and
+        the heir's entry is dated the day after -- so only more than one day
+        between two tenures is a gap.
+        """
+        out: list[Tenure | Gap] = []
+        previous: Tenure | None = None
+        for tenure in title.tenures:
+            if previous is not None and previous.end and tenure.start:
+                ended, began = to_date(previous.end), to_date(tenure.start)
+                if ended and began and (began - ended).days > 1:
+                    out.append(Gap(previous.end, tenure.start))
+            out.append(tenure)
+            if previous is None or not previous.end or (
+                tenure.end and date_key(tenure.end) > date_key(previous.end)
+            ):
+                previous = tenure
+        return out
+
+    def gap_after(self, title: WikiTitle, tenure: Tenure) -> Gap | None:
+        """The gap that follows this tenure, if nobody is recorded right after it."""
+        items = self.succession(title)
+        for here, following in zip(items, items[1:]):
+            if here is tenure and isinstance(following, Gap):
+                return following
+        return None
+
     def held_elsewhere(self, character_id: int) -> list[Holding]:
         """What this character held outside the lineage, highest tier first."""
         held = self.holdings.get(character_id, {})
@@ -410,6 +454,30 @@ def _merge_history(title: WikiTitle, record: TitleRecord, view: SnapshotView) ->
     title.tenures = sorted(by_start.values(), key=Tenure.sort_key)
 
 
+def _end_reigns_at_death(wiki: Wiki) -> None:
+    """Close a tenure at its holder's death when the history runs on past it.
+
+    A title's history closes a tenure only at its next entry, and before the
+    bookmark those are sparse: `e_hre` goes from Heinrich (died 936.7.2) to the
+    next entry in 962.2.2, which read naively has him reign 26 years dead. The
+    death is the better end; the years after it become a `Gap`, never a guessed
+    successor. 316 tenures across the three release chronicles, most of them the
+    one-day handover the game always records, which `succession` does not count
+    as a gap. An open tenure is left alone: the newest save says who holds it.
+    """
+    for title in wiki.titles.values():
+        for tenure in title.tenures:
+            holder = wiki.characters.get(tenure.holder)
+            death = holder.death if holder else None
+            if tenure.open or not death or not tenure.end:
+                continue
+            if date_key(tenure.end) > date_key(death) and (
+                not tenure.start or date_key(death) >= date_key(tenure.start)
+            ):
+                tenure.recorded_end = tenure.recorded_end or tenure.end
+                tenure.end = death
+
+
 def _follow_titles(wiki: Wiki, views: list[SnapshotView]) -> None:
     """Read every title of the wiki from every snapshot that has it, lineage or not.
 
@@ -463,6 +531,7 @@ def build_wiki(
         )
     # before the family: the holders it finds are ever-holders, whose kin count
     _follow_titles(wiki, views)
+    _end_reigns_at_death(wiki)
     _load_vassalage(wiki, views)
     _load_holdings(wiki, views)
     if with_family:

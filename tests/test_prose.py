@@ -43,7 +43,9 @@ def test_the_fact_sheet_is_what_the_page_shows(tmp_path):
     assert facts["number_of_marriages"] == 1 and facts["died_aged"] is None
 
     title = page_facts(wiki, "titles", "k_testland")
-    assert [s["ruler"] for s in title["succession"]][-1] == "Test"
+    assert [s["ruler"] for s in title["succession"] if "ruler" in s][-1] == "Test"
+    # the kingdom was destroyed in 900 and created again in 950: nobody held it
+    assert {"no_holder_recorded": {"from": "1 January 900", "until": "3 March 950"}} in title["succession"]
     assert page_facts(wiki, "characters", "999999") is None
 
 

@@ -41,12 +41,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from .model import Wiki, WikiTitle
+from .model import Gap, Wiki, WikiTitle
 from .render import TIER_WORD
 
 #: Bump when the prompt or the fact sheet changes: existing prose is then
 #: regenerated, not reused.
-PROMPT_VERSION = "ck3-prose/2"
+PROMPT_VERSION = "ck3-prose/3"
 SCHEMA = "ck3-prose/1"
 KINDS = ("characters", "titles")
 
@@ -61,6 +61,10 @@ relationships or geography. Do not judge a reign. If the facts are thin, write l
 dates, say so; never pick a date inside it.
 - "how_gained" says how a title was gained, never how it was lost. "passed_to" says \
 who held a title next, not how or why: never say a title was granted or given.
+- "next_holder_recorded_from" means nobody is recorded holding the title between \
+"until" and that date. Say so; never name a successor for those years.
+- A "no_holder_recorded" entry in a succession is such a stretch. Say nobody is \
+recorded then; never bridge it.
 - "held_when_title_last_seen" gives the last save that shows the title, and the person \
 still held it then. It says nothing about later, and nothing about a death.
 - "other_titles_this_person_held" are titles this same person held outside this \
@@ -172,6 +176,9 @@ def character_facts(wiki: Wiki, cid: int) -> dict:
             "previous_holder": previous,
             "passed_to": None if tenure.open else following,
         })
+        gap = wiki.gap_after(title, tenure)
+        if gap is not None:
+            reigns[-1]["next_holder_recorded_from"] = _date(gap.end)
     return {
         "page": "character",
         "id": cid,
@@ -214,7 +221,11 @@ def title_facts(wiki: Wiki, key: str) -> dict:
         "tier": _tier(title.tier),
         "de_jure_liege": _liege_name(wiki, title.de_jure_liege) if title.de_jure_liege else None,
         "rulers_recorded": len(title.tenures),
+        # gaps included: a stretch nobody is recorded holding is a fact too,
+        # and leaving it out invites a model to bridge it
         "succession": [
+            {"no_holder_recorded": {"from": _date(t.start), "until": _date(t.end)}}
+            if isinstance(t, Gap) else
             {
                 "ruler": wiki.named(t.holder),
                 "from": _date(t.start),
@@ -222,7 +233,7 @@ def title_facts(wiki: Wiki, key: str) -> dict:
                 "held_when_title_last_seen": _date(title.last_recorded) if t.open else None,
                 "how_gained": _tidy(t.reason),
             }
-            for t in title.tenures
+            for t in wiki.succession(title)
         ],
         # a save has no vassalage history: these are windows, never dates
         "lieges": [_liege_stretch(wiki, s) for s in title.vassalage(wiki.snapshots)],
@@ -326,7 +337,7 @@ def _template_character(f: dict) -> str:
 
 
 def _template_title(f: dict) -> str:
-    rulers = [s["ruler"] for s in f["succession"]]
+    rulers = [s["ruler"] for s in f["succession"] if "ruler" in s]
     n = f["rulers_recorded"]
     text = f"The {(f['tier'] or 'title').lower()} of {f['name']} records {n} holder{'s' if n != 1 else ''}."
     if rulers:
