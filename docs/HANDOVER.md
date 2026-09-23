@@ -157,9 +157,12 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 in its own right (PLAN.md §12), but the published chronicle is the deliverable,
 and in a first pass it outranks everything the graph could answer.
 
-1. **Narrative prose.** The wiki is factual; Phase 7's LLM-written text is still
-   gated on choosing a small local model. Everything it would need now exists:
-   succession, vassalage with honest bounds, family, houses and arms.
+1. **Choose the prose model.** The pipeline is built (`ck3wiki.prose`,
+   PLAN.md §15) with a template backend and an OpenAI-compatible HTTP one; what
+   is missing is the model. This machine has a 16 GB RTX 4090 laptop GPU, so a
+   ~14B model at 4 bits via Ollama fits. Run the rulers of one chronicle through
+   two or three candidates, read every word, then decide whether prose goes to
+   ck_wiki's `prose/`.
 2. **Cache the other sections too, if a build is still too slow.** The
    character digest (PLAN.md §14) took the five character passes down to one
    read. What is left uncached is `landed_titles` (~2 s a save), the dynasties
@@ -197,6 +200,12 @@ and in a first pass it outranks everything the graph could answer.
    | asked unpredictably, in words | graph + LM |
 
 ### Done since this list was last written
+
+- **Narrative prose has a pipeline, not yet a model.** Each page gets a fact
+  sheet; prose is written from it alone, stored with its digest, left out when
+  stale and rejected when it uses a number the sheet lacks. `--prose DIR` folds
+  it into the build. Tried on Germania's rulers with the template backend
+  (PLAN.md §15).
 
 - **Where a chronicle stops is decided.** The ring beyond the direct line gets
   pages only where it holds a title itself: 182 of 13 202 on Germania, 18 of

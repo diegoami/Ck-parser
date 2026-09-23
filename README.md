@@ -43,6 +43,7 @@ src/ck3wiki/
   render.py       static HTML
   manifest.py     portraits.json: every image the wiki wants, and what is missing
   build.py        `python -m ck3wiki.build` — the wikis themselves
+  prose.py        `python -m ck3wiki.prose` — paragraphs written from each page's facts
 tests/            pytest suite over a small hand-written gamestate fixture
 docs/PLAN.md      the plan
 docs/COMPANION_PROPOSAL.md  the image contract, as filed with the companion
