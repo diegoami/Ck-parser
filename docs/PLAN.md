@@ -1441,6 +1441,48 @@ number; nothing mechanical catches the misreading, which is the argument for
 fact-sheet keys a model cannot misread (`titles_held_elsewhere` says whose
 titles they are only by position).
 
+**The cheap models, measured** on the same four pages:
+
+| | written | tokens in / out | cost | time | 950 pages | wrong against the facts |
+|---|---|---|---|---|---|---|
+| **`deepseek-v4-flash`** | 4 of 4 | 12 394 / 5 517 | $0.003 | 35 s | ~$0.80 | nothing; 3 mild misreadings |
+| `glm-5.3-flash` | 4 of 4 | 12 434 / 12 946 | $0.008 | 109 s | ~$2 | Vladimir called a duchy; a death dropped |
+| `minimax-m3` | 4 of 4 | 12 826 / 4 266 | $0.009 | 32 s | ~$2 | "married six times" (seven); "Mallorce" |
+
+`big-pickle` and `mimo-v2.6-flash-free` answer `FreeTierError: OpenCode's free
+tier can only be used from within OpenCode`, so free models are out;
+`deepseek-v4.1-flash` hit an upstream outage (HTTP 503) halfway. **The model is
+`deepseek-v4-flash`**: the cheapest, among the fastest, and the only cheap one
+with nothing wrong. It is the default in `.env.example`.
+
+### The fact sheet, second version (`ck3-prose/2`)
+
+Every mild misreading in the trials came from a fact the sheet left ambiguous,
+so the sheet was changed rather than the checks loosened:
+
+| misreading | change |
+|---|---|
+| "Lithuania and Ruthenia were revoked" (they were *gained* by revocation) | `how` → `how_gained`; the prompt says it never describes a loss |
+| "granted Benevento to Anthinos" | `successor` → `passed_to`; the prompt forbids granted and given |
+| "ten empires in other hands" (they were his) | `titles_held_elsewhere` → `other_titles_this_person_held` |
+| "independence established by 1358" | liege windows written in words: "already so at the first save, …", "between … and …" |
+| "his daughter Asa", guessed | every relative carries `sex` |
+| "76" rejected | `died_aged`, computed here |
+| "married six times" | `number_of_marriages` |
+| `1284.3.6` read badly | dates written out here, "6 March 1284", so a model copies rather than converts |
+
+The second trial turned up one more, and it was not the model's: Asa "still
+held Denmark at the last save", four years dead. Denmark was in the lineage
+only in the first save, so its tenure stays open with nothing later to close
+it, and the sheet had called that "the last save". It is now
+`held_when_title_last_seen` with the title's own last date, and the paragraph
+reads "still holding Denmark as of 13 September 1358". The page's `current` tag
+has the same flaw and is not fixed yet. One mild phrase survives the prompt —
+"counties in the region" — and nothing mechanical catches it.
+
+Output tokens vary run to run: the same four pages billed 4 919 and then 10 043
+out, because the model reasons for as long as it likes. Budget on the higher.
+
 Two things the first request taught: opencode.ai sits behind Cloudflare, which
 refuses urllib's default `Python-urllib/3.x` user agent with HTTP 403 "error
 code: 1010", so the backend names itself; and at ~40 s a page, sequential

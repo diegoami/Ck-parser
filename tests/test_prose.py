@@ -19,7 +19,7 @@ from ck3wiki.prose import (
     rulers,
     write_prose,
 )
-from helpers import SUCCESSION_EDITS, make_save
+from helpers import SUCCESSION_EDITS, VASSAL_MOVE_EDITS, make_save
 from test_wiki import views
 
 
@@ -31,14 +31,40 @@ def test_the_fact_sheet_is_what_the_page_shows(tmp_path):
     wiki = wiki_of(make_save(tmp_path / "a.ck3"))
     facts = page_facts(wiki, "characters", "200")
     assert facts["name"] == "Test" and facts["house"]
-    reign = next(r for r in facts["titles_held"] if r["title"] == wiki.titles["k_testland"].name)
-    assert reign["from"] == "1090.2.1" and reign["still_holds"] and reign["to"] is None
-    assert reign["predecessor"] == wiki.named(wiki.titles["k_testland"].tenures[-2].holder)
-    assert [c["name"] for c in facts["children"]] == ["Child", "Sibling"]
+    kingdom = wiki.titles["k_testland"]
+    reign = next(r for r in facts["titles_held_in_this_chronicle"] if r["title"] == kingdom.name)
+    # dates are written out here, so a model copies them rather than converts them
+    assert reign["from"] == "1 February 1090"
+    assert reign["held_when_title_last_seen"] == "1 June 1100"
+    assert reign["until"] is None and reign["passed_to"] is None
+    assert reign["previous_holder"] == wiki.named(kingdom.tenures[-2].holder)
+    # every relative carries a sex, so "son" or "daughter" is never a guess
+    assert [(c["name"], c["sex"]) for c in facts["children"]] == [("Child", "male"), ("Sibling", "female")]
+    assert facts["number_of_marriages"] == 1 and facts["died_aged"] is None
 
     title = page_facts(wiki, "titles", "k_testland")
     assert [s["ruler"] for s in title["succession"]][-1] == "Test"
     assert page_facts(wiki, "characters", "999999") is None
+
+
+def test_a_liege_window_is_written_in_words(tmp_path):
+    early = make_save(tmp_path / "a_1100.ck3", date="1100.6.1", seed=7, random_count=100)
+    late = make_save(tmp_path / "b_1120.ck3", date="1120.1.1", seed=7, random_count=200,
+                     edits=VASSAL_MOVE_EDITS)
+    lieges = page_facts(wiki_of(early, late), "titles", "x_mc_0")["lieges"]
+    # a save has no vassalage history: a change is only ever known between two saves
+    assert lieges[0]["ended"] == "between 1 June 1100 and 1 January 1120"
+    assert lieges[1]["began"] == "between 1 June 1100 and 1 January 1120"
+    assert lieges[1]["ended"] == "still so at the last save, 1 January 1120"
+
+
+def test_age_at_death_is_whole_years():
+    from ck3wiki.prose import _age, _date
+
+    assert _age("1284.3.13", "1360.6.8") == 76
+    assert _age("1284.6.9", "1360.6.8") == 75  # the day before a birthday
+    assert _age("1284.3.13", None) is None
+    assert _date("1284.3.6") == "6 March 1284" and _date("not a date") == "not a date"
 
 
 def test_the_digest_moves_only_when_the_facts_do(tmp_path):
@@ -64,7 +90,7 @@ def test_rulers_are_the_subject_title_and_its_holders_in_order(tmp_path):
 
 def test_a_number_the_facts_do_not_hold_is_caught(tmp_path):
     facts = page_facts(wiki_of(make_save(tmp_path / "a.ck3")), "characters", "200")
-    assert check("Test took the throne on 1090.2.1.", facts) == []
+    assert check("Test took the throne on 1 February 1090.", facts) == []
     assert check("Test took the throne in 1091 and had 7 children.", facts) == [
         "numbers not in the facts: 7, 1091"
     ]
@@ -217,3 +243,17 @@ def test_a_refused_key_stops_the_run_with_the_servers_reason(tmp_path, monkeypat
     assert "HTTP 401" in err and "invalid api key" in err
     assert "not-a-real-key" not in err  # the key is never echoed
     assert not (tmp_path / "prose").exists()
+
+
+def test_an_open_tenure_is_dated_by_when_its_title_was_last_seen(tmp_path):
+    # Asa "still held Denmark at the last save", four years dead: Denmark had
+    # left the lineage after the first save, so its last word was that save's
+    from ck3wiki.model import Tenure, Wiki, WikiCharacter, WikiTitle
+
+    wiki = Wiki(run_id="r", title_key="k_a", snapshots=["1358.9.13", "1364.3.10"])
+    wiki.characters[1] = WikiCharacter(id=1, name="Asa", death="1360.6.8")
+    wiki.titles["k_a"] = WikiTitle(key="k_a", name="Denmark", tier="kingdom",
+                                   first_seen="1358.9.13", last_seen="1358.9.13",
+                                   tenures=[Tenure(1, "1323.7.5", "1358.9.13", None, True)])
+    reign = page_facts(wiki, "characters", "1")["titles_held_in_this_chronicle"][0]
+    assert reign["held_when_title_last_seen"] == "13 September 1358" and reign["until"] is None

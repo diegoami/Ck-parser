@@ -124,6 +124,7 @@ class Relative:
     name: str = ""
     birth: str | None = None
     death: str | None = None
+    female: bool = False
 
     @property
     def lifespan(self) -> str:
@@ -602,6 +603,7 @@ def _name_the_rest(wiki: Wiki, views: list[SnapshotView]) -> None:
                 name=clean_name(str(char.get("first_name") or "")),
                 birth=str(char["birth"]) if char.get("birth") is not None else None,
                 death=str(dead["date"]) if isinstance(dead, Block) and dead.get("date") else None,
+                female=bool(char.get("female")),
             )
 
 
@@ -725,4 +727,5 @@ def _name_the_founders(wiki: Wiki, views: list[SnapshotView]) -> None:
                 name=clean_name(str(char.get("first_name") or "")),
                 birth=str(char["birth"]) if char.get("birth") is not None else None,
                 death=str(dead["date"]) if isinstance(dead, Block) and dead.get("date") else None,
+                female=bool(char.get("female")),
             )
