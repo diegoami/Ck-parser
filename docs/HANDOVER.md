@@ -14,7 +14,7 @@ session (any model) can continue without the conversation history.
 | Real saves | **ck_wiki's** Releases, tagged by run seed; `scripts/fetch_saves.sh` downloads and checksums them into `./saves` |
 | Branch | work lands on `main` through a PR per task |
 | Published wiki | `diegoami/ck_wiki` — its `images/` holds the companion's harvested images, its `portraits.json` the queue; the pages are built there, never committed |
-| CI | `.github/workflows/ci.yml`, runs `uv run pytest` on the fixture on every push and PR, ~15 s |
+| CI | `.github/workflows/ci.yml`, runs `uv run pytest` on the fixture on every push and PR, ~15 s; a green push to `main` then sends `parser-updated` to ck_wiki, which rebuilds with that commit (needs the `CK_WIKI_DISPATCH_TOKEN` secret; without it, ck_wiki's daily schedule catches up) |
 
 ## What is done
 

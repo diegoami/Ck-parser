@@ -14,3 +14,26 @@ jobs:
           python-version: "3.11"
       - run: uv sync --group dev
       - run: uv run pytest -q
+
+  # The wiki and its harvest queue are built in diegoami/ck_wiki from this
+  # repository's main. Without a nudge they waited for its schedule, and a
+  # review once counted a five-day-old queue as current (ck_wiki#2). So every
+  # green push to main asks ck_wiki to rebuild, naming the exact commit.
+  notify-wiki:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask ck_wiki to rebuild with this commit
+        env:
+          # fine-grained, ck_wiki only, Contents: read and write
+          GH_TOKEN: ${{ secrets.CK_WIKI_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::notice::CK_WIKI_DISPATCH_TOKEN is not set; ck_wiki will catch up on its daily schedule"
+            exit 0
+          fi
+          gh api repos/diegoami/ck_wiki/dispatches \
+            -f event_type=parser-updated \
+            -f "client_payload[ref]=$GITHUB_SHA"
+          echo "asked ck_wiki to rebuild with $GITHUB_SHA"
