@@ -1,3 +1,4 @@
+import os
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -110,16 +111,16 @@ def test_generate_writes_keeps_and_rejects(tmp_path):
     wiki = wiki_of(make_save(tmp_path / "a.ck3"))
     out = tmp_path / "prose"
     pages = rulers(wiki)
-    first = generate(wiki, "run", pages, TemplateBackend(), out, log=open("/dev/null", "w"))
+    first = generate(wiki, "run", pages, TemplateBackend(), out, log=open(os.devnull, "w"))
     assert first["written"] == len(pages) and first["rejected"] == 0
     saved = read_prose(prose_path(out, "run", "characters", "200"))
     assert saved.backend == "template" and "Test" in saved.text
 
-    again = generate(wiki, "run", pages, TemplateBackend(), out, log=open("/dev/null", "w"))
+    again = generate(wiki, "run", pages, TemplateBackend(), out, log=open(os.devnull, "w"))
     assert again["kept"] == len(pages) and again["written"] == 0
 
     bad = tmp_path / "bad"
-    counts = generate(wiki, "run", pages, Inventing(), bad, log=open("/dev/null", "w"))
+    counts = generate(wiki, "run", pages, Inventing(), bad, log=open(os.devnull, "w"))
     # never saved: a page without prose beats one saying what the save does not
     assert counts["rejected"] == len(pages) and not bad.exists()
 
@@ -127,7 +128,7 @@ def test_generate_writes_keeps_and_rejects(tmp_path):
 def test_stale_prose_is_left_out_of_the_page(tmp_path):
     wiki = wiki_of(make_save(tmp_path / "a.ck3"))
     out = tmp_path / "prose"
-    generate(wiki, "run", rulers(wiki), TemplateBackend(), out, log=open("/dev/null", "w"))
+    generate(wiki, "run", rulers(wiki), TemplateBackend(), out, log=open(os.devnull, "w"))
     write_prose(prose_path(out, "run", "titles", "k_testland"),
                 Prose(text="Written from other facts.", facts="0" * 16, backend="template"))
     found, stale = load_prose(out, "run", wiki)
@@ -145,10 +146,10 @@ def test_the_build_folds_prose_in_and_says_where_it_came_from(tmp_path):
     assert build_main([str(saves), "--title", "k_testland", "--out", str(site),
                        "--cache", str(cache), "--prose", str(prose)]) == 0
     slug = next(p.name for p in prose.iterdir())
-    page = (site / slug / "characters" / "200.html").read_text()
+    page = (site / slug / "characters" / "200.html").read_text(encoding="utf-8")
     assert '<section class="prose">' in page and "Written by <code>template</code>" in page
     # a page nobody wrote prose for is built exactly as before
-    assert '<section class="prose">' not in (site / slug / "characters" / "202.html").read_text()
+    assert '<section class="prose">' not in (site / slug / "characters" / "202.html").read_text(encoding="utf-8")
 
 
 def test_the_openai_backend_speaks_plain_http_and_drops_the_thinking(tmp_path):

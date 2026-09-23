@@ -209,7 +209,7 @@ def load_manifest(path: str | Path) -> dict[str, dict]:
     p = Path(path)
     if not p.exists():
         return {}
-    data = json.loads(p.read_text())
+    data = json.loads(p.read_text(encoding="utf-8"))
     known = {}
     for run in data.get("runs", []):
         for s in run.get("snapshots", []):
@@ -231,7 +231,12 @@ def scan(directory: str | Path, with_sha256: bool = True, manifest: str | Path |
 
 
 def write_manifest(runs: list[Run], path: str | Path) -> None:
-    Path(path).write_text(json.dumps({"runs": [r.to_json() for r in runs]}, indent=2, ensure_ascii=False) + "\n")
+    # UTF-8 said out loud: with ensure_ascii off, the platform default (cp1252 on
+    # Windows) cannot hold every save name a player might choose
+    Path(path).write_text(
+        json.dumps({"runs": [r.to_json() for r in runs]}, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
 
 
 def format_runs(runs: list[Run]) -> str:

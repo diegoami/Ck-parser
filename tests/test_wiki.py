@@ -136,11 +136,11 @@ def test_write_site_produces_a_page_per_entity(tmp_path):
     assert pages == 1 + len(wiki.titles) + len(wiki.characters) + len(wiki.houses) + len(
         wiki.cultures
     ) + len(wiki.faiths)
-    assert (out / "index.html").is_file() and (out / "style.css").read_text() == STYLE
-    title_page = (out / "titles" / "k_testland.html").read_text()
+    assert (out / "index.html").is_file() and (out / "style.css").read_text(encoding="utf-8") == STYLE
+    title_page = (out / "titles" / "k_testland.html").read_text(encoding="utf-8")
     assert "Succession" in title_page and "../characters/200.html" in title_page
     assert "Kingdom of Testland" in title_page
-    character_page = (out / "characters" / "100.html").read_text()
+    character_page = (out / "characters" / "100.html").read_text(encoding="utf-8")
     assert "880.5.5" in character_page and "../titles/k_testland.html" in character_page
 
 
@@ -152,7 +152,7 @@ def test_a_portrait_is_linked_whether_or_not_it_has_been_harvested(tmp_path):
 
     out = tmp_path / "site"
     write_site(wiki, out)  # nothing harvested yet
-    page_html = (out / "characters" / "200.html").read_text()
+    page_html = (out / "characters" / "200.html").read_text(encoding="utf-8")
     assert f'src="../portraits/{wanted}"' in page_html  # the link is there first
     assert "awaited" in page_html
 
@@ -162,7 +162,7 @@ def test_a_portrait_is_linked_whether_or_not_it_has_been_harvested(tmp_path):
     (shots / "another-run.png").write_bytes(b"\x89PNG")  # belongs to another chronicle
     assert harvested(shots) == {wanted, "another-run.png"} and harvested(None) == set()
     write_site(wiki, out, shots)
-    page_html = (out / "characters" / "200.html").read_text()
+    page_html = (out / "characters" / "200.html").read_text(encoding="utf-8")
     assert f'src="../portraits/{wanted}"' in page_html  # unchanged, as promised
     assert "awaited" not in page_html
     assert (out / "portraits" / wanted).is_file()
@@ -183,7 +183,7 @@ def test_the_dead_are_never_asked_for(tmp_path):
 
     out = tmp_path / "site"
     write_site(wiki, out)
-    assert "<img" not in (out / "characters" / "100.html").read_text()
+    assert "<img" not in (out / "characters" / "100.html").read_text(encoding="utf-8")
     assert not any(p["character"] == 100 for p in
                    chronicle_manifest(wiki, "s", have=set())["portraits"]
                    if p["kind"] == "portrait")
@@ -198,7 +198,7 @@ def test_a_character_gets_one_portrait_per_save_they_appear_in(tmp_path):
     assert len({p.file for p in shots}) == 2  # a different image per save
     out = tmp_path / "site"
     write_site(wiki, out)
-    page_html = (out / "characters" / "200.html").read_text()
+    page_html = (out / "characters" / "200.html").read_text(encoding="utf-8")
     assert "<h2>Portraits</h2>" in page_html
     for shot in shots:
         assert shot.file in page_html
@@ -215,11 +215,11 @@ def test_houses_are_read_from_the_save_and_get_a_page(tmp_path):
     assert [c.id for c in wiki.members_of(500)] == [100, 101, 102, 201, 205, 200]
     out = tmp_path / "site"
     write_site(wiki, out)
-    house_page = (out / "houses" / "500.html").read_text()
+    house_page = (out / "houses" / "500.html").read_text(encoding="utf-8")
     assert "of Test" in house_page and "../characters/200.html" in house_page
     assert "1040.3.2" in house_page  # founded
-    assert '<a href="../houses/500.html">' in (out / "characters" / "200.html").read_text()
-    assert 'href="houses/500.html"' in (out / "index.html").read_text()
+    assert '<a href="../houses/500.html">' in (out / "characters" / "200.html").read_text(encoding="utf-8")
+    assert 'href="houses/500.html"' in (out / "index.html").read_text(encoding="utf-8")
 
 
 def test_a_houses_arms_are_named_after_the_recipe_that_draws_them(tmp_path):
@@ -238,7 +238,7 @@ def test_a_houses_arms_are_named_after_the_recipe_that_draws_them(tmp_path):
     assert ["pattern", "pattern_solid.dds"] in arms.definition
     out = tmp_path / "site"
     write_site(wiki, out)
-    assert f'src="../portraits/{arms.file}"' in (out / "houses" / "500.html").read_text()
+    assert f'src="../portraits/{arms.file}"' in (out / "houses" / "500.html").read_text(encoding="utf-8")
     entry = next(
         p for p in chronicle_manifest(wiki, "s", have=set())["portraits"] if p["file"] == arms.file
     )
@@ -268,10 +268,10 @@ def test_the_build_writes_a_manifest_the_companion_can_scan(tmp_path):
     two_snapshots(tmp_path)
     out = tmp_path / "site"
     assert main([str(tmp_path), "--title", "k_testland", "--out", str(out)]) == 0
-    root = json.loads((out / "portraits.json").read_text())
+    root = json.loads((out / "portraits.json").read_text(encoding="utf-8"))
     assert root["chronicles"][0]["manifest"] == "7-1-6-1-2/portraits.json"
     assert root["missing"] == root["wanted"] > 0
-    chronicle = json.loads((out / "7-1-6-1-2" / "portraits.json").read_text())
+    chronicle = json.loads((out / "7-1-6-1-2" / "portraits.json").read_text(encoding="utf-8"))
     assert chronicle["schema"] == root["schema"]
     assert all(not p["have"] for p in chronicle["portraits"])
 
@@ -290,7 +290,7 @@ def test_cli_builds_one_chronicle_per_run(tmp_path, capsys):
     assert sorted(p.name for p in (out / "7-1-6-1-2" / "titles").iterdir()) == [
         "c_test.html", "k_testland.html", "x_mc_0.html"
     ]
-    landing = (out / "index.html").read_text()
+    landing = (out / "index.html").read_text(encoding="utf-8")
     assert 'href="7-1-6-1-2/index.html"' in landing and "576691683" not in landing
 
 
@@ -302,7 +302,7 @@ def test_two_runs_become_two_chronicles(tmp_path, capsys):
     assert "2 run(s) to build" in capsys.readouterr().err
     assert (out / "7-1-6-1-2" / "index.html").is_file()
     assert (out / "8-1-6-1-2" / "index.html").is_file()
-    landing = (out / "index.html").read_text()
+    landing = (out / "index.html").read_text(encoding="utf-8")
     assert landing.count('/index.html">') == 2
 
 
@@ -319,10 +319,10 @@ def test_a_chronicle_links_back_to_the_landing_page(tmp_path):
     two_snapshots(tmp_path)
     out = tmp_path / "site"
     main([str(tmp_path), "--title", "k_testland", "--out", str(out)])
-    assert 'href="../index.html">All chronicles' in (out / "7-1-6-1-2" / "index.html").read_text()
+    assert 'href="../index.html">All chronicles' in (out / "7-1-6-1-2" / "index.html").read_text(encoding="utf-8")
     assert 'href="../../index.html">All chronicles' in (
         out / "7-1-6-1-2" / "titles" / "k_testland.html"
-    ).read_text()
+    ).read_text(encoding="utf-8")
 
 
 def test_cli_rejects_an_unknown_title(tmp_path, capsys):
@@ -383,7 +383,7 @@ def test_the_infobox_is_a_grid_column_not_a_float(tmp_path):
     out = tmp_path / "site"
     write_site(build_wiki(views(early), "k_testland"), out)
     assert not re.search(r"float\s*:\s*(left|right)", STYLE)  # the declaration, not the prose
-    page_html = (out / "titles" / "k_testland.html").read_text()
+    page_html = (out / "titles" / "k_testland.html").read_text(encoding="utf-8")
     assert '<div class="page">' in page_html and '<aside class="infobox card">' in page_html
 
 
@@ -425,11 +425,11 @@ def test_the_subject_page_says_what_joined_and_left(tmp_path):
     wiki = build_wiki(views(early, late), "k_testland")
     out = tmp_path / "site"
     write_site(wiki, out)
-    kingdom_page = (out / "titles" / "k_testland.html").read_text()
+    kingdom_page = (out / "titles" / "k_testland.html").read_text(encoding="utf-8")
     assert "<h2>Vassalage</h2>" in kingdom_page
     assert "1 left" in kingdom_page and "Between <strong>1100.6.1</strong>" in kingdom_page
 
-    moved_page = (out / "titles" / "x_mc_0.html").read_text()
+    moved_page = (out / "titles" / "x_mc_0.html").read_text(encoding="utf-8")
     assert "1100.6.1 – 1120.1.1" in moved_page
     assert '../titles/c_test.html' in moved_page
 
@@ -462,7 +462,7 @@ def test_family_reaches_the_character_pages(tmp_path):
 
     out = tmp_path / "site"
     write_site(wiki, out)
-    page_html = (out / "characters" / "200.html").read_text()
+    page_html = (out / "characters" / "200.html").read_text(encoding="utf-8")
     assert "<h2>Family</h2>" in page_html and "Children" in page_html
     assert "Spouse" in page_html
 
@@ -481,7 +481,7 @@ def test_the_direct_line_is_promoted_to_pages_of_its_own(tmp_path):
     out = tmp_path / "site"
     write_site(wiki, out)
     assert (out / "characters" / "202.html").is_file()
-    assert '../characters/202.html' in (out / "characters" / "200.html").read_text()
+    assert '../characters/202.html' in (out / "characters" / "200.html").read_text(encoding="utf-8")
 
 
 def test_a_sibling_gets_a_page_and_no_siblings_takes_it_away(tmp_path):
@@ -578,10 +578,10 @@ def test_two_releases_still_build_one_chronicle(tmp_path):
     )
     out = tmp_path / "site"
     assert main([str(tmp_path), "--title", "k_testland", "--out", str(out)]) == 0
-    root = json.loads((out / "portraits.json").read_text())
+    root = json.loads((out / "portraits.json").read_text(encoding="utf-8"))
     assert len(root["chronicles"]) == 1
     assert root["chronicles"][0]["releases"] == ["0.0.2", "0.0.3"]
-    chronicle = json.loads((out / "7-1-6-1-2" / "portraits.json").read_text())
+    chronicle = json.loads((out / "7-1-6-1-2" / "portraits.json").read_text(encoding="utf-8"))
     assert [s["release"] for s in chronicle["saves"]] == ["0.0.2", "0.0.3"]
 
 
@@ -592,7 +592,7 @@ def test_a_directory_with_no_release_index_says_nothing_about_releases(tmp_path)
     assert read_releases(str(tmp_path)) == {}
     out = tmp_path / "site"
     main([str(tmp_path), "--title", "k_testland", "--out", str(out)])
-    chronicle = json.loads((out / "7-1-6-1-2" / "portraits.json").read_text())
+    chronicle = json.loads((out / "7-1-6-1-2" / "portraits.json").read_text(encoding="utf-8"))
     assert all("release" not in s for s in chronicle["saves"])
 
 
@@ -612,7 +612,7 @@ def test_a_title_bears_arms_of_its_own(tmp_path):
 
     out = tmp_path / "site"
     write_site(wiki, out)
-    assert f'src="../portraits/{arms.file}"' in (out / "titles" / "k_testland.html").read_text()
+    assert f'src="../portraits/{arms.file}"' in (out / "titles" / "k_testland.html").read_text(encoding="utf-8")
 
 
 def test_a_title_and_a_house_drawn_alike_share_one_file(tmp_path):
@@ -647,7 +647,7 @@ def test_a_character_page_says_the_culture_and_faith(tmp_path):
     wiki = build_wiki(views(early, late), "k_testland")
     out = tmp_path / "site"
     write_site(wiki, out)
-    page = (out / "characters" / "200.html").read_text()
+    page = (out / "characters" / "200.html").read_text(encoding="utf-8")
     assert "<th>Culture</th>" in page and "<th>Faith</th>" in page
     assert "../cultures/1.html" in page and "../faiths/1.html" in page
     assert "Testish-Farrish" in page and "Testarianism" in page
@@ -658,7 +658,7 @@ def test_a_faith_founded_in_the_run_says_so_on_its_page(tmp_path):
     wiki = build_wiki(views(early, late), "k_testland")
     out = tmp_path / "site"
     write_site(wiki, out)
-    page = (out / "faiths" / "1.html").read_text()
+    page = (out / "faiths" / "1.html").read_text(encoding="utf-8")
     assert "founded during the run" in page
     # 102 holds a title, so he has a page of his own to link
     assert "../characters/102.html" in page
@@ -671,11 +671,11 @@ def test_a_templated_culture_says_its_name_is_a_key(tmp_path):
     wiki = build_wiki(views(early, late), "k_testland")
     out = tmp_path / "site"
     write_site(wiki, out)
-    keyed = (out / "cultures" / "0.html").read_text()
+    keyed = (out / "cultures" / "0.html").read_text(encoding="utf-8")
     assert "localization key" in keyed and "Testish" in keyed
     # and it does not claim that a template says when the culture began
     assert "can still have emerged during this run" in keyed
-    made = (out / "cultures" / "1.html").read_text()
+    made = (out / "cultures" / "1.html").read_text(encoding="utf-8")
     assert "no template for this culture" in made
     # a created culture shows where it came from, and the parent is a link
     assert "../cultures/0.html" in made
@@ -715,7 +715,7 @@ def test_every_manifest_says_where_the_naming_rule_is_written(tmp_path):
 
     out = tmp_path / "site"
     assert main([str(tmp_path), "--out", str(out), "--title", "k_testland"]) == 0
-    root = json.loads((out / "portraits.json").read_text())
+    root = json.loads((out / "portraits.json").read_text(encoding="utf-8"))
     assert root["docs"]["names"].endswith("COMPANION_PROPOSAL.md#the-rule")
 
 
@@ -769,9 +769,9 @@ def test_a_page_says_what_its_character_held_outside_the_chronicle(tmp_path):
 
     out = tmp_path / "site"
     write_site(wiki, out)
-    nephew = (out / "characters" / "206.html").read_text()
+    nephew = (out / "characters" / "206.html").read_text(encoding="utf-8")
     assert "<h2>Titles held elsewhere</h2>" in nephew and "Empty Duchy" in nephew
-    assert "Titles held elsewhere" not in (out / "characters" / "200.html").read_text()
+    assert "Titles held elsewhere" not in (out / "characters" / "200.html").read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------- following a title
@@ -821,9 +821,9 @@ def test_a_title_gone_from_later_saves_is_held_when_last_seen_not_current(tmp_pa
     assert tenure.open and not wiki.is_current(company, tenure)
     out = tmp_path / "site"
     write_site(wiki, out)
-    page = (out / "titles" / "x_mc_0.html").read_text()
+    page = (out / "titles" / "x_mc_0.html").read_text(encoding="utf-8")
     assert "held when last seen, 1100.6.1" in page and ">current<" not in page
-    assert "held when last seen, 1100.6.1" in (out / "characters" / "201.html").read_text()
+    assert "held when last seen, 1100.6.1" in (out / "characters" / "201.html").read_text(encoding="utf-8")
 
 
 
@@ -855,7 +855,7 @@ def test_a_reign_ends_at_the_holders_death_and_the_rest_is_a_gap(tmp_path):
 
     out = tmp_path / "site"
     write_site(wiki, out)
-    page = (out / "titles" / "k_testland.html").read_text()
+    page = (out / "titles" / "k_testland.html").read_text(encoding="utf-8")
     assert "1080.1.1 – 1090.2.1</td><td colspan=\"2\"><span class=\"tag\">no holder recorded" in page
 
 

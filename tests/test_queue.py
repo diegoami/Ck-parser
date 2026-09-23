@@ -20,7 +20,7 @@ def built(tmp_path):
 
 def test_every_portrait_says_why_its_character_is_in_the_queue(tmp_path):
     site = built(tmp_path)
-    root = json.loads((site / "portraits.json").read_text())
+    root = json.loads((site / "portraits.json").read_text(encoding="utf-8"))
     assert root["schema"] == "ck3-images/3"
     by_id = {e["character"]: e for e in load_entries(site / "portraits.json")}
     # 200 holds the kingdom, 202 is his wife, 206 his titled nephew
@@ -34,7 +34,7 @@ def test_ids_writes_one_file_per_save_rulers_first(tmp_path):
     out = tmp_path / "ids"
     assert queue_main(["ids", str(site / "portraits.json"), "--out", str(out)]) == 0
     (only,) = out.glob("*.ids")
-    ids = only.read_text().split()
+    ids = only.read_text(encoding="utf-8").split()
     roles = {e["character"]: e["role"] for e in load_entries(site / "portraits.json")}
     order = [roles[int(i)] for i in ids]
     assert order == sorted(order, key=["ever-holder", "kin", "titled-kin"].index)
@@ -42,7 +42,7 @@ def test_ids_writes_one_file_per_save_rulers_first(tmp_path):
 
     narrow = tmp_path / "narrow"
     queue_main(["ids", str(site / "portraits.json"), "--out", str(narrow), "--role", "ever-holder"])
-    assert {roles[int(i)] for i in next(narrow.glob("*.ids")).read_text().split()} == {"ever-holder"}
+    assert {roles[int(i)] for i in next(narrow.glob("*.ids")).read_text(encoding="utf-8").split()} == {"ever-holder"}
 
 
 def test_collect_gives_a_capture_the_name_the_page_links(tmp_path):
