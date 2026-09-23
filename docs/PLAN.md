@@ -10,11 +10,15 @@ the assumption that the player does not save-scum.
 Everything in the "Verified against the sample saves" section was checked against
 three release assets from the same run:
 
-| Label | Release | File | Size | sha256 |
+They now live on **ck_wiki's** Releases, tagged by run seed; the batch-numbered
+releases in the second column are where they used to sit in this repository, and
+are kept here because §7 argues from them.
+
+| Label | Release (ck_wiki / was) | File | Size | sha256 |
 |---|---|---|---|---|
-| A | 0.0.4 | `Fylkir_Asa_of_Immasonian_Fylkirate_1358_09_13.ck3` | 72.8 MB | `69b78aae…8b57` |
-| B | 0.0.3 | `Fylkir_Ludwig_of_Immasonian_Fylkirate_1361_01_17.ck3` | 73.1 MB | `a2b12bbb…a37b` |
-| C | 0.0.2 | `Fylkir_Ludwig_of_Immasonian_Fylkirate_1364_03_10.ck3` | 73.8 MB | `919ad2c7…946a` |
+| A | `576691683` / 0.0.4 | `Fylkir_Asa_of_Immasonian_Fylkirate_1358_09_13.ck3` | 72.8 MB | `69b78aae…8b57` |
+| B | `576691683` / 0.0.3 | `Fylkir_Ludwig_of_Immasonian_Fylkirate_1361_01_17.ck3` | 73.1 MB | `a2b12bbb…a37b` |
+| C | `576691683` / 0.0.2 | `Fylkir_Ludwig_of_Immasonian_Fylkirate_1364_03_10.ck3` | 73.8 MB | `919ad2c7…946a` |
 
 A succession (Åsa → Ludwig, 1360.6.8) falls between A and B, so the chain covers
 both a ruler change and a same-ruler interval.
@@ -646,22 +650,24 @@ after their recipe (§11); portrait names did not change.
 absence of the file as the truth and the flag as a hint. `saves` repeats the
 checksum map so the two sides can be checked against each other.
 
-### A release is a batch, not a run
+### A release tag is filing, not identity
 
 `scripts/fetch_saves.sh` records which release each save was published in, and
 that tag rides in the manifest's `saves` entries and in the root listing's
 `releases`. It says **where a save came from and where its harvested images
 belong**. It never decides which chronicle a save joins.
 
-It cannot, and the published data already shows why: the Germania run's three
-saves are on releases **0.0.2, 0.0.3 and 0.0.4**, one save each. Treating a
-release as a run would split that chronicle into three, each with a single
-snapshot, losing every succession the run recorded between them. Runs are
-decided by the fingerprint (§3) and nothing else.
+The saves now sit on **ck_wiki's** Releases, tagged by run seed —
+`1370892195`, `633048653`, `576691683` — so a release does currently hold
+exactly one run, and the tag is even a component of the run id.
 
-The inverse is a useful convention rather than a rule: keeping one run's saves
-out of another run's release makes a release a clean delivery unit. Nothing
-enforces it, and nothing breaks if it is ignored.
+That is a convenience and not something to start depending on. Until the move,
+the Germania run's three saves were on **0.0.2, 0.0.3 and 0.0.4**, one save
+each: reading the release as the run would have split that chronicle into three
+single-snapshot wikis and lost every succession between them. Nothing about the
+format enforces the new filing either, and the fingerprint costs ~3 ms to
+compute. Runs are decided by the fingerprint (§3) and nothing else, and code
+that reads the tag for grouping is wrong however neat the tags look today.
 
 Delivery is a git push. `diegoami/ck_wiki` is where the two projects meet: the
 companion commits images to its flat `images/` directory, that push triggers the
@@ -672,7 +678,9 @@ save, so nothing collides.
 `ck_wiki` is also where the manifests live in git, committed back by the build,
 so the companion reads its queue without going through Pages or parsing HTML.
 The pages themselves are never committed: they are rebuilt from this repository
-and the saves on its Releases, and published as a Pages artifact.
+and the saves on **ck_wiki's own** Releases, and published as a Pages artifact.
+That makes ck_wiki the single place the run's inputs and outputs meet — saves,
+images, manifests and pages — and leaves this repository holding only code.
 
 ### Houses and dynasties
 
@@ -907,18 +915,23 @@ later word on it, and listing the person under both names them twice.
 ### Who gets a page
 
 Holding a title is what put the ever-holders in. The **direct line** — parents,
-spouses, former spouses and children — is in by blood or marriage, and gets the
-same page and the same portrait rule. Siblings do not: they are named wherever
-they appear, and promoting them would buy 689 more pages for the Germania
-chronicle that are mostly dead ends.
+spouses, former spouses, children and **siblings** — is in by blood or marriage,
+and gets the same page and the same portrait rule.
+
+Siblings were left out at first, as 689 pages of mostly dead ends. That was the
+wrong way to count them. A succession is usually a quarrel between siblings: the
+brother who was passed over is the reason a reign happened at all, and a
+chronicle that can name him but not say what became of him has dropped the half
+of the story that explains the other half. They are the widest ring that still
+earns its pages, and `--no-siblings` goes back to the narrow line.
 
 Measured on the Germania chronicle, across its three saves:
 
-| | pages |
-|---|---|
-| ever-holders alone | 952 |
-| **+ the direct line** | **5 550** |
-| + siblings as well | 6 251 |
+| | pages | images wanted |
+|---|---|---|
+| ever-holders alone | 952 | 53 |
+| + parents, spouses, children | 6 651 | 2 313 |
+| **+ siblings** | **7 393** | **2 470** |
 
 The portrait queue moves with it, but only for the living: 53 → **1 389**,
 because a ruler's spouse and children are usually alive when the ruler is,
@@ -1205,3 +1218,81 @@ outside the lineage is.
 
 Measured on the Germania run: 63 cultures and 21 faiths across the three saves,
 adding 84 pages to the chronicle's 1 297.
+
+---
+
+## 14. Incremental builds: the digest
+
+A build reads each save's character sections **five times over**: once for the
+lineage's holders, once for the family inversion, once to promote the direct
+line, once to name the relatives beyond it, once more for a faith's founder.
+Every one is a pass over a 280 MB gamestate, the inversion cannot exit early
+(§10), and all of it is paid again in full on the next build even for saves that
+have not changed.
+
+That is where a build's minutes go, and it is why the three Germania saves took
+~10 minutes. Worse, it grows with every save added to a run: the cost of adding
+one snapshot was the cost of re-reading all of them.
+
+### One digest per save
+
+So each save's characters are written once to a digest and read from there
+afterwards. Measured on the 1364 save:
+
+| | |
+|---|---|
+| characters stored | 281 916 |
+| size, gzipped JSONL | **11 MB** |
+| to write (one pass) | 54 s |
+| **to read back** | **2.1 s** |
+
+Five passes at ~40 s each become one read at two seconds. Adding a save to a run
+now costs that one save's pass, not the run's.
+
+### What it stores, and what it deliberately does not
+
+Exactly what this project asks a character record for: name, birth, sex, house,
+culture, faith, death and the `family_data` links. Nothing else in a record is
+read anywhere here, and a digest holding more would be a second, slower copy of
+the save. The keys are single letters because there are 281 916 rows and
+`"first_name"` over that many is megabytes of nothing.
+
+It is a **cache, not a format**. It is keyed by the save's fingerprint and the
+size of the file, carries `SCHEMA` in its header, and is ignored — never
+migrated — whenever that changes. A digest that cannot be read, is stale, or is
+half-written costs a slow build and never a wrong one: every failure path
+returns nothing and the save is read instead. It is written to a temporary name
+and renamed, so an interrupted build leaves nothing a later one would trust.
+
+`.ck3cache/` is git-ignored, and `--no-cache` turns the whole thing off.
+
+### Why the characters and nothing else
+
+The other sections are read too — titles, houses, dynasties, arms, cultures,
+faiths — and none of them is worth caching yet. `landed_titles` is one pass of
+about two seconds; the rest are smaller still. The character sections are ~60%
+of a gamestate's lines and are read five times; everything else is read once.
+Caching them as well is a later step and would not change a build's shape.
+
+### What it is worth, end to end
+
+The Germania chronicle, three saves, whole build including the family pass:
+
+| | time |
+|---|---|
+| before this, and without sibling pages | 9 m 55 |
+| **cold** — no digests yet, so it writes all three | **3 m 51** |
+| **warm** — the digests already there | **1 m 06** |
+
+Even the cold build is faster than what it replaced, because writing one digest
+costs one pass and saves five. The three digests take 31 MB.
+
+That is 9 m 55 → 1 m 06 while the chronicle grew from 6 651 pages to 7 393, and
+it is now flat in the number of saves already built: adding a fourth snapshot
+costs that snapshot's pass, not a fourth of the whole.
+
+### The property that matters
+
+A cache may change how long a build takes and nothing else. `tests/test_digest.py`
+builds the same run three times — once with no cache, once filling one, once
+reading it — and asserts the rendered sites are byte-identical.

@@ -36,6 +36,18 @@ SCHEMA = "ck3-images/2"
 #: The manifest's name, in each chronicle and at the root.
 MANIFEST = "portraits.json"
 
+#: Where the naming rule is written down, carried in every manifest.
+#:
+#: A consumer that has the queue but not the rule can still deliver the wrong
+#: file name, and the rule is the one thing both projects must agree on without
+#: talking to each other. So the manifest says where it is written rather than
+#: assuming whoever reads it already knows.
+DOCS = {
+    "names": "https://github.com/diegoami/Ck-parser/blob/main/docs/COMPANION_PROPOSAL.md#the-rule",
+    "contract": "https://github.com/diegoami/Ck-parser/blob/main/docs/COMPANION_PROPOSAL.md",
+    "images": "https://github.com/diegoami/ck_wiki/tree/main/images",
+}
+
 
 def wanted_images(wiki: Wiki, have: set[str]) -> list[dict]:
     """Every image the wiki links, portraits first, each flagged with `have`."""
@@ -102,6 +114,7 @@ def chronicle_manifest(
     images = wanted_images(wiki, have)
     return {
         "schema": SCHEMA,
+        "docs": DOCS,
         "chronicle": slug,
         "run_id": wiki.run_id,
         "title": wiki.title_key,
@@ -140,6 +153,7 @@ def write_root_manifest(out: Path, chronicles: list[dict]) -> None:
         out / MANIFEST,
         {
             "schema": SCHEMA,
+            "docs": DOCS,
             "chronicles": chronicles,
             "wanted": sum(c["wanted"] for c in chronicles),
             "missing": sum(c["missing"] for c in chronicles),

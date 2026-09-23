@@ -17,7 +17,9 @@ def test_parents_are_found_by_inverting_child_lists(tmp_path):
 def test_a_parents_own_record_gives_children_and_spouses(tmp_path):
     parent = read_family(save(tmp_path), {200})[200]
     assert parent.children == [203, 204] and parent.spouses == [202]
-    assert parent.parents == []  # nobody claims the founder of this line
+    # 102 held the kingdom until 1090 and 103 held nothing; both claim 200 as a
+    # child, which is the only way a save ever states a parent (docs/PLAN.md §10)
+    assert parent.parents == [102, 103]
 
 
 def test_siblings_come_from_the_parents_whole_brood(tmp_path):

@@ -13,15 +13,20 @@ yours. Three repositories, three jobs:
 
 | Repository | Job | What you do with it |
 |---|---|---|
-| [`diegoami/Ck-parser`](https://github.com/diegoami/Ck-parser) | reads the saves, writes the pages | nothing — but the saves are attached to its **Releases**, and those are the files you harvest from |
-| [`diegoami/ck_wiki`](https://github.com/diegoami/ck_wiki) | publishes the wiki, holds the images | **read** `portraits.json` for your queue; **push** your captures to `images/` |
+| [`diegoami/Ck-parser`](https://github.com/diegoami/Ck-parser) | reads the saves, writes the pages | nothing — it holds code and nothing else |
+| [`diegoami/ck_wiki`](https://github.com/diegoami/ck_wiki) | the saves, the images, the manifests, the published pages | **everything**: upload saves to its Releases, read `portraits.json` for your queue, push captures to `images/` |
 | `diegoami/ck_portrait_generator` | captures the images | unchanged, except for where the queue comes from and what the files are called |
 
-`ck_wiki` is the one you need write access to. Its CI clones the parser, fetches
-the saves from the parser's Releases, rebuilds the site, commits the refreshed
-manifests back, and deploys to <https://diegoami.github.io/ck_wiki/>. Pushing to
-`images/` is what triggers that, so a push both delivers the images and
-republishes the pages that link them.
+`ck_wiki` is the one you need write access to, and as of now it is the *only*
+one either of us puts files into. The saves used to be on `Ck-parser`'s Releases
+and have moved here, so `ck_wiki` now holds every input and every output of a
+run: saves, images, manifests, pages. `Ck-parser` is code.
+
+Its CI clones the parser, fetches the saves from **this repository's** Releases,
+rebuilds the site, commits the refreshed manifests back, and deploys to
+<https://diegoami.github.io/ck_wiki/>. Pushing to `images/` is what triggers
+that, so a push both delivers the images and republishes the pages that link
+them.
 
 ## What changes for you
 
@@ -155,7 +160,7 @@ published in:
 ```json
 "saves": [ { "file": "Fylkir_Ludwig_of_Immasonian_Fylkirate_1364_03_10.ck3",
              "checksum": "5a86b836cd32", "date": "1364.3.10",
-             "release": "0.0.4" } ]
+             "release": "576691683" } ]
 ```
 
 and the root listing gives the releases a chronicle draws on, which may be
@@ -165,15 +170,138 @@ several.
 site serves and what triggers a rebuild. The release is the archive; the
 directory is the live copy. Putting a file in both is deliberate.
 
-### One thing a release is *not*
+### A release tag is filing, and the build does not depend on it
 
-It is not a run. Do not group by it, and do not assume the saves in one release
-belong together. Ours do not: the Germania chronicle's three saves are on
-releases **0.0.2, 0.0.3 and 0.0.4**, one save each, and grouping by release
-would split one playthrough into three single-snapshot chronicles. Which saves
-belong to which run is decided by their fingerprint — seed, game version,
-bookmark date — and the manifest has already done it for you. The `chronicle`
-a manifest belongs to is the answer; `release` is just where the file came from.
+The releases are now tagged with the run's **seed** — `576691683`,
+`633048653`, `1370892195` — so one release does hold one run, which is the
+tidy arrangement and the one to keep to.
+
+But the build does not read the tag to decide anything. `fetch_saves.sh` reads
+**every** release, deduplicates by checksum, and groups the saves by their own
+fingerprint (seed, game version, bookmark date). Two consequences worth having
+in writing:
+
+* **A save filed under the wrong tag still builds correctly.** It lands in the
+  right chronicle regardless, because the fingerprint decides. Only the
+  archival tidiness suffers, and that is fixable later by moving the asset.
+* **A save from a brand-new run does not need you to know its seed.** Put it
+  anywhere — a release called `incoming` is fine — and the build will discover
+  the run and create its chronicle. Our reply on the issue tells you the seed
+  it computed, so the release can be named properly afterwards.
+
+So: group your uploads by run because it keeps the archive readable, not
+because anything breaks if you do not. The `chronicle` field in a manifest is
+the authoritative answer to which run a save belongs to; `release` is where the
+file happens to sit.
+
+## The loop, end to end
+
+Neither side watches the other. Each does its part and then says so, and an
+issue is how it says so — readable by a person and by an agent, and a durable
+record of what was asked and answered. The trigger for a *rebuild* is a git
+push, not the issue; the issue is the handshake.
+
+```
+  you                                        us
+  ───                                        ──
+  1. upload save  ──→ ck_wiki Releases
+     send the dispatch (starts the build)
+     open an issue on Ck-parser  ─────────→  2. build the wiki from it
+                                                manifests committed to ck_wiki
+  4. read the queue  ←── portraits.json  ←──  3. open an issue here with
+     capture the images                          the counts and the links
+     push to ck_wiki images/  ───────────────→ 5. rebuild fires on that push
+     (an issue is a courtesy, not a trigger)     images appear on the pages
+```
+
+### 1. You add a save
+
+Upload the `.ck3` to a release on **`diegoami/ck_wiki`**, in the release for
+that run where you know it — you hold your saves per run already, so this
+costs you nothing. If it is a run we have never seen, any release will do; see
+*A release tag is filing* above for why nothing breaks.
+
+Then **send the dispatch**, which is what actually starts the build:
+
+```sh
+gh api repos/diegoami/ck_wiki/dispatches -f event_type=saves-updated
+```
+
+and open an issue on `diegoami/Ck-parser` titled something like
+**"New save: `<file name>`"**. The dispatch starts a machine; the issue tells a
+person. What we need in the issue:
+
+* the file name, and the release you put it on;
+* if you know it, which run it belongs to and which existing chronicle that is.
+
+That is all. We can derive everything else from the file.
+
+### 2. We build the wiki from it
+
+We fetch every save from `ck_wiki`'s Releases, group them into runs by
+fingerprint, and rebuild. The build writes `portraits.json` at the site root
+and one per chronicle, and CI **commits those manifests back into `ck_wiki`**,
+so your queue is in git and needs no HTML parsing and no Pages round-trip.
+
+Every manifest carries a `docs` block pointing at the rule for deriving file
+names, so a consumer that has the queue always has the rule with it:
+
+```json
+"docs": {
+  "names": ".../docs/COMPANION_PROPOSAL.md#the-rule",
+  "contract": ".../docs/COMPANION_PROPOSAL.md",
+  "images": "https://github.com/diegoami/ck_wiki/tree/main/images"
+}
+```
+
+### 3. We tell you what is wanted
+
+We reply on your issue, or open one on `ck_portrait_generator`, with:
+
+* the **chronicle slug** and the **run seed** we computed — so you can name the
+  release properly if this was a new run;
+* how many images are wanted and how many are still missing;
+* the link to that chronicle's `portraits.json`;
+* the reminder that captures go to `ck_wiki`'s `images/`, flat.
+
+### 4. You capture and push
+
+Read the manifest, take the entries with `"have": false`, capture them, and push
+them to `ck_wiki`'s `images/` directory under exactly the `file` name the
+manifest gives.
+
+**That push is the trigger.** `ck_wiki`'s workflow runs on any push touching
+`images/**`, so delivering the images and republishing the pages are the same
+action. An issue telling us you have pushed is welcome as a record, but nothing
+waits on it.
+
+### 5. There is no step 5
+
+The rebuild that step 4 triggered has already folded the images in. The pages
+link every image by a derived name whether or not the file exists, so an image
+appearing is the whole of "integrating" it — nothing is regenerated, nothing is
+rewired, and `have` flips to `true` in the next manifest.
+
+### How step 1 actually starts the build
+
+Uploading a save to a `ck_wiki` release does not dependably start anything on
+its own. Adding an asset to a release that **already exists** — which is how a
+save is normally added, into the release for its run — does not reliably fire a
+release event, so a trigger relying on that would work for a new run and stay
+silent for every save after the first. `ck_wiki`'s workflow has an `on: release`
+trigger for the new-run case, but the dependable path is one API call:
+
+```sh
+gh api repos/diegoami/ck_wiki/dispatches -f event_type=saves-updated
+```
+
+Send that after uploading, and the build starts immediately. It is the same
+kind of call as opening the issue, and it is what an agent should send when it
+has finished step 1.
+
+If it is ever missed, nothing is lost: `ck_wiki` rebuilds on a Monday schedule,
+so a save can sit unbuilt for at most a week. The issue in step 1 remains worth
+opening either way — the dispatch starts a machine, the issue tells a person.
 
 ## What we ask you to build
 
@@ -270,6 +398,8 @@ that or an offer to do less work.
 | what produces the manifests | `ck3wiki/manifest.py` |
 | the reasoning | `docs/PLAN.md` §7 (images), §10 (family), §11 (coats of arms) |
 | the same contract from the delivery side | `diegoami/ck_wiki`'s README |
+| the loop, as a checklist | *The loop, end to end*, above |
+| where the saves live | `diegoami/ck_wiki`'s Releases, tagged by run seed |
 
 Questions, disagreements and "this would be easier if you sent X instead" are
 all welcome — the shape of the hand-off is ours to change, and it has changed
