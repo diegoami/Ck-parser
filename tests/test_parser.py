@@ -62,3 +62,35 @@ def test_read_top_level_seeks_deep_section():
 
 def test_date_key():
     assert date_key("867.1.1") < date_key("1066.9.15") < date_key("1066.10.1")
+
+
+def test_a_hash_comment_is_refused_not_parsed_as_keys():
+    import pytest
+
+    from ck3parser.parser import FormatError, tokenize_lines
+
+    with pytest.raises(FormatError, match=r"'#' comment, line 2 .*# a note"):
+        list(tokenize_lines(["a=1\n", "b=2 # a note\n"]))
+    # a '#' inside a string is text, as it always was
+    assert [str(t) for t in tokenize_lines(['name="No. #1"\n'])] == ["name", "=", "No. #1"]
+
+
+def test_a_string_may_run_over_several_lines():
+    from ck3parser.parser import Quoted, tokenize_lines
+
+    # a truce's description in the Germania saves: `name="` then the text on the
+    # next line. It used to lose both quotes and turn the words into keys.
+    tokens = list(tokenize_lines(['truce={ name="\n', 'Truce signed for gold" date=1358.10.12 }\n']))
+    assert [str(t) for t in tokens] == ["truce", "=", "{", "name", "=", "\nTruce signed for gold",
+                                        "date", "=", "1358.10.12", "}"]
+    assert isinstance(tokens[5], Quoted)
+    assert len(list(tokenize_lines(["a=1   \n", "\n", "  \t\n"]))) == 3  # whitespace is still whitespace
+
+
+def test_a_string_never_closed_is_refused_not_truncated():
+    import pytest
+
+    from ck3parser.parser import FormatError, tokenize_lines
+
+    with pytest.raises(FormatError, match=r"quoted string is never closed, line 1"):
+        list(tokenize_lines(['b={ name="Half }\n', "c=1\n"]))

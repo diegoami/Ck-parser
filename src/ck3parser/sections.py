@@ -17,12 +17,13 @@ pipeline happens to read.
 from __future__ import annotations
 
 import re
+import sys
 from collections import Counter
 from dataclasses import dataclass
 from typing import Iterable, Iterator
 
 from .container import open_gamestate_text
-from .parser import CLOSE, OPEN, tokenize_lines
+from .parser import CLOSE, OPEN, FormatError, tokenize_lines
 
 #: A top-level key: an identifier at column 0 followed by ``=``.
 TOP_LEVEL = re.compile(r"^([A-Za-z_][A-Za-z_0-9]*)=(\{?)")
@@ -157,7 +158,11 @@ def main(argv: list[str] | None = None) -> int:
     print(format_index(summarize(sections), total))
     print(f"\n{len(sections)} top-level entries, {len(summarize(sections))} distinct keys, {total:,} lines")
     if args.verify:
-        report = verify_parse(args.save)
+        try:
+            report = verify_parse(args.save)
+        except FormatError as exc:
+            print(f"parse failed: {exc}", file=sys.stderr)
+            return 1
         print(f"whole-file parse: {report}")
         return 0 if report.ok else 1
     return 0

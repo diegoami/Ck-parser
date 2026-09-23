@@ -91,16 +91,64 @@ def convert(atom: str) -> Any:
     return atom
 
 
+class FormatError(ValueError):
+    """The text breaks an assumption the parser makes about the save format.
+
+    Raised rather than parsed around: guessing past a construct the saves have
+    never contained produces a wrong wiki with no sign of it (PLAN.md §5).
+    """
+
+
+def _format_error(what: str, number: int, line: str) -> FormatError:
+    shown = line.strip()
+    shown = shown if len(shown) <= 80 else shown[:77] + "..."
+    return FormatError(
+        f"{what}, line {number:,} of the text read: {shown!r}. The parser assumes the save"
+        " has none (docs/PLAN.md §5); if a new game version writes them, teach it to."
+    )
+
+
+#: the rest of a quoted string that opened on an earlier line: text up to the
+#: first unescaped quote
+_CLOSING = re.compile(r'((?:[^"\\]|\\.)*)"')
+
+
 def tokenize_lines(lines: Iterable[str]) -> Iterator[Any]:
-    """Yield tokens: the strings ``{`` ``}`` ``=`` (as :class:`_Sym`), :class:`Quoted`, or bare ``str``."""
-    for line in lines:
+    """Yield tokens: the strings ``{`` ``}`` ``=`` (as :class:`_Sym`), :class:`Quoted`, or bare ``str``.
+
+    A quoted string may run over several lines, newlines included: the Germania
+    saves write a truce's description that way (PLAN.md §5), which an earlier
+    version of this tokenizer cut into stray words without a sign. A string
+    never closed, and a ``#`` comment, which no save has contained and which
+    would otherwise arrive as words parsed as keys, raise :class:`FormatError`.
+    """
+    number = 0
+    pending: list[str] | None = None  # the parts of a string still open
+    opened_at = 0
+    for number, line in enumerate(lines, 1):
         pos = 0
         n = len(line)
+        if pending is not None:
+            closing = _CLOSING.match(line)
+            if closing is None:
+                pending.append(line)
+                continue
+            pending.append(closing.group(1))
+            yield Quoted("".join(pending))
+            pending = None
+            pos = closing.end()
         while pos < n:
             m = _TOKEN.match(line, pos)
             if not m or m.end() == pos:
-                break  # trailing whitespace / newline
+                # only whitespace is left, unless a quote opened and did not
+                # close on this line: every other character matches a pattern
+                rest = line[pos:].lstrip()
+                if rest:
+                    pending, opened_at = [rest[1:]], number
+                break
             pos = m.end()
+            if m.group(5) is not None and m.group(5).startswith("#"):
+                raise _format_error("a '#' comment", number, line)
             if m.group(1):
                 yield OPEN
             elif m.group(2):
@@ -111,6 +159,8 @@ def tokenize_lines(lines: Iterable[str]) -> Iterator[Any]:
                 yield Quoted(m.group(4))
             else:
                 yield m.group(5)
+    if pending is not None:
+        raise _format_error("a quoted string is never closed", opened_at, '"' + pending[0])
 
 
 class _Sym:
