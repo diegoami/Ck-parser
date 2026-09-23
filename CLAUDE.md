@@ -28,6 +28,50 @@ uv run --env-file .env python -m ck3wiki.prose saves --out prose       # ... fro
 uv run python -m ck3wiki.build saves --out site --prose prose            # ... folded into the pages
 ```
 
+## Process
+
+Implement on a branch, open a PR that references its issue, and let the owner
+merge. A change that needs a decision first — a new contract, a trade-off with
+two defensible answers — is written up as a proposal on its issue (the problem,
+findings with `file:line`, the options and their implications, a recommended
+default) before any code.
+
+### Independent review (when Claude implements)
+
+Claude does the work itself and does not spawn its own reviewer. At each
+milestone it gives the owner a prompt for the **independent reviewer**: a
+different model, in whatever tool the owner picks (OpenCode with the owner's
+Zen key, Codex, or another), in a fresh session every time. The review is
+**offered, never waited on**: the owner's agreement starts a branch and the
+owner's decision merges, reviewed or not. When a review runs, it is recorded
+on the thread the milestone already has:
+
+| Milestone | Thread | Offer the prompt |
+|---|---|---|
+| Design written | the proposal issue | with the proposal |
+| PR implementing a design, gates green | the PR | when the PR is ready to merge |
+| Merged work, looked back at | a tracking issue naming the range | when the owner asks |
+
+A review costs the owner a round, so it is for **milestones only**. A
+robustness fix that implements no proposal, a process or docs change, or a
+re-review gets no prompt by default: Claude verifies it itself and says how in
+the PR, and when a review might still be worth it, says so in one line.
+
+Every milestone PR body carries a `Review:` line Claude keeps current:
+`not run`, `AGREE at <sha>`, or `BLOCK at <sha>: #n, #m`. A review can run after
+the merge, against the merged commit; its findings are ordinary issues.
+
+The reviewer posts to GitHub itself: **one issue per reproduced finding**,
+labelled `review` plus a category (`bug`, `robustness`, `tests`, `design`,
+`cleanup`, `documentation`), and **always one verdict comment** on the thread —
+AGREE, or BLOCK when any finding is MUST-FIX. Severities are MUST-FIX, SHOULD
+and OUT OF SCOPE; none locks anything, the owner decides.
+
+The `review-handoff` skill holds the prompt template. When the owner says the
+review is in, read it from GitHub, reproduce each finding before acting on it,
+and fix it (`Fixes #n`) or rebut it with evidence on the issue. Owner decisions
+go to the owner with a recommended default, not into the code.
+
 ## Rules
 
 - Never open a save or its `gamestate` with Read, `cat`, `less` or an unbounded
