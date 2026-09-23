@@ -13,11 +13,14 @@ This bridges both ends until it does, so the queue works today:
     one ``<save>.ids`` per save, the ids still missing from it, rulers first,
     in the one-id-per-line form the harvester's ``--ids-file`` takes. One save
     per file because a capture needs its save loaded, and loading is the slow
-    step: one load, then every id alive in it.
+    step: one load, then every id alive in it. Give each save its **own**
+    harvester ``--out``: its resume manifest keys on the character alone, so
+    in a shared directory everyone captured in one save is skipped in the next.
 ``collect``
     copies the harvester's ``<id>_<save date>.png`` files to the names the
     wiki links, found in the queue by character and save date, ready to commit
-    to ck_wiki's ``images/``. Copies, never moves; never overwrites.
+    to ck_wiki's ``images/``. Copies, never moves; never overwrites. Run it
+    once per save's output directory.
 
 MANIFEST may be a chronicle's ``portraits.json`` or the root one, which names
 every chronicle's.

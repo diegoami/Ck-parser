@@ -386,6 +386,9 @@ today:
     python -m ck3wiki.queue collect ck_wiki/portraits.json --from <your output> --to ck_wiki/images/
 
 `ids` writes one `<save>.ids` per save for your `--ids-file`, rulers first.
+Give each save its own `--out`: your `manifest.jsonl` keys on the character
+alone, so in one shared directory everyone captured in the first save would
+be skipped in the second (your roadmap item 2 already names the fix).
 `collect` copies your `<id>_<save date>.png` captures to the names the wiki
 links — today those differ, so without it a harvest lands where no page looks.
 

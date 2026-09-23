@@ -149,7 +149,12 @@ class Relative:
 
 
 #: why a character has a page, most important first: held a title of the
-#: wiki; the direct line of someone who did; the ring beyond it, titled
+#: wiki; the direct line of someone who did; the ring beyond it, titled.
+#: One role each, and the first that applies wins: someone can be both a
+#: ruler and a ruler's son, and is then an ever-holder. The order is kept by
+#: construction -- ever-holders are merged before the direct line is promoted,
+#: and the direct line before the ring beyond it, and a role is only set when
+#: a character is first added.
 ROLES = ("ever-holder", "kin", "titled-kin")
 
 #: highest first, the order a list of someone's titles reads in
