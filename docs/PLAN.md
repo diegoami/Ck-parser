@@ -1390,10 +1390,41 @@ left for the writer to work out. The first template run proved why: it wrote
 | backend | what | for |
 |---|---|---|
 | `template` | fixed sentences, no model | tests, and the pipeline itself |
-| `openai` | `POST {url}/chat/completions`, stdlib `urllib` | Ollama (`http://localhost:11434/v1`, the default), llama.cpp server, LM Studio, vLLM |
+| `openai` | `POST {url}/chat/completions`, stdlib `urllib` | OpenCode Zen, Ollama (`http://localhost:11434/v1`, the default), llama.cpp server, LM Studio, vLLM |
 
-A `<think>` block from a reasoning model is dropped before the check. An API key,
-if a server wants one, comes from `CK3_PROSE_API_KEY`. No SDK is imported.
+A `<think>` block from a reasoning model is dropped before the check. No SDK is
+imported. Backend, URL, model and key are read from `CK3_PROSE_BACKEND`,
+`CK3_PROSE_URL`, `CK3_PROSE_MODEL` and `CK3_PROSE_API_KEY`, so a local run is
+`uv run --env-file .env python -m ck3wiki.prose ...` (`.env.example` has the
+lines). The key comes only from the environment and is never printed. A refused
+key, no credit or no server stops the run with the server's own reason (exit
+2): the next page would fail the same way. A run ends with the tokens the server
+says it billed, so its cost is read, not estimated.
+
+### OpenCode Zen, the first provider
+
+OpenCode Zen (`https://opencode.ai/zen/v1`, bearer key, pay-as-you-go) serves
+its DeepSeek, GLM, Kimi and MiniMax models on `chat/completions`, so the
+`openai` backend reaches them unchanged. Claude and Qwen are on an
+Anthropic-style `/messages` endpoint and GPT on `/responses`; neither is wired,
+on purpose (Claude is too dear for bulk prose). OpenCode Go, the $10/month
+plan, is the same protocol at `https://opencode.ai/zen/go/v1`. Checked
+against the live endpoint: no key gives `HTTP 401 … "Missing API key."`.
+
+Prices per 1M tokens, input / output, September 2026:
+
+| model | price | a trial of 4 Germania pages | ~950 Germania ever-holders |
+|---|---|---|---|
+| `deepseek-v4-pro` | $1.74 / $3.48 | ~2 ¢ | ~$3.50 |
+| `glm-5.3` | $1.40 / $4.40 | ~2 ¢ | ~$3.50 |
+| `kimi-k3` | $3.00 / $15.00 | ~6 ¢ | ~$10, more if it reasons |
+| `deepseek-v4-flash` | $0.14 / $0.28 | < 1 ¢ | ~$0.30 |
+
+The last two columns are estimates from the fact-sheet sizes; the billed token
+counts of the trial replace them. With a hosted model no GPU is needed, so
+prose can be written in ck_wiki's own workflow from an `OPENCODE_API_KEY`
+secret, committing `prose/` as it commits the manifests. Kept paragraphs cost
+nothing, so a scheduled build pays only for pages whose facts changed.
 
 ### Storage, and where it is meant to go
 
