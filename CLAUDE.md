@@ -147,6 +147,9 @@ go to the owner with a recommended default, not into the code.
 - `diegoami/ck_wiki` is where the wiki is published and where the companion
   commits its images. This repository builds the pages; it does not publish them
   and has no Pages workflow. Generated pages are never committed anywhere.
+  Every green push to `main` asks ck_wiki to rebuild with that commit
+  (`parser-updated`, needs the `CK_WIKI_DISPATCH_TOKEN` secret; ck_wiki#2), so
+  the published wiki and its queue never lag the parser by more than a build.
 - `scripts/fetch_saves.sh` must never infer the repository from
   `GITHUB_REPOSITORY`: it names whichever repository the workflow runs in,
   which is the one place the saves are not guaranteed to be.
