@@ -120,8 +120,9 @@ uv run python -m ck3parser.pipeline saves --title k_papal_state --dry-run
 Consecutive snapshots are checked against each other as they load; the exit
 code is 0 when they agree and 1 when they do not. `--no-vassals` loads the
 title alone, `--no-check` skips the comparison, and `--run <id>` picks one run
-when a directory holds several. Drop `--dry-run` to write to Neo4j using the
-`.env` settings.
+when a directory holds several. A dry run reports counts on stderr and prints
+nothing else; add `--echo` to see every Cypher statement it would have run.
+Drop `--dry-run` to write to Neo4j using the `.env` settings.
 
 Build the wikis, which is what all of this is for:
 

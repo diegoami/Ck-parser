@@ -5,7 +5,7 @@ from helpers import SUCCESSION_EDITS, make_save
 
 def test_traced_dry_run_loads_title_with_vassals(tmp_path, capsys):
     p = make_save(tmp_path / "a.ck3")
-    assert main([str(p), "--title", "k_testland", "--dry-run"]) == 0
+    assert main([str(p), "--title", "k_testland", "--dry-run", "--echo"]) == 0
     out, err = capsys.readouterr()
     assert "with 2 immediate vassal(s)" in err
     assert "5 referenced, 5 found, 5 kept, 0 missing" in err
@@ -20,7 +20,7 @@ def test_traced_dry_run_loads_title_with_vassals(tmp_path, capsys):
 
 def test_no_vassals_flag_narrows_to_one_title(tmp_path, capsys):
     p = make_save(tmp_path / "a.ck3")
-    assert main([str(p), "--title", "k_testland", "--dry-run", "--no-vassals"]) == 0
+    assert main([str(p), "--title", "k_testland", "--dry-run", "--echo", "--no-vassals"]) == 0
     out, err = capsys.readouterr()
     assert "with 0 immediate vassal(s)" in err
     assert out.count("HELD_BY") == 4 and "VASSAL_OF" not in out
@@ -28,7 +28,7 @@ def test_no_vassals_flag_narrows_to_one_title(tmp_path, capsys):
 
 def test_de_jure_edge_written_when_it_differs(tmp_path, capsys):
     p = make_save(tmp_path / "a.ck3")
-    assert main([str(p), "--title", "c_test", "--dry-run"]) == 0
+    assert main([str(p), "--title", "c_test", "--dry-run", "--echo"]) == 0
     out, _ = capsys.readouterr()
     # c_far is de facto under c_test but de jure under d_empty
     assert out.count("VASSAL_OF") == 4
@@ -78,7 +78,7 @@ def _two_snapshots(tmp_path, **later):
 
 
 def test_directory_loads_every_snapshot_oldest_first(tmp_path, capsys):
-    assert main([str(_two_snapshots(tmp_path)), "--title", "k_testland", "--dry-run"]) == 0
+    assert main([str(_two_snapshots(tmp_path)), "--title", "k_testland", "--dry-run", "--echo"]) == 0
     out, err = capsys.readouterr()
     assert "run 7-1.6.1.2-867.1.1" in err and "2 snapshot(s), oldest first" in err
     assert err.index("a_1100.ck3") < err.index("b_1120.ck3")
@@ -90,14 +90,14 @@ def test_directory_loads_every_snapshot_oldest_first(tmp_path, capsys):
 
 
 def test_later_snapshot_adds_the_new_ruler(tmp_path, capsys):
-    main([str(_two_snapshots(tmp_path)), "--title", "k_testland", "--dry-run"])
+    main([str(_two_snapshots(tmp_path)), "--title", "k_testland", "--dry-run", "--echo"])
     out, _ = capsys.readouterr()
     assert "'holder': 201, 'from': datetime.date(1110, 5, 5)" in out
 
 
 def test_changed_history_is_reported_but_still_loads(tmp_path, capsys):
     tmp_path = _two_snapshots(tmp_path, edits=SUCCESSION_EDITS + (("880.5.5=101", "880.5.5=999"),))
-    assert main([str(tmp_path), "--title", "k_testland", "--dry-run"]) == 1
+    assert main([str(tmp_path), "--title", "k_testland", "--dry-run", "--echo"]) == 1
     out, err = capsys.readouterr()
     assert "disagreement: k_testland: history at 880.5.5" in err
     assert "1 disagreement(s) between snapshots" in err
@@ -137,7 +137,7 @@ def test_named_run_loads_only_that_run(tmp_path, capsys):
     make_save(tmp_path / "one.ck3", date="1100.6.1", seed=1, random_count=100)
     make_save(tmp_path / "two.ck3", date="1100.6.1", seed=2, random_count=100)
     wanted = next(r for r in scan(tmp_path, with_sha256=False) if r.random_seed == 2)
-    assert main([str(tmp_path), "--title", "k_testland", "--dry-run", "--run", wanted.run_id]) == 0
+    assert main([str(tmp_path), "--title", "k_testland", "--dry-run", "--echo", "--run", wanted.run_id]) == 0
     out, _ = capsys.readouterr()
     assert out.count("MERGE (s:Snapshot") == 1
 
@@ -151,7 +151,15 @@ def test_empty_directory_is_an_argument_error(tmp_path, capsys):
 def test_a_title_absent_from_one_snapshot_is_skipped_not_fatal(tmp_path, capsys):
     # dynamic titles vanish when destroyed; the snapshots that have it still load
     tmp_path = _two_snapshots(tmp_path, edits=SUCCESSION_EDITS + (('key="c_test"', 'key="c_gone"'),))
-    assert main([str(tmp_path), "--title", "c_test", "--dry-run"]) == 0
+    assert main([str(tmp_path), "--title", "c_test", "--dry-run", "--echo"]) == 0
     out, err = capsys.readouterr()
     assert "'c_test' is not in b_1120.ck3, skipped" in err
     assert out.count("MERGE (s:Snapshot") == 1
+
+
+def test_dry_run_is_quiet_without_echo(tmp_path, capsys):
+    p = make_save(tmp_path / "a.ck3")
+    assert main([str(p), "--title", "k_testland", "--dry-run"]) == 0
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert "statement(s) recorded, none written; --echo prints them" in err

@@ -5,6 +5,7 @@ facto vassals); ``--no-vassals`` narrows it to the title alone.
 
     python -m ck3parser.pipeline SAVE      --title k_papal_state [--dry-run]
     python -m ck3parser.pipeline SAVES_DIR --title k_papal_state [--dry-run]
+    python -m ck3parser.pipeline SAVES_DIR --title k_papal_state --dry-run --echo
 
 Given a directory, every snapshot of the run it holds is loaded oldest first.
 That matters because CK3 prunes dead characters and destroyed titles as a run
@@ -324,6 +325,7 @@ def run(
     run_id: str | None = None,
     check: bool = True,
     with_people: bool = False,
+    echo: bool = False,
 ) -> int:
     try:
         saves = resolve_saves(save_path, run_id)
@@ -332,7 +334,9 @@ def run(
         return 2
 
     warnings: list[str] = []
-    session = DryRunSession() if dry_run else open_session(Neo4jConfig.from_env())
+    # a dry run echoes only on request: a whole run is thousands of statements,
+    # and with --people hundreds of megabytes of parameters
+    session = DryRunSession(echo=echo) if dry_run else open_session(Neo4jConfig.from_env())
     with session:
         previous: SnapshotView | None = None
         observed = Observations()
@@ -382,6 +386,9 @@ def run(
             print(f"  vassalage: {observed.emit(session)} stretch(es)", file=sys.stderr)
             load_houses(session, saves, houses)
 
+    if dry_run:
+        hint = "" if echo else "; --echo prints them"
+        print(f"dry run: {len(session.statements)} statement(s) recorded, none written{hint}", file=sys.stderr)
     if not loaded:
         print(f"title {title_key!r} not found in any of the {len(saves)} save(s)", file=sys.stderr)
         return 2
@@ -395,7 +402,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m ck3parser.pipeline")
     ap.add_argument("save", help="a .ck3 file, or a directory of saves to load as one run")
     ap.add_argument("--title", required=True, help="title key, e.g. k_papal_state")
-    ap.add_argument("--dry-run", action="store_true", help="print Cypher instead of writing to Neo4j")
+    ap.add_argument("--dry-run", action="store_true", help="record Cypher instead of writing to Neo4j")
+    ap.add_argument("--echo", action="store_true", help="with --dry-run, print every statement to stdout")
     ap.add_argument("--no-vassals", action="store_true", help="load the title alone, without its vassals")
     ap.add_argument("--run", dest="run_id", help="which run to load when a directory holds several")
     ap.add_argument("--no-check", action="store_true", help="skip the checks between consecutive snapshots")
@@ -413,6 +421,7 @@ def main(argv: list[str] | None = None) -> int:
         run_id=args.run_id,
         check=not args.no_check,
         with_people=args.people,
+        echo=args.echo,
     )
 
 
