@@ -54,3 +54,39 @@ def test_a_title_that_leaves_for_another_realm_has_left(tmp_path):
     late = realm(index_of(tmp_path, "b.ck3", date="1120.1.1", edits=edits), 200, "1120.1.1")
     assert [(c.key, c.kind) for c in changes(early, late)] == [("c_far", "left")]
     assert [(c.key, c.kind) for c in changes(late, early)] == [("c_far", "gained")]
+
+
+def test_a_title_the_ruler_holds_is_rank_0_under_any_index_order():
+    # #42: the ruler holds c_z, which sits de facto under a vassal's k_y. Reached
+    # down k_y's branch it came out rank 2, with the ruler twice in its chain,
+    # or rank 0 as a seed -- decided by nothing but the order of the indices
+    import pytest
+
+    from ck3parser.titles import TitleIndex, TitleRecord
+
+    def index(order):
+        records = {
+            "e_x": dict(holder=200, tier="empire", liege=None),
+            "k_y": dict(holder=201, tier="kingdom", liege="e_x"),
+            "c_z": dict(holder=200, tier="county", liege="k_y"),
+            "b_w": dict(holder=202, tier="barony", liege="c_z"),
+        }
+        idx = {key: i for i, key in enumerate(order)}
+        out = TitleIndex()
+        for key in order:
+            r = records[key]
+            out.add(TitleRecord(idx=idx[key], key=key, holder=r["holder"], tier=r["tier"],
+                                de_facto_liege=idx[r["liege"]] if r["liege"] else None))
+        return out
+
+    seen = set()
+    for order in (["e_x", "k_y", "c_z", "b_w"], ["c_z", "b_w", "e_x", "k_y"], ["b_w", "c_z", "k_y", "e_x"]):
+        r = realm(index(order), 200, "1.1.1")
+        assert (r.titles["c_z"].depth, r.titles["c_z"].chain) == (0, (200,))
+        # and what hangs under it counts from the ruler, not from the vassal
+        assert r.titles["b_w"].chain == (200, 202)
+        seen.add(tuple(sorted((k, t.chain) for k, t in r.titles.items())))
+    assert len(seen) == 1
+
+    with pytest.raises(ValueError, match="snapshot date"):
+        changes(realm(index(["e_x", "k_y", "c_z", "b_w"]), 200), r)

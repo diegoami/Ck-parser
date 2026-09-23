@@ -64,6 +64,13 @@ def realm(index: TitleIndex, ruler: int, date: str | None = None) -> Realm:
     Each title is reached once: de facto liege links form a forest, and a title
     already placed is not placed again, which also keeps a malformed save with a
     cycle from looping.
+
+    A title the ruler holds is rank 0 however it is reached. The ruler can hold
+    a title that sits de facto under a vassal's (#42): walked down the vassal's
+    branch it would have come out rank 2 with the ruler twice in its chain, or
+    rank 0 as a seed, depending on nothing but the order of title indices.
+    Restarting the chain at every title the ruler holds makes each title's
+    chain run from its nearest ruler-held ancestor, whatever the order.
     """
     out = Realm(ruler=ruler, date=date, in_save=frozenset(index.by_key))
     stack = [(record, (ruler,)) for record in index.by_idx.values() if record.holder == ruler]
@@ -71,8 +78,10 @@ def realm(index: TitleIndex, ruler: int, date: str | None = None) -> Realm:
         record, chain = stack.pop()
         if record.key in out.titles:
             continue
+        if record.holder == ruler:
+            chain = (ruler,)
         # an unheld title passes its liege's chain down unchanged
-        if record.holder is not None and record.holder != chain[-1]:
+        elif record.holder is not None and record.holder != chain[-1]:
             chain = chain + (record.holder,)
         out.titles[record.key] = RealmTitle(
             key=record.key, tier=record.tier, holder=record.holder, depth=len(chain) - 1, chain=chain
@@ -101,7 +110,16 @@ class RealmChange:
 
 
 def changes(earlier: Realm, later: Realm, tier: str | None = "county") -> list[RealmChange]:
-    """What entered and left the realm between two snapshots, sorted by key."""
+    """What entered and left the realm between two snapshots, sorted by key.
+
+    The two realms may belong to different people, and usually will across a
+    succession: the chronicle follows the subject title, so Asa's realm in 1358
+    is compared with Ludwig's in 1361. Both must carry their snapshot date, or
+    there is no window to report.
+    """
+    if earlier.date is None or later.date is None:
+        raise ValueError("changes() needs each realm's snapshot date: they bound every change")
+
     def keys(r: Realm) -> set[str]:
         return {k for k, t in r.titles.items() if tier is None or t.tier == tier}
 
