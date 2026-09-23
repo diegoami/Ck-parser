@@ -208,8 +208,11 @@ class WikiTitle:
     vassals: dict[str, list[str]] = field(default_factory=dict)  #: snapshot date -> vassal keys
     lieges: dict[str, str | None] = field(default_factory=dict)  #: snapshot date -> liege key
     arms: Arms | None = None
-    first_seen: str | None = None
-    last_seen: str | None = None
+    first_seen: str | None = None  #: first snapshot with the title in the lineage
+    last_seen: str | None = None  #: last snapshot with the title in the lineage
+    #: last snapshot with the title in the save at all, lineage or not: the
+    #: newest word on who holds it (docs/PLAN.md §9, "following a title")
+    last_recorded: str | None = None
 
     @property
     def all_vassals(self) -> list[str]:
@@ -301,6 +304,10 @@ class Wiki:
         out.sort(key=lambda pair: pair[1].sort_key())
         return out
 
+    def is_current(self, title: WikiTitle, tenure: Tenure) -> bool:
+        """Open in the newest snapshot, not merely open when the title was last seen."""
+        return tenure.open and title.last_recorded == (self.snapshots[-1] if self.snapshots else None)
+
     def held_elsewhere(self, character_id: int) -> list[Holding]:
         """What this character held outside the lineage, highest tier first."""
         held = self.holdings.get(character_id, {})
@@ -358,9 +365,22 @@ def _merge_title(wiki: Wiki, record: TitleRecord, view: SnapshotView) -> WikiTit
     title = wiki.titles.get(record.key) or WikiTitle(key=record.key)
     title.name = record.display_name
     title.tier = record.tier or title.tier
-    title.holder = record.holder if record.holder is not None else title.holder
     title.first_seen = min(filter(None, [title.first_seen, view.fp.date]), key=date_key)
     title.last_seen = max(filter(None, [title.last_seen, view.fp.date]), key=date_key)
+    _merge_history(title, record, view)
+    wiki.titles[record.key] = title
+    return title
+
+
+def _merge_history(title: WikiTitle, record: TitleRecord, view: SnapshotView) -> None:
+    """Add what one snapshot's record says about who held the title, and when.
+
+    Used both for the lineage and for a title of the wiki that one snapshot
+    has outside it: the history is the title's own, whoever its liege is.
+    """
+    if title.last_recorded is None or date_key(view.fp.date) >= date_key(title.last_recorded):
+        title.last_recorded = view.fp.date
+        title.holder = record.holder if record.holder is not None else title.holder
 
     intervals = holder_intervals(
         record.history, end_date=view.fp.date, current_holder=record.holder, holder_since=record.date
@@ -388,8 +408,32 @@ def _merge_title(wiki: Wiki, record: TitleRecord, view: SnapshotView) -> WikiTit
             if tenure.end and (not existing.end or date_key(tenure.end) > date_key(existing.end)):
                 by_start[key] = tenure
     title.tenures = sorted(by_start.values(), key=Tenure.sort_key)
-    wiki.titles[record.key] = title
-    return title
+
+
+def _follow_titles(wiki: Wiki, views: list[SnapshotView]) -> None:
+    """Read every title of the wiki from every snapshot that has it, lineage or not.
+
+    A title can leave the lineage and stay in the save: Denmark was an
+    immediate vassal of Germania only in the 1358 save, and read from the
+    lineage alone, Asa's tenure stayed open four years after her death. The
+    1361 and 1364 saves still hold Denmark, with its whole history; this reads
+    it. The holders it turns up held a title of the wiki, so they are
+    ever-holders like the rest and get pages. A title *absent* from a later save
+    was destroyed or pruned and the save does not say which, so nothing is
+    inferred from absence: its last tenure stays open, dated by `last_recorded`.
+    """
+    known = {t.holder for title in wiki.titles.values() for t in title.tenures}
+    for view in views:
+        inside = set(view.keys)
+        for key, title in wiki.titles.items():
+            record = None if key in inside else view.index.get(key)
+            if record is not None:
+                _merge_history(title, record, view)
+    found = {t.holder for title in wiki.titles.values() for t in title.tenures} - known
+    found -= wiki.characters.keys()
+    for view in views:
+        for cid, char in view.find_characters(found).items():
+            _merge_character(wiki, cid, char, view.fp.date, view.fp.file)
 
 
 def build_wiki(
@@ -417,6 +461,8 @@ def build_wiki(
         wiki.saves.append(
             {"file": Path(view.fp.file).name, "checksum": save_checksum(view.fp.file), "date": view.fp.date}
         )
+    # before the family: the holders it finds are ever-holders, whose kin count
+    _follow_titles(wiki, views)
     _load_vassalage(wiki, views)
     _load_holdings(wiki, views)
     if with_family:

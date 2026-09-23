@@ -72,6 +72,10 @@ uv run python -m ck3wiki.build saves --out site --prose prose            # ... f
   without changing hands (PLAN.md §9).
 - A title absent from a save was destroyed or pruned, and the save does not say
   which. Absence is never independence, and never bridges two stretches.
+- The lineage says which titles the wiki is about, never which saves are read
+  about them. A title's history and holder come from every snapshot that has
+  it, in the lineage or not; `current` means open in the newest snapshot, and
+  anything older is "held when last seen" (PLAN.md §9).
 - No LLM SDK dependency. Prose (`ck3wiki.prose`) talks to a model over plain
   HTTP through a pluggable backend; the model is not chosen yet (PLAN.md §15).
 - Prose is written from a page's **fact sheet** and nothing else, and carries a
