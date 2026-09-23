@@ -7,6 +7,8 @@ site/
 saves/
 # per-save character digests: a cache, rebuildable from the saves in a minute
 .ck3cache/
+# generated prose, until it has a home on ck_wiki beside images/
+prose/
 
 .env
 .venv/

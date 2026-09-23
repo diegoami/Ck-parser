@@ -36,7 +36,7 @@ both a ruler change and a same-ruler interval.
 | 4 | **Run grouping**: fingerprint saves, cluster them into runs, order them, verify the chain | 1, 2 (partial) |
 | 5 | Multi-snapshot loading: merge several saves of one run into one graph with provenance | 3, 4 |
 | 6 | Full-save scale (all referenced characters, all titles) | 5 |
-| 7 | Narrative generation (deferred, local LLM) | 6 |
+| 7 | Narrative generation: pipeline built, model not chosen (§15) | 6 |
 
 Phases 0–3 are the setup prompt. Phase 4 is the new work and is designed so it can
 be built right after Phase 1, because most of the signal lives in the first few
@@ -730,9 +730,9 @@ and writes a static site: an index, a page per title with its succession table
 and its vassals per snapshot, and a page per character with their reigns.
 
 **It is a factual wiki, not a narrative one.** Every page is generated from the
-save data directly. Phase 7's LLM-written prose is still gated on choosing a
-small local model, and nothing here depends on that choice: the prose, when it
-arrives, has a page to live on.
+save data directly. Prose sits on top of that, never in place of it: written
+from the page's own facts, shown only while they still hold, and labelled with
+what wrote it (§15). The model that writes it is not chosen yet.
 
 **Why it is built from saves rather than from Neo4j.** Both derive from the same
 parsed data, and reading saves directly keeps the site buildable by anyone with
@@ -1347,3 +1347,74 @@ costs that snapshot's pass, not a fourth of the whole.
 A cache may change how long a build takes and nothing else. `tests/test_digest.py`
 builds the same run three times — once with no cache, once filling one, once
 reading it — and asserts the rendered sites are byte-identical.
+
+---
+
+## 15. Narrative prose, written from the page's own facts
+
+`python -m ck3wiki.prose` writes a paragraph for a page; `ck3wiki.build --prose
+DIR` puts it at the top of that page, above the tables, with a line saying which
+backend wrote it. Everything except the model is built. The model is left open
+on purpose: the pipeline had to exist before models could be compared on it.
+
+### The fact sheet
+
+A model is given a JSON **fact sheet** for one page (`character_facts`,
+`title_facts`): exactly what the page shows — reigns with predecessor and
+successor, titles held elsewhere, family with lifespans, house, culture, faith;
+for a title, its succession and its lieges as **windows**, because a save has
+no vassalage history (§9). Nothing that is not on the page, so nothing the
+prose says can be missing from the page. On the Germania rulers a sheet is
+1 800–2 500 tokens, small enough for any local model's context.
+
+Counts are in the sheet (`number_of_children`, `rulers_recorded`) rather than
+left for the writer to work out. The first template run proved why: it wrote
+"records 4 holders", and 4 was nowhere in the facts, so the check rejected it.
+
+### Three rules that keep it honest
+
+1. **Only the sheet.** The prompt forbids events, motives, wars and
+   personalities. A save has none of them.
+2. **Stale is left out.** A paragraph is stored with a 16-hex digest of the
+   canonical JSON of the sheet it was written from. The build recomputes the
+   sheet and shows the paragraph only on a match. Adding a save that changes a
+   ruler's page removes the old paragraph until it is written again; it never
+   sits beside a table that contradicts it.
+3. **Numbers are checked.** Every run of digits in the text must occur in the
+   sheet. An invented year is the commonest fabrication and the cheapest to
+   catch; a rejected paragraph is reported and not saved. Names and events are
+   not checked mechanically: that is what the prompt and the reader are for.
+
+### Backends
+
+| backend | what | for |
+|---|---|---|
+| `template` | fixed sentences, no model | tests, and the pipeline itself |
+| `openai` | `POST {url}/chat/completions`, stdlib `urllib` | Ollama (`http://localhost:11434/v1`, the default), llama.cpp server, LM Studio, vLLM |
+
+A `<think>` block from a reasoning model is dropped before the check. An API key,
+if a server wants one, comes from `CK3_PROSE_API_KEY`. No SDK is imported.
+
+### Storage, and where it is meant to go
+
+One file per page: `<out>/<chronicle>/<characters|titles>/<id>.json`, holding
+`schema`, `facts` (the digest), `backend`, `prompt` and `text`. The name is
+derived from the page, like an image's. Unlike an image, prose is text inside
+the page, so a new paragraph needs a rebuild to show.
+
+Its intended home is **ck_wiki**, beside `images/`: a `prose/` directory there,
+`--prose ../prose` in its workflow's build step and `prose/**` among the paths
+that trigger it. Until a model is chosen and its output judged, `prose/` is
+git-ignored here and folded into local builds only.
+
+### The first trial
+
+The rulers of the subject title, and the title's own page (`rulers()`): on
+Germania that is `e_germany` and Folmar, Asa and Ludwig. The template backend
+wrote all four with none rejected, and the build showed all four. Its text is
+what a template gives — one sentence per title, 23 of them for Folmar — which is
+the case for a model, not against the pipeline. Choosing the model is next.
+
+`PROMPT_VERSION` in `ck3wiki.prose` is part of every file: bump it when the prompt
+changes, and prose from the old prompt is rewritten on the next run instead of
+kept.

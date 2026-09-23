@@ -26,7 +26,8 @@ from ck3parser.player import primary_title_key
 from ck3parser.runs import Run, Snapshot, scan
 
 from .manifest import write_chronicle_manifest, write_root_manifest
-from .model import build_wiki
+from .model import Wiki, build_wiki
+from .prose import load_prose
 from .render import harvested, write_landing, write_site
 
 
@@ -83,12 +84,17 @@ def subject_of(run: Run, override: str | None, log) -> str | None:
     return key
 
 
-def build_one(
-    run: Run, subject: str, with_vassals: bool, out: Path, portraits: Path | None,
-    log, with_family: bool = True, with_kin: bool = True, with_siblings: bool = True,
-    releases: dict[str, str] | None = None, cache_dir: Path | None = None,
-    with_titled_kin: bool = True,
-) -> dict | None:
+def load_run(
+    run: Run, subject: str, with_vassals: bool = True, log=None,
+    with_family: bool = True, with_kin: bool = True, with_siblings: bool = True,
+    cache_dir: Path | None = None, with_titled_kin: bool = True,
+) -> Wiki | None:
+    """One run's snapshots, merged into the wiki's picture of it.
+
+    The build and the prose generator both start here, so the facts a paragraph
+    is written from are the facts the page is built from.
+    """
+    log = sys.stderr if log is None else log
     views = []
     for snapshot in run.snapshots:
         try:
@@ -100,11 +106,28 @@ def build_one(
     if not views:
         print(f"warning: nothing to build for run {run.slug}", file=log)
         return None
-    wiki = build_wiki(
+    return build_wiki(
         views, subject, with_family=with_family, with_kin=with_kin, with_siblings=with_siblings,
         with_titled_kin=with_titled_kin,
     )
-    pages = write_site(wiki, out / run.slug, portraits, top=True)
+
+
+def build_one(
+    run: Run, subject: str, with_vassals: bool, out: Path, portraits: Path | None,
+    log, with_family: bool = True, with_kin: bool = True, with_siblings: bool = True,
+    releases: dict[str, str] | None = None, cache_dir: Path | None = None,
+    with_titled_kin: bool = True, prose_dir: Path | None = None,
+) -> dict | None:
+    wiki = load_run(
+        run, subject, with_vassals, log, with_family, with_kin, with_siblings, cache_dir,
+        with_titled_kin,
+    )
+    if wiki is None:
+        return None
+    prose, stale = load_prose(prose_dir, run.slug, wiki)
+    if prose_dir is not None:
+        print(f"  prose: {len(prose)} page(s), {stale} stale and left out", file=log)
+    pages = write_site(wiki, out / run.slug, portraits, top=True, prose=prose)
     images = write_chronicle_manifest(
         out / run.slug, wiki, run.slug, harvested(portraits), releases
     )
@@ -143,6 +166,7 @@ def run_build(
     with_siblings: bool = True,
     with_titled_kin: bool = True,
     cache: str | None = None,
+    prose: str | None = None,
     log=None,
 ) -> int:
     log = sys.stderr if log is None else log
@@ -165,6 +189,7 @@ def run_build(
         entry = build_one(
             run, subject, with_vassals, out, shots, log, with_family, with_kin,
             with_siblings, releases, cache_dir, with_titled_kin=with_titled_kin,
+            prose_dir=Path(prose) if prose else None,
         )
         if entry is not None:
             entries.append(entry)
@@ -189,6 +214,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-vassals", action="store_true", help="the title alone, without its vassals")
     ap.add_argument("--run", dest="run_id", help="build only this run (its id or slug)")
     ap.add_argument("--portraits", help="directory of harvested portrait images to include")
+    ap.add_argument(
+        "--prose",
+        help="directory written by ck3wiki.prose; a page shows its paragraph only while"
+             " the page still has the facts it was written from",
+    )
     ap.add_argument(
         "--cache",
         default=".ck3cache",
@@ -235,6 +265,7 @@ def main(argv: list[str] | None = None) -> int:
         with_siblings=not args.no_siblings,
         with_titled_kin=not args.no_titled_kin,
         cache=None if args.no_cache else args.cache,
+        prose=args.prose,
     )
 
 

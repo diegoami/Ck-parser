@@ -41,6 +41,7 @@ h1 { font-size: 1.9rem; margin: .4rem 0 .2rem; line-height: 1.2; }
 h2 { font-size: 1.2rem; margin: 2rem 0 .6rem; padding-bottom: .3rem;
   border-bottom: 1px solid var(--rule); font-weight: normal; letter-spacing: .02em; }
 .sub { color: var(--muted); font-size: .95rem; margin: 0 0 1rem; }
+.prose { border-left: 3px solid var(--accent); padding-left: 1rem; margin: 0 0 1.5rem; }
 table { width: 100%; border-collapse: collapse; margin: .5rem 0 1rem; font-size: .95rem; }
 th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--rule);
   vertical-align: top; }
@@ -271,7 +272,23 @@ def tenure_rows(wiki: Wiki, title: WikiTitle, depth: int) -> str:
     return "".join(out)
 
 
-def render_title(wiki: Wiki, title: WikiTitle, have: set[str], top: bool = False) -> str:
+def prose_section(prose) -> str:
+    """The paragraph a model wrote from this page's facts, above the record it summarises.
+
+    Says where it came from: a reader should know which part of the page was
+    written by a model and which part is the save.
+    """
+    if prose is None:
+        return ""
+    paragraphs = "".join(f"<p>{e(p.strip())}</p>" for p in prose.text.split("\n\n") if p.strip())
+    return (
+        f'<section class="prose">{paragraphs}'
+        f'<p class="sub">Written by <code>{e(prose.backend)}</code> from the facts on this'
+        " page and nothing else. The tables below are the record.</p></section>"
+    )
+
+
+def render_title(wiki: Wiki, title: WikiTitle, have: set[str], top: bool = False, prose=None) -> str:
     heading = f'{TIER_WORD.get(title.tier or "", "Title")} of {title.name}'
     info = rows(
         [
@@ -290,7 +307,7 @@ def render_title(wiki: Wiki, title: WikiTitle, have: set[str], top: bool = False
     )
     arms = image_slot(title.arms, 1, f"Arms of {title.name}", "coat of arms", have, kind="arms")
     body = [f'<div class="page"><aside class="infobox card">{arms}<table>{info}</table></aside>',
-            '<div class="content">']
+            '<div class="content">', prose_section(prose)]
     body.append("<h2>Succession</h2>")
     if title.tenures:
         body.append(
@@ -355,7 +372,9 @@ def movement_note(wiki: Wiki, title: WikiTitle) -> str:
     return f'<ul class="plain">{"".join(out)}</ul>' if out else ""
 
 
-def render_character(wiki: Wiki, character: WikiCharacter, have: set[str], top: bool = False) -> str:
+def render_character(
+    wiki: Wiki, character: WikiCharacter, have: set[str], top: bool = False, prose=None
+) -> str:
     held = wiki.held_by(character.id)
     house = wiki.houses.get(character.house) if character.house else None
     # newest first: the infobox wants the latest likeness, the gallery the run
@@ -381,7 +400,7 @@ def render_character(wiki: Wiki, character: WikiCharacter, have: set[str], top: 
         shots[0].save_date if shots else "", have,
     )
     body = [f'<div class="page"><aside class="infobox card">{portrait}<table>{info}</table></aside>',
-            '<div class="content">']
+            '<div class="content">', prose_section(prose)]
     body.append("<h2>Titles held</h2>")
     if held:
         lines = []
@@ -689,8 +708,17 @@ def harvested(directory: Path | None) -> set[str]:
     return {path.name for path in directory.iterdir() if path.is_file()}
 
 
-def write_site(wiki: Wiki, out: Path, portraits: Path | None = None, top: bool = False) -> int:
-    """Write the whole site. Returns the number of pages written."""
+def write_site(
+    wiki: Wiki, out: Path, portraits: Path | None = None, top: bool = False,
+    prose: dict | None = None,
+) -> int:
+    """Write the whole site. Returns the number of pages written.
+
+    `prose` maps ``(kind, id)`` to the paragraphs still true of those pages
+    (:func:`ck3wiki.prose.load_prose`). Unlike an image, prose is text inside
+    the page, so a new paragraph needs a rebuild to appear.
+    """
+    prose = prose or {}
     for folder in ("titles", "characters", "houses", "cultures", "faiths"):
         (out / folder).mkdir(parents=True, exist_ok=True)
     (out / "style.css").write_text(STYLE, encoding="utf-8")
@@ -708,12 +736,13 @@ def write_site(wiki: Wiki, out: Path, portraits: Path | None = None, top: bool =
     (out / "index.html").write_text(render_index(wiki, have, top), encoding="utf-8")
     for title in wiki.titles.values():
         (out / "titles" / f"{title.key}.html").write_text(
-            render_title(wiki, title, have, top), encoding="utf-8"
+            render_title(wiki, title, have, top, prose.get(("titles", title.key))), encoding="utf-8"
         )
         pages += 1
     for character in wiki.characters.values():
         (out / "characters" / f"{character.id}.html").write_text(
-            render_character(wiki, character, have, top), encoding="utf-8"
+            render_character(wiki, character, have, top, prose.get(("characters", str(character.id)))),
+            encoding="utf-8",
         )
         pages += 1
     for house in wiki.houses.values():

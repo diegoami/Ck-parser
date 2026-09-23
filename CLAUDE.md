@@ -23,6 +23,9 @@ uv run python -m ck3wiki.build saves --out site --no-family              # ... f
 uv run python -m ck3wiki.build saves --out site --no-cache               # ... without the per-save character digests
 uv run python -m ck3wiki.build saves --out site --no-kin                 # ... title-holders only, no direct line
 uv run python -m ck3wiki.build saves --out site --no-titled-kin          # ... stop at the direct line
+uv run python -m ck3wiki.prose saves --out prose                         # rulers' prose, template backend
+uv run python -m ck3wiki.prose saves --out prose --backend openai --model M  # ... from a local server
+uv run python -m ck3wiki.build saves --out site --prose prose            # ... folded into the pages
 ```
 
 ## Rules
@@ -69,8 +72,13 @@ uv run python -m ck3wiki.build saves --out site --no-titled-kin          # ... s
   without changing hands (PLAN.md §9).
 - A title absent from a save was destroyed or pruned, and the save does not say
   which. Absence is never independence, and never bridges two stretches.
-- No LLM SDK dependency yet; narrative generation is deferred (PLAN.md Phase 7).
-  The wiki `ck3wiki` builds today is factual, generated straight from save data.
+- No LLM SDK dependency. Prose (`ck3wiki.prose`) talks to a model over plain
+  HTTP through a pluggable backend; the model is not chosen yet (PLAN.md §15).
+- Prose is written from a page's **fact sheet** and nothing else, and carries a
+  digest of it. The build shows it only while the digest still matches: stale
+  prose is left out, never shown beside a table that contradicts it. A number
+  the fact sheet does not hold gets the paragraph rejected, not saved. When a
+  paragraph needs a number, put it in the fact sheet; never loosen the check.
 - Character names in saves are localization keys with diacritics marked by an
   underscore. Drop the marker, never guess the letter (PLAN.md §8).
 - One wiki per playthrough. What separates them is the run, identified by seed
