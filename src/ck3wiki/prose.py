@@ -35,6 +35,7 @@ import hashlib
 import json
 import re
 import sys
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -280,12 +281,24 @@ def _template_title(f: dict) -> str:
     return text
 
 
+class BackendError(RuntimeError):
+    """The model could not be asked at all: a bad key, no credit, no server.
+
+    Stops the run rather than skipping the page, because the next page would
+    fail the same way.
+    """
+
+
 class OpenAICompatible:
     """Any server speaking ``POST {url}/chat/completions``, over plain HTTP.
 
     Ollama serves it at ``http://localhost:11434/v1``, llama.cpp's server and LM
-    Studio at their own ports. A reasoning model's ``<think>`` block is dropped:
-    it is the model's scratch work, not the entry.
+    Studio at their own ports, OpenCode Zen at ``https://opencode.ai/zen/v1``
+    for its DeepSeek, GLM, Kimi and MiniMax models. A reasoning model's
+    ``<think>`` block is dropped: it is the model's scratch work, not the entry.
+
+    `usage` adds up the tokens the server says it billed, so a run can report
+    what it cost rather than leave it to an estimate.
     """
 
     def __init__(self, url: str, model: str, api_key: str | None = None, timeout: float = 300):
@@ -294,6 +307,7 @@ class OpenAICompatible:
         self.api_key = api_key
         self.timeout = timeout
         self.name = f"openai:{model}"
+        self.usage = {"prompt_tokens": 0, "completion_tokens": 0}
 
     def write(self, facts: dict, system: str, user: str) -> str:
         body = json.dumps({
@@ -306,8 +320,16 @@ class OpenAICompatible:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         request = urllib.request.Request(f"{self.url}/chat/completions", body, headers)
-        with urllib.request.urlopen(request, timeout=self.timeout) as response:
-            reply = json.load(response)
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                reply = json.load(response)
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "replace")[:300]
+            raise BackendError(f"{self.url} answered HTTP {exc.code}: {detail}") from None
+        except (urllib.error.URLError, TimeoutError) as exc:
+            raise BackendError(f"cannot reach {self.url}: {exc}") from None
+        for key in self.usage:
+            self.usage[key] += int((reply.get("usage") or {}).get(key) or 0)
         text = reply["choices"][0]["message"]["content"] or ""
         return re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
 
@@ -383,7 +405,7 @@ def generate(
 ) -> dict[str, int]:
     """Write prose for these pages. Current prose is kept unless `force`."""
     log = sys.stderr if log is None else log
-    counts = {"written": 0, "kept": 0, "rejected": 0, "missing": 0}
+    counts = {"written": 0, "kept": 0, "rejected": 0, "missing": 0, "failed": 0}
     for kind, ident in pages:
         facts = page_facts(wiki, kind, ident)
         if facts is None:
@@ -397,7 +419,12 @@ def generate(
             counts["kept"] += 1
             continue
         system, user = prompt(facts)
-        text = backend.write(facts, system, user)
+        try:
+            text = backend.write(facts, system, user)
+        except BackendError as exc:
+            print(f"  stopped at {kind}/{ident}: {exc}", file=log)
+            counts["failed"] = 1
+            break
         problems = check(text, facts)
         if problems:
             # reported, never saved: a page without prose is better than one
@@ -430,10 +457,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--title", help="subject title (default: each run's own, as the build does)")
     ap.add_argument("--character", action="append", default=[], metavar="ID",
                     help="write this character's page instead of the rulers'; repeatable")
-    ap.add_argument("--backend", choices=("template", "openai"), default="template")
-    ap.add_argument("--url", default="http://localhost:11434/v1",
-                    help="OpenAI-compatible base URL (default: Ollama's)")
-    ap.add_argument("--model", help="model name, as the server knows it")
+    # each also read from the environment, so `uv run --env-file .env` is all
+    # a local run needs; the key is only ever read from there
+    env = os.environ
+    ap.add_argument("--backend", choices=("template", "openai"),
+                    default=env.get("CK3_PROSE_BACKEND") or "template")
+    ap.add_argument("--url", default=env.get("CK3_PROSE_URL") or "http://localhost:11434/v1",
+                    help="OpenAI-compatible base URL (default: $CK3_PROSE_URL, else Ollama's)")
+    ap.add_argument("--model", default=env.get("CK3_PROSE_MODEL") or None,
+                    help="model name, as the server knows it (default: $CK3_PROSE_MODEL)")
     ap.add_argument("--force", action="store_true", help="rewrite prose that is still current")
     ap.add_argument("--cache", default=".ck3cache", help="character digests, as for the build")
     args = ap.parse_args(argv)
@@ -456,8 +488,13 @@ def main(argv: list[str] | None = None) -> int:
         pages = [("characters", c) for c in args.character] or rulers(wiki)
         counts = generate(wiki, run.slug, pages, backend, Path(args.out), args.force, log)
         print(f"  {run.slug}: " + ", ".join(f"{n} {k}" for k, n in counts.items()), file=log)
+        if counts["failed"]:
+            return 2
         if counts["rejected"] or counts["missing"]:
             status = 1
+    usage = getattr(backend, "usage", None)
+    if usage:
+        print(f"tokens billed: {usage['prompt_tokens']} in, {usage['completion_tokens']} out", file=log)
     return status
 
 

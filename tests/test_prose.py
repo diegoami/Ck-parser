@@ -159,3 +159,58 @@ def test_the_openai_backend_speaks_plain_http_and_drops_the_thinking(tmp_path):
 def test_the_openai_backend_needs_a_model(tmp_path, capsys):
     assert prose_main([str(tmp_path), "--backend", "openai"]) == 2
     assert "--model is required" in capsys.readouterr().err
+
+
+def _serve(status, reply):
+    """A one-route stand-in for an OpenAI-compatible server, on a free port."""
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers["Content-Length"]))
+            data = json.dumps(reply).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def test_the_openai_backend_adds_up_the_tokens_it_was_billed():
+    server = _serve(200, {"choices": [{"message": {"content": "An entry."}}],
+                          "usage": {"prompt_tokens": 120, "completion_tokens": 30}})
+    try:
+        backend = OpenAICompatible(f"http://127.0.0.1:{server.server_port}/v1", "m")
+        backend.write({}, "s", "u")
+        backend.write({}, "s", "u")
+    finally:
+        server.shutdown()
+    assert backend.usage == {"prompt_tokens": 240, "completion_tokens": 60}
+
+
+def test_a_refused_key_stops_the_run_with_the_servers_reason(tmp_path, monkeypatch, capsys):
+    server = _serve(401, {"error": {"message": "invalid api key"}})
+    saves = tmp_path / "saves"
+    saves.mkdir()
+    make_save(saves / "a.ck3")
+    # the settings come from the environment, as `uv run --env-file .env` gives them
+    monkeypatch.setenv("CK3_PROSE_BACKEND", "openai")
+    monkeypatch.setenv("CK3_PROSE_URL", f"http://127.0.0.1:{server.server_port}/v1")
+    monkeypatch.setenv("CK3_PROSE_MODEL", "m")
+    monkeypatch.setenv("CK3_PROSE_API_KEY", "not-a-real-key")
+    try:
+        status = prose_main([str(saves), "--title", "k_testland", "--out", str(tmp_path / "prose"),
+                             "--cache", str(tmp_path / "cache")])
+    finally:
+        server.shutdown()
+    err = capsys.readouterr().err
+    assert status == 2
+    assert "HTTP 401" in err and "invalid api key" in err
+    assert "not-a-real-key" not in err  # the key is never echoed
+    assert not (tmp_path / "prose").exists()

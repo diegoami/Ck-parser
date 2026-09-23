@@ -24,7 +24,7 @@ uv run python -m ck3wiki.build saves --out site --no-cache               # ... w
 uv run python -m ck3wiki.build saves --out site --no-kin                 # ... title-holders only, no direct line
 uv run python -m ck3wiki.build saves --out site --no-titled-kin          # ... stop at the direct line
 uv run python -m ck3wiki.prose saves --out prose                         # rulers' prose, template backend
-uv run python -m ck3wiki.prose saves --out prose --backend openai --model M  # ... from a local server
+uv run --env-file .env python -m ck3wiki.prose saves --out prose       # ... from the model .env names
 uv run python -m ck3wiki.build saves --out site --prose prose            # ... folded into the pages
 ```
 

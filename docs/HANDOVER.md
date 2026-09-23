@@ -158,11 +158,11 @@ in its own right (PLAN.md §12), but the published chronicle is the deliverable,
 and in a first pass it outranks everything the graph could answer.
 
 1. **Choose the prose model.** The pipeline is built (`ck3wiki.prose`,
-   PLAN.md §15) with a template backend and an OpenAI-compatible HTTP one; what
-   is missing is the model. This machine has a 16 GB RTX 4090 laptop GPU, so a
-   ~14B model at 4 bits via Ollama fits. Run the rulers of one chronicle through
-   two or three candidates, read every word, then decide whether prose goes to
-   ck_wiki's `prose/`.
+   PLAN.md §15) and the provider is OpenCode Zen, pay-as-you-go, over the
+   existing `openai` backend. The trial is `deepseek-v4-pro` against `glm-5.3`
+   on Germania's rulers, a few cents each; `kimi-k3` is ~3x dearer, Claude
+   ruled out on price. Then decide whether prose is written in ck_wiki's
+   workflow from an `OPENCODE_API_KEY` secret.
 2. **Cache the other sections too, if a build is still too slow.** The
    character digest (PLAN.md §14) took the five character passes down to one
    read. What is left uncached is `landed_titles` (~2 s a save), the dynasties
