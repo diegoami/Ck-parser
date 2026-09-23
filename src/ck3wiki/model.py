@@ -148,6 +148,15 @@ class Relative:
         return f"b. {self.birth}" if self.birth else ""
 
 
+#: why a character has a page, most important first: held a title of the
+#: wiki; the direct line of someone who did; the ring beyond it, titled.
+#: One role each, and the first that applies wins: someone can be both a
+#: ruler and a ruler's son, and is then an ever-holder. The order is kept by
+#: construction -- ever-holders are merged before the direct line is promoted,
+#: and the direct line before the ring beyond it, and a role is only set when
+#: a character is first added.
+ROLES = ("ever-holder", "kin", "titled-kin")
+
 #: highest first, the order a list of someone's titles reads in
 TIER_ORDER = {"empire": 0, "kingdom": 1, "duchy": 2, "county": 3, "barony": 4}
 
@@ -190,6 +199,9 @@ class WikiCharacter:
     former_spouses: list[int] = field(default_factory=list)
     children: list[int] = field(default_factory=list)
     real_father: int | None = None
+    #: why this character has a page: ROLES, in the order they are worth
+    #: harvesting (docs/PLAN.md §7, the queue)
+    role: str = "ever-holder"
 
     @property
     def has_family(self) -> bool:
@@ -362,10 +374,12 @@ class Wiki:
         return person.name if person and person.name else f"Character {character_id}"
 
 
-def _merge_character(wiki: Wiki, cid: int, char: Block, date: str, save_file: str = "") -> None:
+def _merge_character(
+    wiki: Wiki, cid: int, char: Block, date: str, save_file: str = "", role: str = "ever-holder"
+) -> None:
     dead = char.get("dead_data")
     existing = wiki.characters.get(cid)
-    record = existing or WikiCharacter(id=cid)
+    record = existing or WikiCharacter(id=cid, role=role)
     record.name = clean_name(str(char.get("first_name") or "")) or record.name
     record.birth = record.birth or (str(char["birth"]) if char.get("birth") is not None else None)
     record.female = bool(char.get("female", record.female))
@@ -659,11 +673,13 @@ def _load_family(
             _merge_family(wiki.characters[cid], index.family_of(cid))
 
     if with_kin:
-        _promote(wiki, views, indexes, _ring(wiki, with_siblings))
+        _promote(wiki, views, indexes, _ring(wiki, with_siblings), "kin")
         if with_titled_kin:
             # one ring further, and only for those who hold a title themselves:
             # the whole ring is ~13 000 people of whom 98.6% hold nothing
-            _promote(wiki, views, indexes, _ring(wiki, with_siblings) & wiki.holdings.keys())
+            _promote(
+                wiki, views, indexes, _ring(wiki, with_siblings) & wiki.holdings.keys(), "titled-kin"
+            )
     _name_the_rest(wiki, views)
 
 
@@ -675,7 +691,9 @@ def _ring(wiki: Wiki, with_siblings: bool = True) -> set[int]:
     return kin - wiki.characters.keys()
 
 
-def _promote(wiki: Wiki, views: list[SnapshotView], indexes: dict, kin: set[int]) -> None:
+def _promote(
+    wiki: Wiki, views: list[SnapshotView], indexes: dict, kin: set[int], role: str = "kin"
+) -> None:
     """Give these relatives pages of their own, and portraits where they lived.
 
     Holding a title is what put the others in; these are here by blood or
@@ -689,7 +707,7 @@ def _promote(wiki: Wiki, views: list[SnapshotView], indexes: dict, kin: set[int]
     for view in views:
         index = indexes[view.fp.date]
         for cid, char in view.find_characters(kin).items():
-            _merge_character(wiki, cid, char, view.fp.date, view.fp.file)
+            _merge_character(wiki, cid, char, view.fp.date, view.fp.file, role)
             family = char.get("family_data")
             if isinstance(family, Block):
                 _merge_family(wiki.characters[cid], own_family(cid, family))

@@ -16,7 +16,9 @@ uv run python -m ck3parser.pipeline saves --title e_germany --dry-run   # whole 
 uv run python -m ck3parser.pipeline saves --title e_germany --dry-run --echo  # ... printing every statement: thousands
 uv run python -m ck3parser.pipeline saves --title e_germany --people    # ... plus every character and their family edges
 uv run python -m ck3parser.sections saves/<file>.ck3 --verify           # top-level layout
-uv run python -m ck3parser.handoff saves --title e_germany --out handoff  # portrait harvester list
+uv run python -m ck3wiki.queue ids site/portraits.json --out ids         # the harvester's --ids-file per save
+uv run python -m ck3wiki.queue collect site/portraits.json --from H --to images  # its captures, renamed
+uv run python -m ck3parser.handoff saves --title e_germany --out handoff  # retiring (#27): use the queue
 uv run python -m ck3wiki.build saves --out site                          # the wikis themselves
 uv run python -m ck3wiki.build saves --out site --portraits harvested    # ... with images folded in
 uv run python -m ck3wiki.build saves --out site --no-family              # ... fast: skips the full character pass
@@ -148,8 +150,11 @@ go to the owner with a recommended default, not into the code.
 - `scripts/fetch_saves.sh` must never infer the repository from
   `GITHUB_REPOSITORY`: it names whichever repository the workflow runs in,
   which is the one place the saves are not guaranteed to be.
-- Never write character names into the hand-off: the companion drops them on
-  principle. Only emit fields this project can resolve correctly. A house's name
+- `portraits.json` is **the one harvest queue** (#27): whatever the companion is
+  asked for comes from the wiki model that renders the pages, so the two cannot
+  list different people. `ck3parser.handoff` is retiring; do not widen it.
+- Never write character names into the queue or the hand-off: the companion
+  drops them on principle. Only emit fields this project can resolve correctly. A house's name
   is not a person's name; the house list keeps it.
 - Image names are **derived**, never assigned: `ck3parser.portraits` is the one
   place that spells the rule, and the companion derives the same names. Changing
