@@ -153,7 +153,9 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 
 ## What is not done, in the order I would do it
 
-Open issues, in the order I would take them: #27's last step (delete
+Next: #39's steps 2 and 3, a *Realm* section on the subject title's page from
+`ck3parser.realm`, then the local map command (PLAN.md §16). Open issues, in the
+order I would take them: #27's last step (delete
 `ck3parser.handoff` once the companion reads `portraits.json`), #30 (a DLC toggled
 mid-run splits it), #31 (localization, needs a decision about the game's
 files), #24 (the graph's two title flaws), #25 with diegoami/ck_wiki#1 (prose in
@@ -209,6 +211,12 @@ and in a first pass it outranks everything the graph could answer.
    | asked unpredictably, in words | graph + LM |
 
 ### Done since this list was last written
+
+- **Realms** (#39, option C, subject ruler only): `ck3parser.realm` computes a
+  ruler's realm per snapshot, with depth as vassal rank and changes as windows
+  (`gained` / `left` / `gone`). Germania: 1 016 → 1 017 → 1 020 counties, 9 held
+  directly (PLAN.md §16). Rebuilds of the wiki now follow every merge here
+  (ck_wiki#2).
 
 - **One harvest queue** (#27, option A). `portraits.json` is it, schema
   `ck3-images/3`, with `role`, `sex` and `birth` per portrait; `ck3wiki.queue`

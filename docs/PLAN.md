@@ -1616,3 +1616,56 @@ the case for a model, not against the pipeline. Choosing the model is next.
 `PROMPT_VERSION` in `ck3wiki.prose` is part of every file: bump it when the prompt
 changes, and prose from the old prompt is rewritten on the next run instead of
 kept.
+
+---
+
+## 16. Realms: what a ruler holds, and what is held under them
+
+Decided on #39, option C: `ck3parser.realm` computes a ruler's realm, the wiki
+shows it on the subject title's page in CI, and a local command renders it on
+the game's own map. Only the subject title's holder at each snapshot gets one.
+This section is the first step, the module.
+
+### Per snapshot, never between
+
+`realm(index, ruler, date)` is the closure of the ruler's titles over one save's
+de facto vassal tree (`TitleIndex.vassals`). A save says who each title's liege
+*is*, never who it has been (§9), so a realm exists per snapshot and nowhere
+between. `changes(earlier, later)` reports what entered and left as windows,
+`after`/`before` the two snapshot dates:
+
+- `gained`: in the later realm, not the earlier one;
+- `left`: in the earlier realm, and in the later save but outside the realm;
+- `gone`: in the earlier realm and in **no** later save. The title was destroyed
+  or pruned, and the save does not say which, so it is never called a loss.
+
+### Depth is vassal rank, not title depth
+
+A title's `depth` counts **holders**: 0 when the ruler holds it, 1 when a direct
+vassal does, 2 when a vassal's vassal does. `chain` lists them, ruler first. A
+duke's county under his own duchy is rank 1, because the duchy and the county
+share a holder. The title tree is deeper than the chain of people, and the two
+must not be mixed: the #39 proposal did, and a review caught it (#40).
+
+Verified on the Germania saves, counties of the `e_germany` holder's realm:
+
+| save | counties | rank 0 | rank 1 | rank 2 | rank 3 | by title depth 2–3 |
+|---|---|---|---|---|---|---|
+| 1358.9.13 | 1 016 | 9 | 229 | 522 | 256 | 1 004 |
+| 1361.1.17 | 1 017 | 9 | 225 | 524 | 259 | 1 005 |
+| 1364.3.10 | 1 020 | 9 | 239 | 520 | 252 | 991 |
+
+Changes: `c_asturias_de_oviedo` gained between 1358.9.13 and 1361.1.17;
+`c_beograd`, `c_bithynia` and `c_tarsos` gained between 1361.1.17 and
+1364.3.10. The last two are the counties Ludwig took by holy war on 1363.1.24
+and passed on the next day: to vassals, so they stayed in the realm. Nothing
+left, and nothing is gone.
+
+### What the map will need (not built yet)
+
+The save holds no geography; the game's files do (`map_data/provinces.png`,
+`definition.csv`, `default.map`, `common/landed_titles`). Barony keys map to
+provinces for 8 575 of 8 576 baronies across saves from 1.3.1 to 1.6.1.2
+(`b_khetaka` alone missing). The prototype on #39 reports "8 574 provinces
+placed", which counts something else: distinct provinces coloured after the
+barony-to-province join, not baronies matched.

@@ -118,6 +118,10 @@ go to the owner with a recommended default, not into the code.
   without changing hands (PLAN.md §9).
 - A title absent from a save was destroyed or pruned, and the save does not say
   which. Absence is never independence, and never bridges two stretches.
+- A realm (`ck3parser.realm`) exists per snapshot only, and its changes are
+  windows, like vassalage. **Depth is vassal rank, counted in holders**, never
+  the depth of the title tree: a duke's county under his own duchy is rank 1.
+  Mixing the two once put 991 where 778 belonged (#40; PLAN.md §16).
 - The lineage says which titles the wiki is about, never which saves are read
   about them. A title's history and holder come from every snapshot that has
   it, in the lineage or not; `current` means open in the newest snapshot, and
