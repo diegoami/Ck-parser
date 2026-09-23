@@ -87,6 +87,7 @@ def build_one(
     run: Run, subject: str, with_vassals: bool, out: Path, portraits: Path | None,
     log, with_family: bool = True, with_kin: bool = True, with_siblings: bool = True,
     releases: dict[str, str] | None = None, cache_dir: Path | None = None,
+    with_titled_kin: bool = True,
 ) -> dict | None:
     views = []
     for snapshot in run.snapshots:
@@ -100,7 +101,8 @@ def build_one(
         print(f"warning: nothing to build for run {run.slug}", file=log)
         return None
     wiki = build_wiki(
-        views, subject, with_family=with_family, with_kin=with_kin, with_siblings=with_siblings
+        views, subject, with_family=with_family, with_kin=with_kin, with_siblings=with_siblings,
+        with_titled_kin=with_titled_kin,
     )
     pages = write_site(wiki, out / run.slug, portraits, top=True)
     images = write_chronicle_manifest(
@@ -139,6 +141,7 @@ def run_build(
     with_family: bool = True,
     with_kin: bool = True,
     with_siblings: bool = True,
+    with_titled_kin: bool = True,
     cache: str | None = None,
     log=None,
 ) -> int:
@@ -161,7 +164,7 @@ def run_build(
             continue
         entry = build_one(
             run, subject, with_vassals, out, shots, log, with_family, with_kin,
-            with_siblings, releases, cache_dir
+            with_siblings, releases, cache_dir, with_titled_kin=with_titled_kin,
         )
         if entry is not None:
             entries.append(entry)
@@ -208,6 +211,12 @@ def main(argv: list[str] | None = None) -> int:
              " pages they appear on and nothing more",
     )
     ap.add_argument(
+        "--no-titled-kin",
+        action="store_true",
+        help="stop at the direct line; otherwise its own relatives get pages too,"
+             " but only those who hold a title themselves",
+    )
+    ap.add_argument(
         "--no-family",
         action="store_true",
         help="skip family; parents exist only as other people's child lists, so"
@@ -224,6 +233,7 @@ def main(argv: list[str] | None = None) -> int:
         with_family=not args.no_family,
         with_kin=not args.no_kin,
         with_siblings=not args.no_siblings,
+        with_titled_kin=not args.no_titled_kin,
         cache=None if args.no_cache else args.cache,
     )
 

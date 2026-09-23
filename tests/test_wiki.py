@@ -717,3 +717,58 @@ def test_every_manifest_says_where_the_naming_rule_is_written(tmp_path):
     assert main([str(tmp_path), "--out", str(out), "--title", "k_testland"]) == 0
     root = json.loads((out / "portraits.json").read_text())
     assert root["docs"]["names"].endswith("COMPANION_PROPOSAL.md#the-rule")
+
+
+#: Gives 205, 200's brother, two children: 206 holds the fixture's unheld duchy,
+#: which is outside the lineage, and 207 holds nothing. Both are in the second
+#: ring -- the direct line of someone who only has a page by blood.
+NEPHEW_EDITS = (
+    ('key="d_empty"\n\tname="Empty Duchy"', 'key="d_empty"\n\tholder=206\n\tname="Empty Duchy"'),
+    (
+        "faith=0\n\t\tdynasty_house=500\n\t\tfamily_data={\n\t\t}",
+        "faith=0\n\t\tdynasty_house=500\n\t\tfamily_data={\n\t\t\tchild={ 206 207 }\n\t\t}",
+    ),
+    (
+        "\n}\ndead_unprunable={",
+        '\n\t206={\n\t\tfirst_name="Nephew"\n\t\tbirth=1080.1.1\n\t}'
+        '\n\t207={\n\t\tfirst_name="Niece"\n\t\tbirth=1082.1.1\n\t\tfemale=yes\n\t}'
+        "\n}\ndead_unprunable={",
+    ),
+)
+
+
+def test_the_second_ring_gets_pages_only_where_it_holds_a_title(tmp_path):
+    # a ruler's nephew who holds a duchy elsewhere is worth a page; one who holds
+    # nothing is one of ~13 000 dead ends and stays a name (docs/PLAN.md §10)
+    save = make_save(tmp_path / "a.ck3", edits=NEPHEW_EDITS)
+    wiki = build_wiki(views(save), "k_testland")
+    assert 206 in wiki.characters
+    assert 207 not in wiki.characters and wiki.named(207) == "Niece"
+    assert wiki.characters[206].parents == [205]
+    assert wiki.characters[206].portraits  # alive, so harvestable like anyone else
+
+    narrow = build_wiki(views(save), "k_testland", with_titled_kin=False)
+    assert 206 not in narrow.characters and 206 in narrow.relatives
+
+
+def test_the_second_ring_is_reached_only_through_somebody_with_a_page(tmp_path):
+    # without sibling pages the brother has none, so his titled son is two steps
+    # from anyone paged and the ring does not reach him
+    save = make_save(tmp_path / "a.ck3", edits=NEPHEW_EDITS)
+    wiki = build_wiki(views(save), "k_testland", with_siblings=False)
+    assert 205 not in wiki.characters and 206 not in wiki.characters
+
+
+def test_a_page_says_what_its_character_held_outside_the_chronicle(tmp_path):
+    save = make_save(tmp_path / "a.ck3", edits=NEPHEW_EDITS)
+    wiki = build_wiki(views(save), "k_testland")
+    # the spouse holds c_far, which answers to c_test and so is not a title of
+    # this lineage; the ruler's own kingdom is, and is not repeated
+    assert [h.key for h in wiki.held_elsewhere(202)] == ["c_far"]
+    assert wiki.held_elsewhere(200) == []
+
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    nephew = (out / "characters" / "206.html").read_text()
+    assert "<h2>Titles held elsewhere</h2>" in nephew and "Empty Duchy" in nephew
+    assert "Titles held elsewhere" not in (out / "characters" / "200.html").read_text()
