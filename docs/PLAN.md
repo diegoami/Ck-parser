@@ -78,6 +78,17 @@ file:
   - Keys can be bare integers (`50544311={`), dates (`867.1.1=`), or identifiers.
   - Values can be quoted strings, bare tokens, numbers, dates, `yes`/`no`, and
     inline lists (`skill={ 5 7 4 4 2 9 }`).
+  - **A quoted string can run over several lines** (verified, all five saves):
+    ~1 090 per Germania save (game version 1.6), none in the 1.3 and 1.4 saves.
+    They are truce descriptions, `name="` with the text on the next line. The
+    tokenizer carries a string across lines; before it did, it dropped both
+    quotes and turned the words into ~17 800 stray tokens per save, unnoticed
+    because nothing the wiki reads is in that section (the site built
+    byte-identical before and after). A string never closed raises
+    `FormatError`.
+  - **No `#` comments** in any of the five saves. One would arrive as words and
+    be parsed as keys, so the tokenizer raises `FormatError` on it instead.
+    `sections --verify` reports either with the line and exits 1.
 - **Section index**: `ck3parser.sections` walks the file once by line and
   reports where each top-level key starts and ends (4.8 s on the 280 MB
   sample), and `verify_parse` pushes the whole file through the tokenizer to

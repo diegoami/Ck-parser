@@ -296,8 +296,9 @@ and in a first pass it outranks everything the graph could answer.
   prefer it as the RunKey and keep the seed as fallback.
 - `RunKey` includes the DLC hash, so toggling a DLC mid-run would split the
   run. A CLI override is planned, not built.
-- The parser assumes no `#` comments and no quoted string spanning lines. Both
-  hold in the three saves; neither is enforced.
+- A quoted string **can** span lines: ~1 090 truce descriptions per Germania
+  save. The handover used to say none did; the tokenizer now reads them, and
+  refuses an unclosed string or a `#` comment with `FormatError` (PLAN.md §5).
 - `holder_intervals` closes a tenure at the next history entry of any kind.
   A typed entry opens a new tenure unless its type is in
   `titles.TERMINAL_TYPES`, which holds `destroyed` alone. That list was derived
