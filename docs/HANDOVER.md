@@ -146,7 +146,7 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 | `sections SAVE` | 54 distinct top-level keys, 14 M lines, 4.8 s |
 | `sections SAVE --verify` | ~41 M tokens, balanced, max depth 7, ~38 s |
 | `handoff saves --title e_germany --run <germany>` | 26 / 2 / 25 harvestable per snapshot, 48 distinct across the run, 22 / 1 / 21 houses, all with arms, ~2 m |
-| `ck3wiki.build saves` on all five release saves | 3 chronicles, 21 879 pages, 5 845 images wanted, ~8 min in CI with family and kin |
+| `ck3wiki.build saves` on all five release saves | 3 chronicles, 25 086 pages, 7 430 images wanted, 1 m 11 s locally with a warm cache |
 | `ck3wiki.build <germania>` with family, cold cache | 1 chronicle, 7 393 pages, 2 470 images, 3 m 51 s |
 | `ck3wiki.build <germania>` with family, warm cache | the same 7 393 pages, **1 m 06 s** — against 9 m 55 s before the digest and before sibling pages |
 | `runs scan` on all five | 3 runs: seeds 576691683 / 633048653 / 1370892195 on versions 1.6.1.2 / 1.4.4 / 1.3.1 |
@@ -160,21 +160,15 @@ and in a first pass it outranks everything the graph could answer.
 1. **Narrative prose.** The wiki is factual; Phase 7's LLM-written text is still
    gated on choosing a small local model. Everything it would need now exists:
    succession, vassalage with honest bounds, family, houses and arms.
-2. **Widen further, or stop here.** Parents, spouses, children and now
-   siblings have pages and portraits (PLAN.md §10). Beyond that lies the second
-   hop — a spouse's parents, a sibling's children — which needs no new pass now
-   that the digest holds every character, but does need a decision about where a
-   chronicle stops. There is no longer a performance reason not to; the reason
-   to stop is editorial.
-3. **Cache the other sections too, if a build is still too slow.** The
+2. **Cache the other sections too, if a build is still too slow.** The
    character digest (PLAN.md §14) took the five character passes down to one
    read. What is left uncached is `landed_titles` (~2 s a save), the dynasties
    section, arms, cultures and faiths — each read once, none of them the shape
    of the problem the characters were. Do this only if a measurement says to.
-4. **Deeper lineages**, then **full-save scale** (PLAN.md Phase 6). Vassalage
+3. **Deeper lineages**, then **full-save scale** (PLAN.md Phase 6). Vassalage
    has bounded stretches (§9) but still only one level down: a county under a
    vassal duchy is not loaded.
-5. **The graph, once the wiki is where it should be.** It now holds what the
+4. **The graph, once the wiki is where it should be.** It now holds what the
    wiki knows and more (PLAN.md §12), so the remaining work is the *query* side,
    not the loading side: pairing it with a local LM and seeing whether Cypher it
    composes actually answers *how many cousins has X*, *how closely are X and Y
@@ -203,6 +197,11 @@ and in a first pass it outranks everything the graph could answer.
    | asked unpredictably, in words | graph + LM |
 
 ### Done since this list was last written
+
+- **Where a chronicle stops is decided.** The ring beyond the direct line gets
+  pages only where it holds a title itself: 182 of 13 202 on Germania, 18 of
+  them kings or better, +506 portraits. Every page now lists what its character held
+  outside the lineage. `--no-titled-kin` stops at the direct line (PLAN.md §10).
 
 - **Sessions read less.** `pipeline --dry-run` no longer prints every statement
   (`--echo` brings that back), `CLAUDE.md` asks for PLAN.md by section rather

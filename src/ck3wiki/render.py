@@ -402,6 +402,23 @@ def render_character(wiki: Wiki, character: WikiCharacter, have: set[str], top: 
     else:
         body.append("<p>This character holds none of the titles in this wiki.</p>")
 
+    elsewhere = wiki.held_elsewhere(character.id)
+    if elsewhere:
+        body.append("<h2>Titles held elsewhere</h2>")
+        body.append(
+            "<table><thead><tr><th>In saves</th><th>Title</th><th>Tier</th></tr></thead><tbody>"
+            + "".join(
+                f'<tr><td class="num">{e(", ".join(h.seen))}</td><td>{e(h.name)}</td>'
+                f'<td>{e(TIER_WORD.get(h.tier or "", h.tier or ""))}</td></tr>'
+                for h in elsewhere
+            )
+            + "</tbody></table>"
+        )
+        body.append(
+            '<p class="sub">Outside this chronicle, so without pages of their own. A save'
+            " says who holds a title when it was written, not who held it before.</p>"
+        )
+
     if character.has_family:
         body.append("<h2>Family</h2>")
         body.append(

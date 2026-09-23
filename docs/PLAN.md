@@ -922,16 +922,18 @@ Siblings were left out at first, as 689 pages of mostly dead ends. That was the
 wrong way to count them. A succession is usually a quarrel between siblings: the
 brother who was passed over is the reason a reign happened at all, and a
 chronicle that can name him but not say what became of him has dropped the half
-of the story that explains the other half. They are the widest ring that still
-earns its pages, and `--no-siblings` goes back to the narrow line.
+of the story that explains the other half. They are the widest ring that
+earns its pages whole, and `--no-siblings` goes back to the narrow line.
+
+| | pages | images wanted |
 
 Measured on the Germania chronicle, across its three saves:
 
-| | pages | images wanted |
 |---|---|---|
 | ever-holders alone | 952 | 53 |
 | + parents, spouses, children | 6 651 | 2 313 |
-| **+ siblings** | **7 393** | **2 470** |
+| + siblings | 7 393 | 2 470 |
+| **+ the titled second ring** | **7 618** | **3 010** |
 
 The portrait queue moves with it, but only for the living: 53 → **1 389**,
 because a ruler's spouse and children are usually alive when the ruler is,
@@ -946,6 +948,55 @@ wiki knows of but not about.
 
 Promotion happens **before** houses are resolved, because it brings in
 characters whose houses must be looked up too. `--no-kin` turns it off.
+
+### Where a chronicle stops: the second ring, gated by a title
+
+One ring further out — the direct line of everyone who has a page only by blood
+or marriage — is where the numbers turn. Measured on Germania (a person reached
+by two paths is counted in both rows):
+
+| path from an ever-holder | people | portraits | hold a title |
+|---|---|---|---|
+| child's child | 4 377 | 1 795 | 57 |
+| sibling's child | 3 832 | 1 248 | 48 |
+| child's spouse | 2 496 | 705 | 40 |
+| spouse's sibling | 2 442 | 534 | 35 |
+| sibling's spouse | 2 235 | 427 | 28 |
+| spouse's parent | 1 516 | 85 | 7 |
+| parent's sibling | 1 516 | 105 | 7 |
+| parent's parent | 896 | 1 | 0 |
+| *all of it* | **13 202** | **3 796** | **182** |
+
+Taking the ring whole would triple the character pages (6 239 → ~19 400) for
+people 98.6% of whom hold nothing. So the ring gets pages **only where it holds
+a title itself**, which is the same thing that put anyone in to begin with: 182
+people. By their highest title that is 1 emperor, 17 kings, 68 dukes, 58 counts
+and 38 barons — a King of Epirus and Krete among the Germania line's kin.
+Everyone else in the ring stays a name, as before. `--no-titled-kin` stops at
+the direct line.
+
+"Holds a title" means **the current holder of any title in any snapshot of the
+run**, baronies included (469 of the 876 titles the 182 hold). A save
+names each title's holder now, and past holders only for the titles whose
+history it keeps, so the current holder is the one answer every save gives
+alike. It also makes the ring's pages almost all harvestable — a current holder
+is alive in that save — which is why 182 people add 506 portraits (540 images
+with the arms of the 36 houses they bring in).
+
+The gate is applied **once**. The ring is computed from the pages that exist
+after the direct line is promoted, and a titled relative's own relatives are not
+considered in turn: iterating would walk the whole nobility of Europe by way of
+its marriages. With `--no-siblings` a brother has no page, so his titled son is
+two steps from anyone paged and is not reached.
+
+Every character page now lists what its character held **outside** the lineage,
+from the same snapshot walk (`Wiki.held_elsewhere`): a page that exists because
+of a title has to name it, and a ruler's wife who holds a county of her own is
+worth saying so. Those titles have no pages; the lineage is still the lineage.
+
+Measured on all five release saves, warm cache, the three chronicles went from
+24 409 pages and 6 443 wanted images to **25 086 and 7 430**, and the build took
+1 m 11 s.
 
 ### One pass, not two
 

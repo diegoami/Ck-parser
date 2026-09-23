@@ -22,6 +22,7 @@ uv run python -m ck3wiki.build saves --out site --portraits harvested    # ... w
 uv run python -m ck3wiki.build saves --out site --no-family              # ... fast: skips the full character pass
 uv run python -m ck3wiki.build saves --out site --no-cache               # ... without the per-save character digests
 uv run python -m ck3wiki.build saves --out site --no-kin                 # ... title-holders only, no direct line
+uv run python -m ck3wiki.build saves --out site --no-titled-kin          # ... stop at the direct line
 ```
 
 ## Rules
@@ -151,6 +152,10 @@ uv run python -m ck3wiki.build saves --out site --no-kin                 # ... t
 - Siblings get pages. A succession is usually a quarrel between them, so the
   brother who was passed over is worth one; `--no-siblings` goes back to the
   narrow line (PLAN.md §10).
+- The chronicle stops one ring past the direct line, and that ring gets pages
+  **only where it holds a title itself**: of ~13 000 people there, 98.6% hold
+  nothing. A title is what put anyone in; do not widen the gate without a
+  measurement, and never iterate it outward (PLAN.md §10).
 - A save's top-level key set varies between saves of one run. Never assume a
   section exists.
 - Facts labelled "verified" in PLAN.md were checked on three real saves. Anything

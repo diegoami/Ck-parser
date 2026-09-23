@@ -132,6 +132,28 @@ class Relative:
         return f"b. {self.birth}" if self.birth else ""
 
 
+#: highest first, the order a list of someone's titles reads in
+TIER_ORDER = {"empire": 0, "kingdom": 1, "duchy": 2, "county": 3, "barony": 4}
+
+
+@dataclass
+class Holding:
+    """A title someone held in a snapshot, whether or not the wiki is about it.
+
+    Only the *current* holder of each title in each save: a save names who holds
+    a title now and, for the past, only who held the titles it keeps history
+    for. `seen` lists the snapshots that said so.
+    """
+
+    key: str
+    name: str
+    tier: str | None = None
+    seen: list[str] = field(default_factory=list)
+
+    def sort_key(self) -> tuple[int, str]:
+        return (TIER_ORDER.get(self.tier or "", 9), self.name)
+
+
 @dataclass
 class WikiCharacter:
     id: int
@@ -236,6 +258,8 @@ class Wiki:
     cultures: dict[int, Culture] = field(default_factory=dict)
     faiths: dict[int, Faith] = field(default_factory=dict)
     relatives: dict[int, Relative] = field(default_factory=dict)  #: named, but no page
+    #: every title each character held at some snapshot, lineage or not
+    holdings: dict[int, dict[str, Holding]] = field(default_factory=dict)
     saves: list[dict] = field(default_factory=list)  #: {file, checksum, date} per snapshot
 
     def person(self, character_id: int) -> WikiCharacter | Relative | None:
@@ -275,6 +299,11 @@ class Wiki:
         ]
         out.sort(key=lambda pair: pair[1].sort_key())
         return out
+
+    def held_elsewhere(self, character_id: int) -> list[Holding]:
+        """What this character held outside the lineage, highest tier first."""
+        held = self.holdings.get(character_id, {})
+        return sorted((h for k, h in held.items() if k not in self.titles), key=Holding.sort_key)
 
     def named(self, character_id: int) -> str:
         person = self.person(character_id)
@@ -368,6 +397,7 @@ def build_wiki(
     with_family: bool = True,
     with_kin: bool = True,
     with_siblings: bool = True,
+    with_titled_kin: bool = True,
 ) -> Wiki:
     """Merge snapshots, oldest first, into one picture of the lineage."""
     views = sorted(views, key=lambda v: date_key(v.fp.date))
@@ -387,8 +417,12 @@ def build_wiki(
             {"file": Path(view.fp.file).name, "checksum": save_checksum(view.fp.file), "date": view.fp.date}
         )
     _load_vassalage(wiki, views)
+    _load_holdings(wiki, views)
     if with_family:
-        _load_family(wiki, views, with_kin=with_kin, with_siblings=with_siblings)
+        _load_family(
+            wiki, views, with_kin=with_kin, with_siblings=with_siblings,
+            with_titled_kin=with_titled_kin,
+        )
     # after the family, never before it: promoting the direct line brings in
     # characters of its own, and their houses have to be resolved too
     _load_houses(wiki, views)
@@ -452,9 +486,9 @@ def direct_line(record: WikiCharacter, with_siblings: bool = True) -> set[int]:
     Parents, spouses and children always. Siblings too, because a succession is
     usually a quarrel between them: the brother who was passed over is the
     reason a reign happened at all, and a chronicle that names him without a
-    page cannot say what became of him. They are the widest ring that still
-    earns its pages (docs/PLAN.md §10); `--no-siblings` drops back to the
-    narrow line.
+    page cannot say what became of him. They are the widest ring that earns
+    its pages whole; the ring beyond gets pages only where it holds a title
+    (docs/PLAN.md §10). `--no-siblings` drops back to the narrow line.
     """
     kin = {*record.parents, *record.spouses, *record.former_spouses, *record.children}
     if with_siblings:
@@ -464,8 +498,33 @@ def direct_line(record: WikiCharacter, with_siblings: bool = True) -> set[int]:
     return kin
 
 
+def _load_holdings(wiki: Wiki, views: list[SnapshotView]) -> None:
+    """Who held what in each snapshot, across the whole save, not just the lineage.
+
+    One walk over each save's title index, which is already in memory. It is
+    what lets a page say what someone held outside the chronicle, and what
+    decides who in the family's second ring earns a page (docs/PLAN.md §10).
+    """
+    for view in views:
+        for record in view.index.by_idx.values():
+            if record.holder is None:
+                continue
+            held = wiki.holdings.setdefault(record.holder, {})
+            holding = held.get(record.key)
+            if holding is None:
+                holding = held[record.key] = Holding(
+                    key=record.key, name=record.display_name, tier=record.tier
+                )
+            if view.fp.date not in holding.seen:
+                holding.seen.append(view.fp.date)
+
+
 def _load_family(
-    wiki: Wiki, views: list[SnapshotView], with_kin: bool = True, with_siblings: bool = True
+    wiki: Wiki,
+    views: list[SnapshotView],
+    with_kin: bool = True,
+    with_siblings: bool = True,
+    with_titled_kin: bool = True,
 ) -> None:
     """Read each snapshot's family, promote the direct line, name the rest.
 
@@ -484,23 +543,31 @@ def _load_family(
             _merge_family(wiki.characters[cid], index.family_of(cid))
 
     if with_kin:
-        _promote(wiki, views, indexes, with_siblings=with_siblings)
+        _promote(wiki, views, indexes, _ring(wiki, with_siblings))
+        if with_titled_kin:
+            # one ring further, and only for those who hold a title themselves:
+            # the whole ring is ~13 000 people of whom 98.6% hold nothing
+            _promote(wiki, views, indexes, _ring(wiki, with_siblings) & wiki.holdings.keys())
     _name_the_rest(wiki, views)
 
 
-def _promote(
-    wiki: Wiki, views: list[SnapshotView], indexes: dict, with_siblings: bool = True
-) -> None:
-    """Give the direct line pages of their own, and portraits where they lived.
+def _ring(wiki: Wiki, with_siblings: bool = True) -> set[int]:
+    """Everyone in the direct line of somebody with a page, who has none yet."""
+    kin: set[int] = set()
+    for record in wiki.characters.values():
+        kin |= direct_line(record, with_siblings=with_siblings)
+    return kin - wiki.characters.keys()
+
+
+def _promote(wiki: Wiki, views: list[SnapshotView], indexes: dict, kin: set[int]) -> None:
+    """Give these relatives pages of their own, and portraits where they lived.
 
     Holding a title is what put the others in; these are here by blood or
     marriage, so they get the same page and the same portrait rule -- a slot
-    only for the saves they were alive in.
+    only for the saves they were alive in. Called twice: once for the whole
+    direct line of the title-holders, once for the titled part of the ring
+    beyond it.
     """
-    kin: set[int] = set()
-    for record in list(wiki.characters.values()):
-        kin |= direct_line(record, with_siblings=with_siblings)
-    kin -= wiki.characters.keys()
     if not kin:
         return
     for view in views:
