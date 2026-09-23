@@ -154,6 +154,12 @@ def gather(
     fp = fingerprint(save_path, with_sha256=False)
     digest = digest_for(save_path, fp, cache_dir, log)
     index = build_index(save_path)
+    for reason, (key, date) in sorted(index.unknown_reasons().items()):
+        print(
+            f"warning: unknown history type {reason!r} in {Path(save_path).name}, first at"
+            f" {key} {date}; it opened a tenure -- if it ends one, add it to titles.TERMINAL_TYPES",
+            file=log,
+        )
     target, vassals = lineage(index, title_key, with_vassals)
     print(
         f"{Path(save_path).name} [{fp.date}]: {target.key} ({target.display_name}, {target.tier})"

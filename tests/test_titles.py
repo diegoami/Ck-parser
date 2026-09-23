@@ -78,3 +78,23 @@ def test_keep_history_predicate_bounds_what_is_kept(tmp_path):
 def test_holder_ids_span_history_and_current_holder(tmp_path):
     index = build_index(make_save(tmp_path / "a.ck3"))
     assert index.get("k_testland").holder_ids() == {100, 101, 102, 200}
+
+
+def test_an_unknown_history_type_is_reported_not_guessed(tmp_path):
+    # a terminal type TERMINAL_TYPES lacks would invent a reign for the outgoing
+    # ruler; nothing can classify it here, so it is surfaced instead
+    import io
+
+    from ck3parser.pipeline import gather
+    from ck3parser.titles import build_index
+
+    edits = (("950.3.3={\n\t\t\ttype=created", "950.3.3={\n\t\t\ttype=abolished"),)
+    save = make_save(tmp_path / "a.ck3", edits=edits)
+    assert build_index(str(save)).unknown_reasons() == {"abolished": ("k_testland", "950.3.3")}
+    assert build_index(str(make_save(tmp_path / "b.ck3"))).unknown_reasons() == {}
+
+    log = io.StringIO()
+    view = gather(str(save), "k_testland", log=log)
+    assert "unknown history type 'abolished'" in log.getvalue() and "k_testland 950.3.3" in log.getvalue()
+    # and nothing else changes: it still opens a tenure, as before
+    assert (102, "950.3.3") in {(h, d) for d, h, _ in view.target.history}

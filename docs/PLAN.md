@@ -394,6 +394,17 @@ Two consequences for the loader, both now implemented:
 2. Every other typed entry opens a tenure, and its type is worth keeping as the
    `reason` on the relationship.
 
+**The types, verified on all five release saves:** 16, and the same 16 in each
+save except that the HRE save lacks one. `destroyed` is the only terminal one.
+The others, by count across the five: `revoked` 22 800, `granted` 17 656,
+`conquest_claim` 15 502, `conquest` 11 858, `abdication` 11 032, `created`
+9 762, `conquest_holy_war` 7 209, `faction_demand` 6 237, `conquest_populist`
+3 955, `independency` 2 945, `leased_out` 1 788, `swear_fealty` 1 069,
+`usurped` 434, `returned` 136, `lease_revoked` 47 (`destroyed`: 6 001). They are
+`titles.KNOWN_TYPES`. A type outside it still opens a tenure as before, but
+`gather` warns with the title and date of its first use, because a terminal
+type the list lacks is exactly what would invent a reign unnoticed.
+
 Character records also carry `landed_data.domain={ … }`, the list of title
 indices a character holds directly, which is a second route to the same
 structure and is not used yet.

@@ -43,6 +43,14 @@ TIER_BY_PREFIX = {"e": "empire", "k": "kingdom", "d": "duchy", "c": "county", "b
 #: history entry types that end a tenure instead of starting one. Such an entry
 #: repeats the *outgoing* holder, so it must not open an interval.
 TERMINAL_TYPES = frozenset({"destroyed"})
+#: every history entry type seen across the five release saves (PLAN.md §5).
+#: One outside it is not an error -- it opens a tenure like any other -- but
+#: it is exactly what would slip past TERMINAL_TYPES, so it is reported.
+KNOWN_TYPES = TERMINAL_TYPES | frozenset({
+    "abdication", "conquest", "conquest_claim", "conquest_holy_war", "conquest_populist",
+    "created", "faction_demand", "granted", "independency", "lease_revoked", "leased_out",
+    "returned", "revoked", "swear_fealty", "usurped",
+})
 
 
 @dataclass
@@ -198,6 +206,22 @@ class TitleIndex:
 
     def get(self, key: str) -> TitleRecord | None:
         return self.by_key.get(key)
+
+    def unknown_reasons(self) -> dict[str, tuple[str, str]]:
+        """History entry types outside KNOWN_TYPES, each with its first ``(title, date)``.
+
+        A terminal type the list lacks would open a tenure for the outgoing
+        ruler and invent a reign nobody notices, so a new one is surfaced for
+        someone to classify rather than silently guessed at.
+        """
+        found: dict[str, tuple[str, str]] = {}
+        for record in self.by_idx.values():
+            for date, _, reason in record.history:
+                if reason is not None and reason not in KNOWN_TYPES and (
+                    reason not in found or date_key(date) < date_key(found[reason][1])
+                ):
+                    found[reason] = (record.key, date)
+        return found
 
     def resolve(self, idx: int | None) -> TitleRecord | None:
         return self.by_idx.get(idx) if idx is not None else None
