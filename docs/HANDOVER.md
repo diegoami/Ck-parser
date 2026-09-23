@@ -161,8 +161,8 @@ and in a first pass it outranks everything the graph could answer.
    model is `deepseek-v4-flash` on OpenCode Zen (~$0.001 a page), and prose is
    written by **ck_wiki's own workflow** from an `OPENCODE_API_KEY` secret, into
    its `prose/` beside `images/` (PLAN.md §15). Not started until the owner
-   picks it up again; the open parts — which pages, parallel requests, a spend
-   cap — are filed as GitHub issues.
+   picks it up again; the plan is diegoami/ck_wiki#1, and what this side still
+   needs — which pages, parallel requests, a spend cap — is #25.
 2. **Cache the other sections too, if a build is still too slow.** The
    character digest (PLAN.md §14) took the five character passes down to one
    read. What is left uncached is `landed_titles` (~2 s a save), the dynasties
@@ -267,7 +267,7 @@ and in a first pass it outranks everything the graph could answer.
 
 - The graph loader reads a title only from snapshots where it is in the
   lineage, so a title that leaves it keeps an open `HELD_BY` — the flaw the
-  wiki had with Denmark (PLAN.md §9). Filed as an issue.
+  wiki had with Denmark (PLAN.md §9). Filed as #24.
 
 - `version="1.6.1.2"` in all three saves while the DLC list contains DLCs
   released well after 1.6. The player started this run on 1.6.1.2 and carried
