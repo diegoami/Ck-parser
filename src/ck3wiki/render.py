@@ -394,6 +394,12 @@ def realm_section(wiki: Wiki) -> str:
         "</tr></thead><tbody>",
     ]
     for r in wiki.realms:
+        if r.ruler is None:
+            out.append(
+                f"<tr><td class='num'>{e(r.date)}</td><td colspan='5'><span class='tag'>vacant"
+                "</span> the title had no holder at this save, so there was no realm</td></tr>"
+            )
+            continue
         deeper = sum(n for rank, n in r.by_rank.items() if rank >= 2)
         out.append(
             f"<tr><td class='num'>{e(r.date)}</td><td>{character_link(wiki, r.ruler, 1)}</td>"
@@ -403,7 +409,8 @@ def realm_section(wiki: Wiki) -> str:
     out.append("</tbody></table>")
 
     moved = [c for r in wiki.realms for c in r.changes]
-    if len(wiki.realms) > 1:
+    held = [r for r in wiki.realms if r.ruler is not None]
+    if len(held) > 1:
         out.append("<h3>Between the saves</h3>")
         if moved:
             out.append(
@@ -419,8 +426,17 @@ def realm_section(wiki: Wiki) -> str:
             out.append("</tbody></table>")
         else:
             out.append("<p>No county joined or left the realm between the saves.</p>")
+        for r in held:
+            if r.across:
+                out.append(
+                    f'<p class="sub">Changes up to {e(r.date)} are measured across'
+                    f" {', '.join(e(d) for d in r.across)}, when the title had no holder:"
+                    " the window runs from the last save it was held in.</p>"
+                )
 
-    last = wiki.realms[-1]
+    if not held:
+        return "\n".join(out)
+    last = held[-1]
     out.append(f"<h3>By kingdom, at {e(last.date)}</h3>")
     out.append(
         "<table><thead><tr><th>De jure kingdom</th><th class='num'>Counties</th>"

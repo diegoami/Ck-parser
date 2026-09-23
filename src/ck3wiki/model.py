@@ -104,10 +104,14 @@ class WikiRealm:
     """
 
     date: str
-    ruler: int
+    #: None when the title had no holder at this snapshot: no realm existed,
+    #: and the row says so rather than leaving the save out (#45)
+    ruler: int | None
     by_rank: dict[int, int]  #: counties at each vassal rank
     kingdoms: list[RealmKingdom]  #: largest first
-    changes: list[RealmCounty]  #: against the previous snapshot; empty for the first
+    changes: list[RealmCounty]  #: against the previous *held* snapshot; empty for the first
+    #: vacant snapshots the changes above were measured across, oldest first
+    across: list[str] = field(default_factory=list)
 
     @property
     def counties(self) -> int:
@@ -633,9 +637,14 @@ def _load_realms(wiki: Wiki, views: list[SnapshotView]) -> None:
     """
     previous = None
     previous_names: dict[str, str] = {}
+    vacant: list[str] = []
     for view in views:
         ruler = view.target.holder
         if ruler is None:
+            # the title is in the save but nobody holds it: no realm to show,
+            # and the next held snapshot is compared across this one
+            wiki.realms.append(WikiRealm(date=view.fp.date, ruler=None, by_rank={}, kingdoms=[], changes=[]))
+            vacant.append(view.fp.date)
             continue
         current = compute_realm(view.index, ruler, view.fp.date)
         counties = current.of_tier("county")
@@ -663,8 +672,9 @@ def _load_realms(wiki: Wiki, views: list[SnapshotView]) -> None:
             by_rank=dict(sorted(current.by_depth("county").items())),
             kingdoms=sorted(kingdoms.values(), key=lambda k: (-k.total, k.name)),
             changes=moved,
+            across=vacant if previous is not None else [],
         ))
-        previous, previous_names = current, names
+        previous, previous_names, vacant = current, names, []
 
 
 def _load_title_arms(wiki: Wiki, views: list[SnapshotView]) -> None:
