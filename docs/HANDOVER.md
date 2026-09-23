@@ -1,7 +1,7 @@
 # Handover
 
-State of the CK3 History Extractor as of the end of the scaffold pass, written
-so a fresh session (any model) can continue without the conversation history.
+State of the CK3 History Extractor, kept current PR by PR, written so a fresh
+session (any model) can continue without the conversation history.
 
 ## Where things are
 
@@ -9,12 +9,12 @@ so a fresh session (any model) can continue without the conversation history.
 |---|---|
 | Plan, design, verified save-format facts | `docs/PLAN.md` |
 | Agent rules and commands | `CLAUDE.md` |
-| Code | `src/ck3parser/`, `src/ck3graph/` (see README for the module map) |
+| Code | `src/ck3parser/`, `src/ck3graph/`, `src/ck3wiki/` (see README for the module map) |
 | Tests and fixture | `tests/`, `tests/fixtures/gamestate_sample.txt` |
 | Real saves | **ck_wiki's** Releases, tagged by run seed; `scripts/fetch_saves.sh` downloads and checksums them into `./saves` |
 | Branch | work lands on `main` through a PR per task |
 | Published wiki | `diegoami/ck_wiki` — its `images/` holds the companion's harvested images, its `portraits.json` the queue; the pages are built there, never committed |
-| CI | `.github/workflows/ci.yml`, runs `uv run pytest` on the fixture; has not run yet because no PR exists |
+| CI | `.github/workflows/ci.yml`, runs `uv run pytest` on the fixture on every push and PR, ~15 s |
 
 ## What is done
 
@@ -128,7 +128,8 @@ so a fresh session (any model) can continue without the conversation history.
 - **Pipeline** (`pipeline.py`): a lineage (title plus its immediate de facto
   vassals) end to end. Given a directory it loads every snapshot of that run
   oldest first, checking consecutive pairs as it goes. `--no-vassals`,
-  `--no-check`, `--run <id>` and `--dry-run` flags. Exit 0 clean, 1 loaded with
+  `--no-check`, `--run <id>` and `--dry-run` flags; a dry run prints its
+  statements only with `--echo`. Exit 0 clean, 1 loaded with
   disagreements, 2 bad arguments.
 
 Measured on the three real saves (same run, 1358 / 1361 / 1364):
@@ -206,6 +207,10 @@ and in a first pass it outranks everything the graph could answer.
    | asked unpredictably, in words | graph + LM |
 
 ### Done since this list was last written
+
+- **Sessions read less.** `pipeline --dry-run` no longer prints every statement
+  (`--echo` brings that back), `CLAUDE.md` asks for PLAN.md by section rather
+  than whole, and forbids opening a save or gamestate raw.
 
 - **The saves moved to ck_wiki's Releases**, tagged by run seed
   (`1370892195`, `633048653`, `576691683`) rather than by batch number.
@@ -327,9 +332,9 @@ and in a first pass it outranks everything the graph could answer.
   exercised on the fixture. `filter.filter_characters`, which expands the
   referenced set through family links, is likewise unused by the pipeline and
   waits for the pass that streams whole character sections.
-- Tests never touch Neo4j; `open_session` imports the driver lazily. A local
-  Neo4j has not been used in this session at all, so the Cypher has been
-  reviewed but not executed.
+- The default suite never touches Neo4j; `open_session` imports the driver
+  lazily. Only `tests/test_integration_neo4j.py` executes the Cypher, and it
+  skips unless `CK3_TEST_NEO4J_URI` is set.
 
 ## How to verify you have not broken anything
 
@@ -344,7 +349,7 @@ uv run python -m ck3parser.handoff saves --title e_germany --out handoff
 
 uv run python -m ck3wiki.build saves --out site   # one chronicle per run
 
-uv run python -m ck3parser.pipeline saves --title e_germany --dry-run 2>&1 >/dev/null
+uv run python -m ck3parser.pipeline saves --title e_germany --dry-run
 # 3 snapshots oldest first, 37/19/51 vassals, 0 missing characters, exit 0
 
 # against a throwaway database (this WIPES it):

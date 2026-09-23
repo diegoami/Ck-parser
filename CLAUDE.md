@@ -1,17 +1,19 @@
 # CK3 History Extractor — notes for coding agents
 
-Read `docs/HANDOVER.md` first (state of the project, next tasks), then
-`docs/PLAN.md` (design, verified facts about the save format).
+Read `docs/HANDOVER.md` first (state of the project, next tasks). `docs/PLAN.md`
+(design, verified facts about the save format) is ~17k tokens: open only the
+sections your task touches, found through its `##` headings, not the whole file.
 
 ## Commands
 
 ```
 uv sync --group dev              # install (the SessionStart hook does this on the web)
-uv run pytest -q                 # 188 tests, < 1 s, fixture only
-scripts/fetch_saves.sh           # three real saves (~73 MB each) into ./saves, git-ignored
+uv run pytest -q                 # ~200 tests, < 1 s, fixture only; the Neo4j ones skip
+scripts/fetch_saves.sh           # every real save (~73 MB each) into ./saves, git-ignored
 uv run python -m ck3parser.runs verify saves --json saves/runs.json
 uv run python -m ck3parser.pipeline saves/<file>.ck3 --title e_germany --dry-run
 uv run python -m ck3parser.pipeline saves --title e_germany --dry-run   # whole run, oldest first
+uv run python -m ck3parser.pipeline saves --title e_germany --dry-run --echo  # ... printing every statement: thousands
 uv run python -m ck3parser.pipeline saves --title e_germany --people    # ... plus every character and their family edges
 uv run python -m ck3parser.sections saves/<file>.ck3 --verify           # top-level layout
 uv run python -m ck3parser.handoff saves --title e_germany --out handoff  # portrait harvester list
@@ -24,6 +26,15 @@ uv run python -m ck3wiki.build saves --out site --no-kin                 # ... t
 
 ## Rules
 
+- Never open a save or its `gamestate` with Read, `cat`, `less` or an unbounded
+  `grep`: a gamestate is ~280 MB and 14 M lines, some of them long (packed
+  `dna`), and one careless look fills the context. Ask the question in Python through
+  `iter_children` / `read_top_level` and print a count or a few fields; use
+  `ck3parser.sections` for the layout. A raw look is `grep -m 5 … | cut -c 1-200`
+  at most.
+- The real-save commands report on stderr and take minutes: run them with
+  output redirected to a log file and read its tail. Never let
+  `--dry-run --echo` print into the conversation, least of all with `--people`.
 - Never commit `.ck3` files or an extracted `gamestate`; they are release assets.
 - The parser is brace-driven. Never rely on indentation: title entries sit at column 0.
 - Everything that touches the real `gamestate` streams it (`iter_children`,
