@@ -44,8 +44,9 @@ from typing import Protocol
 from .model import Wiki, WikiTitle
 from .render import TIER_WORD
 
-#: Bump when the prompt changes: existing prose is then regenerated, not reused.
-PROMPT_VERSION = "ck3-prose/1"
+#: Bump when the prompt or the fact sheet changes: existing prose is then
+#: regenerated, not reused.
+PROMPT_VERSION = "ck3-prose/2"
 SCHEMA = "ck3-prose/1"
 KINDS = ("characters", "titles")
 
@@ -54,16 +55,55 @@ playthrough. You are given a JSON fact sheet. Write one to three paragraphs of p
 neutral prose in the style of an encyclopedia.
 
 Rules:
-- Use only the facts given. Do not invent events, motives, wars, personalities or \
-relationships. If the facts are thin, write less.
-- Keep every date exactly as it appears; game dates are written year.month.day.
-- A value written as "A – B" or "by A" is a window, not a date: say the change \
-happened between A and B, or by A. Never pick a date inside it.
-- Names are given as they should appear. Do not translate or correct them.
+- Use only the facts given. Do not invent events, motives, wars, personalities, \
+relationships or geography. Do not judge a reign. If the facts are thin, write less.
+- Copy dates exactly as written. Where a fact says a change happened "between" two \
+dates, say so; never pick a date inside it.
+- "how_gained" says how a title was gained, never how it was lost. "passed_to" says \
+who held a title next, not how or why: never say a title was granted or given.
+- "held_when_title_last_seen" gives the last save that shows the title, and the person \
+still held it then. It says nothing about later, and nothing about a death.
+- "other_titles_this_person_held" are titles this same person held outside this \
+chronicle.
+- A de jure liege is only a legal claim; whether a realm was independent is what \
+"lieges" says, and nothing else.
+- Use each person's "sex" for pronouns and for words such as son or daughter. \
+Use the counts given; do not count for yourself.
+- Names are given as they should appear. Do not translate, correct or respell them.
 - No headings, no lists, no markdown. Output only the entry."""
+
+MONTHS = ("January", "February", "March", "April", "May", "June", "July",
+          "August", "September", "October", "November", "December")
 
 
 # ---------------------------------------------------------------- facts
+
+
+def _date(value: str | None) -> str | None:
+    """``"1284.3.6"`` -> ``"6 March 1284"``, written here so a model never converts one.
+
+    The numbers stay the same, so the number check still holds a paragraph to
+    them. Anything that is not a date is passed through untouched.
+    """
+    if not value:
+        return None
+    try:
+        year, month, day = (int(x) for x in str(value).split("."))
+        return f"{day} {MONTHS[month - 1]} {year}"
+    except (ValueError, IndexError):
+        return str(value)
+
+
+def _age(birth: str | None, death: str | None) -> int | None:
+    """Whole years between two save dates, as a fact rather than a sum left to the writer."""
+    if not birth or not death:
+        return None
+    try:
+        by, bm, bd = (int(x) for x in birth.split("."))
+        dy, dm, dd = (int(x) for x in death.split("."))
+    except ValueError:
+        return None
+    return dy - by - ((dm, dd) < (bm, bd))
 
 
 def _tidy(reason: str | None) -> str | None:
@@ -74,8 +114,9 @@ def _person(wiki: Wiki, cid: int) -> dict:
     person = wiki.person(cid)
     return {
         "name": wiki.named(cid),
-        "born": getattr(person, "birth", None),
-        "died": getattr(person, "death", None),
+        "sex": "female" if getattr(person, "female", False) else "male",
+        "born": _date(getattr(person, "birth", None)),
+        "died": _date(getattr(person, "death", None)),
     }
 
 
@@ -99,6 +140,15 @@ def _neighbours(title: WikiTitle, index: int, wiki: Wiki) -> tuple[str | None, s
     )
 
 
+def _liege_stretch(wiki: Wiki, stretch) -> dict:
+    """A vassalage stretch in words, so a window cannot be mistaken for a date (§9)."""
+    began = (f"between {_date(stretch.after)} and {_date(stretch.first)}" if stretch.after
+             else f"already so at the first save, {_date(stretch.first)}")
+    ended = (f"between {_date(stretch.last)} and {_date(stretch.before)}" if stretch.before
+             else f"still so at the last save, {_date(stretch.last)}")
+    return {"liege": _liege_name(wiki, stretch.liege), "began": began, "ended": ended}
+
+
 def character_facts(wiki: Wiki, cid: int) -> dict:
     """Everything a character page states, as data. The prose may use this and no more."""
     character = wiki.characters[cid]
@@ -109,32 +159,35 @@ def character_facts(wiki: Wiki, cid: int) -> dict:
     for title, tenure in wiki.held_by(cid):
         # by identity: two tenures can be equal field for field (PLAN.md §5)
         at = next(i for i, t in enumerate(title.tenures) if t is tenure)
-        predecessor, successor = _neighbours(title, at, wiki)
+        previous, following = _neighbours(title, at, wiki)
         reigns.append({
             "title": title.name,
             "tier": _tier(title.tier),
-            "from": tenure.start,
-            "to": None if tenure.open else tenure.end,
-            "still_holds": tenure.open,
-            "how": _tidy(tenure.reason),
-            "predecessor": predecessor,
-            "successor": None if tenure.open else successor,
+            "from": _date(tenure.start),
+            "until": None if tenure.open else _date(tenure.end),
+            # not "at the last save": a title can leave the lineage, and then
+            # the last word on it is older than the chronicle's end
+            "held_when_title_last_seen": _date(title.last_seen) if tenure.open else None,
+            "how_gained": _tidy(tenure.reason),
+            "previous_holder": previous,
+            "passed_to": None if tenure.open else following,
         })
     return {
         "page": "character",
         "id": cid,
         "name": character.name or f"Character {cid}",
         "sex": "female" if character.female else "male",
-        "born": character.birth,
-        "died": character.death,
+        "born": _date(character.birth),
+        "died": _date(character.death),
+        "died_aged": _age(character.birth, character.death),
         "cause_of_death": _tidy(character.death_reason),
         "house": house.name if house else None,
         "dynasty": house.dynasty.display_name if house and house.dynasty else None,
         "culture": culture.display_name if culture else None,
         "faith": faith.display_name if faith else None,
-        "titles_held": reigns,
-        "titles_held_elsewhere": [
-            {"title": h.name, "tier": _tier(h.tier), "in_saves": h.seen}
+        "titles_held_in_this_chronicle": reigns,
+        "other_titles_this_person_held": [
+            {"title": h.name, "tier": _tier(h.tier), "held_in_saves": [_date(d) for d in h.seen]}
             for h in wiki.held_elsewhere(cid)
         ],
         "parents": [_person(wiki, p) for p in character.parents],
@@ -144,9 +197,10 @@ def character_facts(wiki: Wiki, cid: int) -> dict:
         "siblings": [_person(wiki, p) for p in character.siblings],
         # counts are facts too: stated here, a paragraph may use them and the
         # number check accepts them, rather than either counting for itself
+        "number_of_marriages": len(character.spouses) + len(character.former_spouses),
         "number_of_children": len(character.children),
         "number_of_siblings": len(character.siblings),
-        "chronicle_saves": list(wiki.snapshots),
+        "chronicle_saves": [_date(d) for d in wiki.snapshots],
     }
 
 
@@ -163,19 +217,16 @@ def title_facts(wiki: Wiki, key: str) -> dict:
         "succession": [
             {
                 "ruler": wiki.named(t.holder),
-                "from": t.start,
-                "to": None if t.open else t.end,
-                "current": t.open,
-                "how": _tidy(t.reason),
+                "from": _date(t.start),
+                "until": None if t.open else _date(t.end),
+                "held_when_title_last_seen": _date(title.last_seen) if t.open else None,
+                "how_gained": _tidy(t.reason),
             }
             for t in title.tenures
         ],
         # a save has no vassalage history: these are windows, never dates
-        "lieges": [
-            {"liege": _liege_name(wiki, s.liege), "began": s.began, "ended": s.ended or None}
-            for s in title.vassalage(wiki.snapshots)
-        ],
-        "chronicle_saves": list(wiki.snapshots),
+        "lieges": [_liege_stretch(wiki, s) for s in title.vassalage(wiki.snapshots)],
+        "chronicle_saves": [_date(d) for d in wiki.snapshots],
     }
 
 
@@ -261,10 +312,12 @@ def _template_character(f: dict) -> str:
     first = name + (f" ({life})" if life else "")
     house = f" of the house of {f['house']}" if f["house"] else ""
     sentences = [f"{first} was a member{house}." if house else f"{first} appears in this chronicle."]
-    for reign in f["titles_held"]:
+    for reign in f["titles_held_in_this_chronicle"]:
         span = f"from {reign['from'] or 'an unrecorded date'}"
-        span += " and still held it when last seen" if reign["still_holds"] else f" to {reign['to'] or 'an unrecorded date'}"
-        after = f", succeeding {reign['predecessor']}" if reign["predecessor"] else ""
+        span += (f" and still held it on {reign['held_when_title_last_seen']}"
+                 if reign["held_when_title_last_seen"]
+                 else f" until {reign['until'] or 'an unrecorded date'}")
+        after = f", after {reign['previous_holder']}" if reign["previous_holder"] else ""
         sentences.append(f"{name} held the {(reign['tier'] or 'title').lower()} of {reign['title']} {span}{after}.")
     n = f["number_of_children"]
     if n:

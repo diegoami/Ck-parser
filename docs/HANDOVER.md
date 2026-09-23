@@ -157,12 +157,12 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 in its own right (PLAN.md §12), but the published chronicle is the deliverable,
 and in a first pass it outranks everything the graph could answer.
 
-1. **Choose the prose model.** The pipeline is built (`ck3wiki.prose`,
-   PLAN.md §15) and the provider is OpenCode Zen, pay-as-you-go, over the
-   existing `openai` backend. The trial is `deepseek-v4-pro` against `glm-5.3`
-   on Germania's rulers, a few cents each; `kimi-k3` is ~3x dearer, Claude
-   ruled out on price. Then decide whether prose is written in ck_wiki's
-   workflow from an `OPENCODE_API_KEY` secret.
+1. **Decide which pages get prose, and where it is written.** The model is
+   chosen: `deepseek-v4-flash` on OpenCode Zen, ~$0.001 a page, nothing wrong
+   on the trial pages (PLAN.md §15). Still open: rulers only or every
+   ever-holder (~$0.80 and ~2 h sequential for Germania), whether requests
+   go in parallel, and whether ck_wiki's workflow writes it from an
+   `OPENCODE_API_KEY` secret into its own `prose/`.
 2. **Cache the other sections too, if a build is still too slow.** The
    character digest (PLAN.md §14) took the five character passes down to one
    read. What is left uncached is `landed_titles` (~2 s a save), the dynasties
@@ -257,6 +257,12 @@ and in a first pass it outranks everything the graph could answer.
   that cost several runs to discover and is recorded in ck_wiki's README.
 
 ## Known gaps and gotchas
+
+- A tenure still open when its title leaves the lineage is tagged `current`
+  on the pages, though the last word on it may be years old: Denmark shows
+  Asa as its current holder, four years after her death, because Denmark was
+  in the lineage only in the 1358 save. The prose fact sheet already says
+  "when the title was last seen" instead; the pages do not yet.
 
 - `version="1.6.1.2"` in all three saves while the DLC list contains DLCs
   released well after 1.6. The player started this run on 1.6.1.2 and carried
