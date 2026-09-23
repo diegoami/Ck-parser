@@ -894,6 +894,35 @@ same way, by `last_recorded`.
 The graph loader still reads titles from the lineage only, and has the same
 flaw; it is filed as an issue rather than fixed here.
 
+### A reign ends at its holder's death
+
+A history closes a tenure only at its next entry, and before the bookmark the
+entries are sparse. Read naively, Heinrich held `e_hre` until 962.2.2, 26 years
+after his death on 936.7.2, because Otto's is the next entry; Kyi "held"
+`d_kiev` for 227 years dead. Across the three release chronicles, 316 closed
+tenures ran past their holder's recorded death.
+
+So a closed tenure now ends at the holder's death when the history runs on
+past it (`_end_reigns_at_death`), keeping the history's date in `recorded_end`,
+and the stretch after it is a **gap**: `Wiki.succession` puts a
+`no holder recorded` row wherever the next tenure starts more than a day after
+the previous one ends. Nobody is guessed into it. One day is not a gap, because
+the game dates the heir's entry the day after the death — 26 of the 316 were
+exactly that. An open tenure is left alone: the newest save says who holds it.
+
+| | tenures clipped | one-day handovers | gaps shown | still past death |
+|---|---|---|---|---|
+| Germania | 21 | 0 | 21 | 0 |
+| HRE | 105 | 16 | 89 | 0 |
+| France | 190 | 10 | 180 | 0 |
+
+`succession` shows every gap, not just those a death opens: a title destroyed
+and later recreated has one too (the fixture kingdom, 900–950). The prose fact
+sheet carries them — `no_holder_recorded` in a succession,
+`next_holder_recorded_from` on a reign — and the prompt forbids bridging one
+(`ck3-prose/3`). The graph's `HELD_BY` still runs to the next entry; see the
+graph issue.
+
 ---
 
 ## 10. Family, and why parents cost a full pass

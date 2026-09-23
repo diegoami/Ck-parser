@@ -153,6 +153,15 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 
 ## What is not done, in the order I would do it
 
+Open issues, in the order I would take them: #27 (two portrait queues that
+disagree — needs the owner's decision), #28 (warn on unknown history reasons),
+#29 (parser: detect comments and multi-line strings), #30 (a DLC toggled
+mid-run splits it), #31 (localization, needs a decision about the game's
+files), #24 (the graph's two title flaws), #25 with diegoami/ck_wiki#1 (prose in
+ck_wiki's workflow, postponed). The companion has not answered
+diegoami/ck_portrait_generator#1 since 2026-09-18, and ck_wiki's `images/` is
+still empty.
+
 **The wiki comes first.** The graph is a milestone and an interesting artifact
 in its own right (PLAN.md §12), but the published chronicle is the deliverable,
 and in a first pass it outranks everything the graph could answer.
@@ -167,7 +176,8 @@ and in a first pass it outranks everything the graph could answer.
    character digest (PLAN.md §14) took the five character passes down to one
    read. What is left uncached is `landed_titles` (~2 s a save), the dynasties
    section, arms, cultures and faiths — each read once, none of them the shape
-   of the problem the characters were. Do this only if a measurement says to.
+   of the problem the characters were. Do this only if a measurement says to;
+   the last one does not: all five saves build in 1 m 11 s with a warm cache.
 3. **Deeper lineages**, then **full-save scale** (PLAN.md Phase 6). Vassalage
    has bounded stretches (§9) but still only one level down: a county under a
    vassal duchy is not loaded.
@@ -200,6 +210,11 @@ and in a first pass it outranks everything the graph could answer.
    | asked unpredictably, in words | graph + LM |
 
 ### Done since this list was last written
+
+- **A reign ends at its holder's death** (#26). 316 tenures ran past their
+  holder's death on sparse pre-bookmark history — Heinrich held the HRE 26
+  years dead, Kyi held Kiev 227. They now end at the death, and a
+  `no holder recorded` row stands where nobody is known (PLAN.md §9).
 
 - **Titles are followed outside the lineage.** A title's history now comes from
   every save that has it, so a ruler no longer "holds" a title years after
@@ -307,11 +322,10 @@ and in a first pass it outranks everything the graph could answer.
 - Neo4j cannot `MERGE` a relationship on a null property. A tenure with no
   start date is dropped rather than written, which is why `holder_intervals`
   filters its own output.
-- 21 of the 1 559 tenures in the empire load run past their holder's recorded
-  death, because pre-bookmark history is sparse (`c_bithynia` jumps from 752 to
-  855 with one holder between). That is the save's granularity, left as stated.
-  `MATCH ()-[h:HELD_BY]->(c) WHERE c.death IS NOT NULL AND h.to > c.death`
-  finds them.
+- The **graph** still has tenures running past their holder's death, because
+  pre-bookmark history is sparse (21 of 1 559 in the empire load); the wiki
+  ends them at the death and shows the gap (PLAN.md §9). `MATCH ()-[h:HELD_BY]->(c)
+  WHERE c.death IS NOT NULL AND h.to > c.death` finds them. Part of #24.
 - Character names in a save are localization *keys* with diacritics marked by an
   underscore (`FranC_ois`). The wiki drops the marker rather than guessing the
   letter; real names need the game's localization files, which this project does
