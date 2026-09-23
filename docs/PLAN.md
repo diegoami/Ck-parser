@@ -1420,8 +1420,31 @@ Prices per 1M tokens, input / output, September 2026:
 | `kimi-k3` | $3.00 / $15.00 | ~6 ¢ | ~$10, more if it reasons |
 | `deepseek-v4-flash` | $0.14 / $0.28 | < 1 ¢ | ~$0.30 |
 
-The last two columns are estimates from the fact-sheet sizes; the billed token
-counts of the trial replace them. With a hosted model no GPU is needed, so
+The last two columns were estimates from the fact-sheet sizes, and the trial
+proved them low: both models reason before they write, and the reasoning bills
+as output.
+
+**The trial, measured** (Germania: `e_germany`, Folmar, Asa, Ludwig):
+
+| | written | tokens in / out | cost | time | at this rate, 950 pages |
+|---|---|---|---|---|---|
+| `deepseek-v4-pro` | 4 of 4 | 12 394 / 9 490 | $0.055 | 2 m 45 s | ~$13, ~11 h |
+| `glm-5.3` | 3 of 4 | 12 434 / 27 519 | $0.139 | 6 m 37 s | ~$33, ~26 h |
+
+Read against the fact sheets: DeepSeek stayed inside the facts on all four
+pages, dry but correct. GLM reads better and got one fact wrong — it called
+the ten empires Ludwig himself held outside the chronicle "ten empires in
+other hands" — added judgement of its own ("his reign was marked by the
+consolidation and expansion of his authority"), and had Asa rejected for a
+"76" no sheet holds, most likely an age it worked out. The check caught the
+number; nothing mechanical catches the misreading, which is the argument for
+fact-sheet keys a model cannot misread (`titles_held_elsewhere` says whose
+titles they are only by position).
+
+Two things the first request taught: opencode.ai sits behind Cloudflare, which
+refuses urllib's default `Python-urllib/3.x` user agent with HTTP 403 "error
+code: 1010", so the backend names itself; and at ~40 s a page, sequential
+generation of a whole chronicle is an overnight job. With a hosted model no GPU is needed, so
 prose can be written in ck_wiki's own workflow from an `OPENCODE_API_KEY`
 secret, committing `prose/` as it commits the manifests. Kept paragraphs cost
 nothing, so a scheduled build pays only for pages whose facts changed.

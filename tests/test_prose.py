@@ -129,6 +129,7 @@ def test_the_openai_backend_speaks_plain_http_and_drops_the_thinking(tmp_path):
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             seen["path"] = self.path
+            seen["agent"] = self.headers["User-Agent"]
             seen["body"] = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             reply = {"choices": [{"message": {"content": "<think>scratch</think>\nThe entry."}}]}
             data = json.dumps(reply).encode()
@@ -151,6 +152,8 @@ def test_the_openai_backend_speaks_plain_http_and_drops_the_thinking(tmp_path):
         server.shutdown()
     assert text == "The entry."
     assert seen["path"] == "/v1/chat/completions"
+    # never urllib's default: Cloudflare in front of opencode.ai refuses it
+    assert not seen["agent"].startswith("Python-urllib")
     assert seen["body"]["model"] == "some-model"
     assert [m["role"] for m in seen["body"]["messages"]] == ["system", "user"]
     assert backend.name == "openai:some-model"

@@ -281,6 +281,9 @@ def _template_title(f: dict) -> str:
     return text
 
 
+USER_AGENT = "ck3-history-extractor (+https://github.com/diegoami/Ck-parser)"
+
+
 class BackendError(RuntimeError):
     """The model could not be asked at all: a bad key, no credit, no server.
 
@@ -316,7 +319,9 @@ class OpenAICompatible:
             "temperature": 0.3,
             "stream": False,
         }).encode("utf-8")
-        headers = {"Content-Type": "application/json"}
+        # a named client: opencode.ai sits behind Cloudflare, which answers
+        # urllib's default `Python-urllib/3.x` with 403 "error code: 1010"
+        headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         request = urllib.request.Request(f"{self.url}/chat/completions", body, headers)
