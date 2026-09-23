@@ -117,7 +117,7 @@ def _run_dir(tmp_path):
 def test_cli_writes_one_file_per_snapshot(tmp_path):
     out = tmp_path / "out"
     assert main([str(_run_dir(tmp_path)), "--title", "k_testland", "--out", str(out)]) == 0
-    manifest = json.loads((out / "handoff.json").read_text())
+    manifest = json.loads((out / "handoff.json").read_text(encoding="utf-8"))
     assert manifest["title"] == "k_testland"
     assert [s["save_date"] for s in manifest["snapshots"]] == ["1100.6.1", "1120.1.1"]
     assert [s["file"] for s in manifest["snapshots"]] == ["characters_1100_6_1.csv", "characters_1120_1_1.csv"]
@@ -130,7 +130,7 @@ def test_cli_writes_one_file_per_snapshot(tmp_path):
 def test_cli_writes_the_houses_beside_the_characters(tmp_path):
     out = tmp_path / "out"
     assert main([str(_run_dir(tmp_path)), "--title", "k_testland", "--out", str(out)]) == 0
-    snapshot = json.loads((out / "handoff.json").read_text())["snapshots"][0]
+    snapshot = json.loads((out / "handoff.json").read_text(encoding="utf-8"))["snapshots"][0]
     assert snapshot["houses_file"] == "houses_1100_6_1.csv" and snapshot["houses"] == 1
     rows = list(csv.DictReader((out / "houses_1100_6_1.csv").open()))
     assert list(rows[0]) == list(HOUSE_COLUMNS)
@@ -148,8 +148,8 @@ def test_the_list_changes_with_the_snapshot(tmp_path):
 def test_ids_only_writes_the_bare_form(tmp_path):
     out = tmp_path / "out"
     assert main([str(_run_dir(tmp_path)), "--title", "k_testland", "--out", str(out), "--ids-only"]) == 0
-    assert (out / "characters_1100_6_1.txt").read_text() == "200\n201\n"
-    assert json.loads((out / "handoff.json").read_text())["snapshots"][0]["file"].endswith(".txt")
+    assert (out / "characters_1100_6_1.txt").read_text(encoding="utf-8") == "200\n201\n"
+    assert json.loads((out / "handoff.json").read_text(encoding="utf-8"))["snapshots"][0]["file"].endswith(".txt")
 
 
 def test_no_character_names_are_ever_written(tmp_path):
@@ -157,7 +157,7 @@ def test_no_character_names_are_ever_written(tmp_path):
     # character list still carries no name column at all
     out = tmp_path / "out"
     main([str(_run_dir(tmp_path)), "--title", "k_testland", "--out", str(out)])
-    text = (out / "characters_1100_6_1.csv").read_text()
+    text = (out / "characters_1100_6_1.csv").read_text(encoding="utf-8")
     assert "Test" not in text and "name" not in text
 
 

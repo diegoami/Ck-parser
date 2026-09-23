@@ -75,7 +75,7 @@ def test_manifest_roundtrip_and_cli(tmp_path, capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert "run 1-1.6.1.2-867.1.1" in out and "legacy=3" in out
-    data = json.loads(manifest.read_text())
+    data = json.loads(manifest.read_text(encoding="utf-8"))
     assert [len(r["snapshots"]) for r in data["runs"]] == [3, 1]
     assert data["runs"][0]["player_account"] == "tester"
     # second scan reuses the manifest (sha256 preserved without rehashing)

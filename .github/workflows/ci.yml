@@ -6,7 +6,13 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Windows too: the owner's companion runs there, and a review run on it
+    # found tests assuming /dev/null and a UTF-8 default encoding
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -14,6 +20,13 @@ jobs:
           python-version: "3.11"
       - run: uv sync --group dev
       - run: uv run pytest -q
+      - name: Again with a default encoding that is not UTF-8, as Windows' is
+        if: runner.os == 'Linux'
+        env:
+          LC_ALL: POSIX
+          PYTHONUTF8: "0"
+          PYTHONCOERCECLOCALE: "0"
+        run: uv run pytest -q -p no:cacheprovider
 
   # The wiki and its harvest queue are built in diegoami/ck_wiki from this
   # repository's main. Without a nudge they waited for its schedule, and a

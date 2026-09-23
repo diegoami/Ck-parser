@@ -133,13 +133,13 @@ def test_a_cached_build_renders_exactly_what_an_uncached_one_does(tmp_path):
 
     def pages(root):
         return {
-            p.relative_to(root).as_posix(): p.read_text()
+            p.relative_to(root).as_posix(): p.read_text(encoding="utf-8")
             for p in sorted(root.rglob("*")) if p.is_file()
         }
 
     assert pages(tmp_path / "cold") == pages(tmp_path / "warm")
     assert pages(tmp_path / "warm") == pages(tmp_path / "warmer")
-    assert (tmp_path / "log").read_text().count("cached:") == 2  # the third build's reads
+    assert (tmp_path / "log").read_text(encoding="utf-8").count("cached:") == 2  # the third build's reads
 
 
 def test_the_first_section_wins_the_way_a_save_search_does(tmp_path):

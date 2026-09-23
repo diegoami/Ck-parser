@@ -120,7 +120,7 @@ class DryRunSession:
 
 
 def schema_statements(path: Path = SCHEMA_PATH) -> list[str]:
-    text = "\n".join(line for line in path.read_text().splitlines() if not line.strip().startswith("//"))
+    text = "\n".join(line for line in path.read_text(encoding="utf-8").splitlines() if not line.strip().startswith("//"))
     return [s.strip() for s in text.split(";") if s.strip()]
 
 
