@@ -24,8 +24,12 @@ import json
 import re
 from pathlib import Path
 
+from .install import game_version
+
 #: Bumped when the extract's shape changes.
-SCHEMA = "ck3-localization/1"
+#: 2: one section per game version (#58): text is only used for saves of the
+#:    version it was read from.
+SCHEMA = "ck3-localization/2"
 
 #: ` key:0 "text"`, the version digit optional, a trailing `# comment` allowed
 #: (`death_depressed` carries one, and a stricter pattern missed it)
@@ -55,12 +59,23 @@ def parse(text: str) -> dict[str, str]:
     return out
 
 
+def _read_extract(path: Path) -> tuple[str | None, dict[str, dict]]:
+    """An extract's schema and sections; no schema if it is not an extract at all."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or not isinstance(data.get("schema"), str):
+        return None, {}
+    return data["schema"], dict(data.get("versions") or {})
+
+
 class Localization:
     """Key -> text, with every key it was asked for and answered recorded."""
 
-    def __init__(self, table: dict[str, str], source: str = ""):
+    def __init__(self, table: dict[str, str], source: str = "", version: str | None = None):
         self.table = table
         self.source = source
+        #: the game version the text was read from (#58): only saves of this
+        #: version may use it
+        self.version = version
         #: the keys that answered, references included: what an extract keeps
         self.used: set[str] = set()
 
@@ -72,20 +87,46 @@ class Localization:
         for f in sorted(folder.rglob("*.yml")):
             for key, text in parse(f.read_text(encoding="utf-8-sig", errors="replace")).items():
                 table.setdefault(key, text)
-        return cls(table, source=f"game: {folder}")
+        return cls(table, source=f"game: {folder}", version=game_version(Path(game_dir)))
+
+    @staticmethod
+    def extract_versions(path: Path) -> dict[str, dict]:
+        """An extract's sections by game version; an older schema is refused."""
+        schema, versions = _read_extract(Path(path))
+        if schema != SCHEMA:
+            raise ValueError(f"{path} is not a {SCHEMA} extract; write it again with ck3wiki.localize")
+        return versions
 
     @classmethod
-    def from_extract(cls, path: Path) -> Localization:
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
-        if data.get("schema") != SCHEMA:
-            raise ValueError(f"{path} is not a {SCHEMA} extract")
-        return cls(dict(data["keys"]), source=f"extract: {path}")
+    def from_extract(cls, path: Path, version: str | None) -> Localization | None:
+        """The extract's text for one game version, or None if it has none."""
+        section = cls.extract_versions(path).get(version or "")
+        if section is None:
+            return None
+        return cls(dict(section["keys"]), source=f"extract: {path} [{version}]", version=version)
 
     def write_extract(self, path: Path) -> int:
-        """The keys used so far, and only those. Returns how many."""
+        """The keys used so far, as this version's section; other versions kept.
+
+        Returns how many keys the section holds.
+        """
+        if not self.version:
+            raise ValueError("cannot write an extract without the game version the text came from")
+        path = Path(path)
+        versions: dict[str, dict] = {}
+        if path.is_file():
+            schema, versions = _read_extract(path)
+            if schema is None or not schema.startswith("ck3-localization/"):
+                raise ValueError(f"{path} is not a localization extract; not overwriting it")
+            if schema != SCHEMA:
+                # an older extract: its text says no version, so none of it
+                # can be kept, and writing it again is how it is upgraded (#60)
+                versions = {}
         keys = {k: self.table[k] for k in sorted(self.used)}
-        Path(path).write_text(
-            json.dumps({"schema": SCHEMA, "keys": keys}, ensure_ascii=False, indent=1) + "\n",
+        versions[self.version] = {"keys": keys}
+        path.write_text(
+            json.dumps({"schema": SCHEMA, "versions": dict(sorted(versions.items()))},
+                       ensure_ascii=False, indent=1) + "\n",
             encoding="utf-8",
         )
         return len(keys)

@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 from ck3parser.fingerprint import fingerprint
+from ck3parser.install import mismatch
 from ck3parser.localization import Localization
 from ck3parser.pipeline import gather
 from ck3parser.player import primary_title_key
@@ -157,8 +158,36 @@ def build_one(
     }
 
 
-def load_localization(game: str | None, extract: str | None) -> Localization | None:
-    """The game's text: read from the game when given, else from an extract (#31).
+class LocSource:
+    """Where a build's game text comes from, answered one run at a time (#31, #58).
+
+    The game's text may only be used for saves of the version it was read
+    from, strictly: with `--game`, only runs of the install's version are
+    localized; with an extract, each run reads its own version's section. A
+    run left without text is built exactly as before #31, and the log says why.
+    """
+
+    def __init__(self, game: Localization | None = None, extract: Path | None = None):
+        self.game = game
+        self.extract = extract
+        self._sections: dict[str, Localization | None] = {}
+
+    def for_run(self, version: str | None) -> tuple[Localization | None, str]:
+        if self.game is not None:
+            problem = mismatch(self.game.version, version)
+            if problem:
+                return None, f"not localized: {problem}"
+            return self.game, f"localized from the game ({self.game.version})"
+        if version not in self._sections:
+            self._sections[version] = Localization.from_extract(self.extract, version)
+        loc = self._sections[version]
+        if loc is None:
+            return None, f"not localized: the extract has no section for {version}"
+        return loc, f"localized from the extract ({version})"
+
+
+def load_localization(game: str | None, extract: str | None) -> LocSource | None:
+    """The game's text: read from the game when given, else from an extract.
 
     Neither: nothing is localized, and the build is the same as before #31.
     """
@@ -166,9 +195,15 @@ def load_localization(game: str | None, extract: str | None) -> Localization | N
         folder = Path(game) / "localization" / "english"
         if not folder.is_dir():
             raise OSError(f"no {folder}: pass the game's `game` directory")
-        return Localization.from_game(Path(game))
+        loc = Localization.from_game(Path(game))
+        if not loc.version:
+            # strict (#58): `--game` asked for text no run may use; fail, not
+            # a build that looks localized and is not
+            raise ValueError(mismatch(None, None))
+        return LocSource(game=loc)
     if extract:
-        return Localization.from_extract(Path(extract))
+        Localization.extract_versions(Path(extract))  # refuse a bad file up front
+        return LocSource(extract=Path(extract))
     return None
 
 
@@ -191,12 +226,10 @@ def run_build(
 ) -> int:
     log = sys.stderr if log is None else log
     try:
-        loc = load_localization(game, localization)
+        source = load_localization(game, localization)
     except (OSError, ValueError) as exc:
         print(f"cannot read the localization: {exc}", file=sys.stderr)
         return 2
-    if loc is not None:
-        print(f"localization: {len(loc.table):,} keys from {loc.source}", file=log)
     try:
         runs = discover(save_path, run_id)
     except (FileNotFoundError, LookupError) as exc:
@@ -213,6 +246,10 @@ def run_build(
         subject = subject_of(run, title, log)
         if subject is None:
             continue
+        loc = None
+        if source is not None:
+            loc, why = source.for_run(run.version)
+            print(f"  {run.slug}: {why}", file=log)
         entry = build_one(
             run, subject, with_vassals, out, shots, log, with_family, with_kin,
             with_siblings, releases, cache_dir, with_titled_kin=with_titled_kin,

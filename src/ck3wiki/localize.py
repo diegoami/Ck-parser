@@ -21,6 +21,7 @@ import os
 import sys
 from pathlib import Path
 
+from ck3parser.install import mismatch
 from ck3parser.localization import Localization
 
 from .build import discover, load_run, subject_of
@@ -46,16 +47,30 @@ def main(argv: list[str] | None = None) -> int:
         print(exc, file=sys.stderr)
         return 2
     loc = Localization.from_game(root)
-    print(f"{loc.source}: {len(loc.table):,} keys", file=sys.stderr)
+    print(f"{loc.source}: {len(loc.table):,} keys, game version {loc.version}", file=sys.stderr)
+    if not loc.version:
+        print(f"nothing written: {mismatch(None, None)}", file=sys.stderr)
+        return 2
     for run in runs:
+        # only the version that wrote the save (#58): another version's text
+        # can look right and be wrong
+        problem = mismatch(loc.version, run.version)
+        if problem:
+            print(f"  {run.slug}: skipped, {problem}", file=sys.stderr)
+            continue
         subject = subject_of(run, args.title, sys.stderr)
         if subject is None:
             continue
         before = len(loc.used)
         load_run(run, subject, log=open(os.devnull, "w"), cache_dir=Path(args.cache), loc=loc)
         print(f"  {run.slug}: {len(loc.used) - before} new key(s)", file=sys.stderr)
-    written = loc.write_extract(args.out)
-    print(f"{written} key(s) written to {args.out}", file=sys.stderr)
+    try:
+        written = loc.write_extract(args.out)
+    except (OSError, ValueError) as exc:
+        print(f"nothing written: {exc}", file=sys.stderr)
+        return 2
+    sections = ", ".join(Localization.extract_versions(args.out))
+    print(f"{written} key(s) written to {args.out} for {loc.version}; its sections: {sections}", file=sys.stderr)
     return 0
 
 

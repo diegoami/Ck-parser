@@ -1763,3 +1763,30 @@ With neither, nothing changes: the build is byte-identical to `poc-reference-1`.
 
 A key a new save introduces is missing from the extract until `localize` runs
 again; until then that page shows the transcribed key, never a guess.
+
+---
+
+## 18. Game files from the save's own version (#58)
+
+The owner's requirement: anything generated from the game's files -- realm
+maps (§16), the game's text (§17) -- must come from **the version that wrote
+the save**, strictly, with no override. Between patches provinces are
+renumbered, baronies added and text rewritten; output from another version
+looks right and is wrong.
+
+- The install's version is `rawVersion` in `<CK3>/launcher/launcher-settings.json`
+  (**1.6.1.2** "Castle" on the owner's machine), read by `ck3parser.install` as
+  the companion reads it. A save's is `Fingerprint.version`, the header's
+  `version` -- possibly its run's *starting* version (§5, unverified), the same
+  field the companion's D4 compares.
+- `maps` and `localize` skip a run of another version, naming both;
+  `build --game` localizes only runs of the install's version. An unknown
+  version on either side is a mismatch.
+- The extract is **one section per version** (`ck3-localization/2`); `localize`
+  writes its install's section and keeps the others, and a build reads each
+  run's own. A run without one is built exactly as before #31.
+
+Against the release saves only Germania (1.6.1.2) matches; the HRE (1.4.4) and
+France (1.3.1) had had maps and text generated from 1.6.1.2 files, which were
+withdrawn from ck_wiki (owner's decision). They come back when files of their
+own versions are available.

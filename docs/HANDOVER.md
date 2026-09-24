@@ -214,6 +214,10 @@ and in a first pass it outranks everything the graph could answer.
 
 ### Done since this list was last written
 
+- **Game files from the save's own version** (#58): maps and the game's text
+  only for runs whose version equals the install's (1.6.1.2 here: Germania).
+  The HRE and France maps and text, made from 1.6.1.2 files, are withdrawn
+  (PLAN.md §18).
 - **Culture aspects in the game's words** (heritage, language, ethos, martial
   custom, looked up as `<key>_name`): all 131 Germania cultures. The 1.3/1.4
   saves carry no aspects and no names on cultures: #56.

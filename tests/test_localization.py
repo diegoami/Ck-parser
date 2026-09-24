@@ -47,16 +47,16 @@ def test_a_template_is_filled_or_left_alone():
 
 
 def test_the_extract_holds_only_what_was_used(tmp_path):
-    loc = Localization({"A_sa": "Åsa", "unused": "x", "k_denmark": "Denmark"})
+    loc = Localization({"A_sa": "Åsa", "unused": "x", "k_denmark": "Denmark"}, version="1.6.1.2")
     loc.text("A_sa")
     path = tmp_path / "localization.json"
     assert loc.write_extract(path) == 1
     data = json.loads(path.read_text(encoding="utf-8"))
-    assert data == {"schema": SCHEMA, "keys": {"A_sa": "Åsa"}}
-    assert Localization.from_extract(path).text("A_sa") == "Åsa"
+    assert data == {"schema": SCHEMA, "versions": {"1.6.1.2": {"keys": {"A_sa": "Åsa"}}}}
+    assert Localization.from_extract(path, "1.6.1.2").text("A_sa") == "Åsa"
     path.write_text('{"schema": "other"}', encoding="utf-8")
     with pytest.raises(ValueError):
-        Localization.from_extract(path)
+        Localization.from_extract(path, "1.6.1.2")
 
 
 def test_the_game_folder_is_read_with_its_subfolders(tmp_path):
