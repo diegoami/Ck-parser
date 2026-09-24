@@ -21,6 +21,7 @@ GAME = {
     "testish": "Testish, the game's",
     "test_pagan": "the Test Faith",
     "c_test": "Testshire",
+    "heritage_test_north_name": "North Testic",
     "never_used": "stays out of the extract",
 }
 
@@ -109,3 +110,15 @@ def test_prose_written_localized_survives_a_localized_build(tmp_path):
 
     # and a missing game folder is an argument error, not a traceback
     assert prose_main([str(saves), "--out", str(tmp_path / "p2"), *common, "--game", str(tmp_path / "nowhere")]) == 2
+
+
+
+def test_a_cultures_heritage_is_the_games_name_for_it(tmp_path):
+    # the save names heritage, language, ethos and martial custom by key; the
+    # game keeps their names under `<key>_name`, beside `_desc`
+    save = make_save(tmp_path / "a.ck3", edits=EDITS)
+    localized = build_wiki(views(save), "k_testland", loc=Localization(dict(GAME)))
+    plain = build_wiki(views(save), "k_testland")
+    assert {c.heritage for c in localized.cultures.values()} == {"North Testic"}
+    assert {c.heritage for c in plain.cultures.values()} == {"Test North"}  # the key, tidied, as before
+    assert "heritage_test_north_name" in localized.loc.used  # so the extract keeps it

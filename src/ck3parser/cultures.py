@@ -47,6 +47,10 @@ SECTION = ("culture_manager", "cultures")
 FROM_THE_START = "1.1.1"
 
 
+#: the aspects of a culture the wiki shows, each a localization key in the save
+ASPECTS = ("heritage", "language", "ethos", "martial_custom")
+
+
 @dataclass
 class Culture:
     id: int
@@ -61,6 +65,9 @@ class Culture:
     parents: list[int] = field(default_factory=list)
     #: the game's own text for a key-named culture, when it was looked up (#31)
     localized: str | None = None
+    #: the raw localization keys behind heritage, language, ethos and martial
+    #: custom, which are shown tidied unless a build has the game's text (#31)
+    keys: dict[str, str] = field(default_factory=dict)
 
     @property
     def templated(self) -> bool:
@@ -123,6 +130,11 @@ def find_cultures(save_path: str, wanted: set[int]) -> dict[int, Culture]:
                 language=titled(block.get("language"), "language_"),
                 ethos=titled(block.get("ethos"), "ethos_"),
                 martial_custom=titled(block.get("martial_custom"), "martial_custom_"),
+                keys={
+                    aspect: str(block.get(aspect))
+                    for aspect in ASPECTS
+                    if block.get(aspect) is not None
+                },
                 created=str(created) if created is not None else None,
                 head=_int(block.get("head")),
                 parents=_parents(block),

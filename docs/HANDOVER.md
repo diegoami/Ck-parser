@@ -214,6 +214,9 @@ and in a first pass it outranks everything the graph could answer.
 
 ### Done since this list was last written
 
+- **Culture aspects in the game's words** (heritage, language, ethos, martial
+  custom, looked up as `<key>_name`): all 131 Germania cultures. The 1.3/1.4
+  saves carry no aspects and no names on cultures: #56.
 - **The game's own words** (#31, option C): names with their real letters,
   causes of death filled in (15 582 of 15 583), unnamed titles and key-named
   cultures and faiths, from the game (`--game`) or a 9 390-key extract
