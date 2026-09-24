@@ -42,6 +42,8 @@ class Faith:
     template: str = ""
     religion: int | None = None
     founder: int | None = None
+    #: the game's own text for a key-named faith, when it was looked up (#31)
+    localized: str | None = None
     adjective: str = ""
     adherent: str = ""
 
@@ -52,8 +54,8 @@ class Faith:
 
     @property
     def display_name(self) -> str:
-        """Whoever named it wins; otherwise the key, tidied and never guessed."""
-        return self.name or titled(self.tag or self.template) or f"Faith {self.id}"
+        """Whoever named it wins; then the game's text for its key; then the key, tidied."""
+        return self.name or self.localized or titled(self.tag or self.template) or f"Faith {self.id}"
 
 
 def _int(value: object) -> int | None:

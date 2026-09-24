@@ -214,6 +214,13 @@ and in a first pass it outranks everything the graph could answer.
 
 ### Done since this list was last written
 
+- **The game's own words** (#31, option C): names with their real letters,
+  causes of death filled in (15 582 of 15 583), unnamed titles and key-named
+  cultures and faiths, from the game (`--game`) or a 9 390-key extract
+  (`--localization`); a build with neither is unchanged (PLAN.md §17).
+- **A DLC toggled mid-run** keeps the run whole when the legacy chain continues
+  (#30), and runs that would share a name are told apart (#52).
+
 - **Realm maps** (#39 step 3): `python -m ck3wiki.maps` renders each save's realm
   on the game's own map; every barony of the five saves is placed; the Realm
   section links each map whether it has been rendered or not (PLAN.md §16).

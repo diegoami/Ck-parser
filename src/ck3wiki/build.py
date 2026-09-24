@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 from ck3parser.fingerprint import fingerprint
+from ck3parser.localization import Localization
 from ck3parser.pipeline import gather
 from ck3parser.player import primary_title_key
 from ck3parser.runs import Run, Snapshot, scan
@@ -88,6 +89,7 @@ def load_run(
     run: Run, subject: str, with_vassals: bool = True, log=None,
     with_family: bool = True, with_kin: bool = True, with_siblings: bool = True,
     cache_dir: Path | None = None, with_titled_kin: bool = True,
+    loc: Localization | None = None,
 ) -> Wiki | None:
     """One run's snapshots, merged into the wiki's picture of it.
 
@@ -108,7 +110,7 @@ def load_run(
         return None
     return build_wiki(
         views, subject, with_family=with_family, with_kin=with_kin, with_siblings=with_siblings,
-        with_titled_kin=with_titled_kin,
+        with_titled_kin=with_titled_kin, loc=loc,
     )
 
 
@@ -117,10 +119,11 @@ def build_one(
     log, with_family: bool = True, with_kin: bool = True, with_siblings: bool = True,
     releases: dict[str, str] | None = None, cache_dir: Path | None = None,
     with_titled_kin: bool = True, prose_dir: Path | None = None,
+    loc: Localization | None = None,
 ) -> dict | None:
     wiki = load_run(
         run, subject, with_vassals, log, with_family, with_kin, with_siblings, cache_dir,
-        with_titled_kin,
+        with_titled_kin, loc,
     )
     if wiki is None:
         return None
@@ -154,6 +157,21 @@ def build_one(
     }
 
 
+def load_localization(game: str | None, extract: str | None) -> Localization | None:
+    """The game's text: read from the game when given, else from an extract (#31).
+
+    Neither: nothing is localized, and the build is the same as before #31.
+    """
+    if game:
+        folder = Path(game) / "localization" / "english"
+        if not folder.is_dir():
+            raise OSError(f"no {folder}: pass the game's `game` directory")
+        return Localization.from_game(Path(game))
+    if extract:
+        return Localization.from_extract(Path(extract))
+    return None
+
+
 def run_build(
     save_path: str,
     out_dir: str,
@@ -167,9 +185,18 @@ def run_build(
     with_titled_kin: bool = True,
     cache: str | None = None,
     prose: str | None = None,
+    game: str | None = None,
+    localization: str | None = None,
     log=None,
 ) -> int:
     log = sys.stderr if log is None else log
+    try:
+        loc = load_localization(game, localization)
+    except (OSError, ValueError) as exc:
+        print(f"cannot read the localization: {exc}", file=sys.stderr)
+        return 2
+    if loc is not None:
+        print(f"localization: {len(loc.table):,} keys from {loc.source}", file=log)
     try:
         runs = discover(save_path, run_id)
     except (FileNotFoundError, LookupError) as exc:
@@ -189,7 +216,7 @@ def run_build(
         entry = build_one(
             run, subject, with_vassals, out, shots, log, with_family, with_kin,
             with_siblings, releases, cache_dir, with_titled_kin=with_titled_kin,
-            prose_dir=Path(prose) if prose else None,
+            prose_dir=Path(prose) if prose else None, loc=loc,
         )
         if entry is not None:
             entries.append(entry)
@@ -214,6 +241,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-vassals", action="store_true", help="the title alone, without its vassals")
     ap.add_argument("--run", dest="run_id", help="build only this run (its id or slug)")
     ap.add_argument("--portraits", help="directory of harvested portrait images to include")
+    ap.add_argument(
+        "--game",
+        help="the game's `game` directory: names, causes of death and key-named cultures"
+             " and faiths in the game's own words (#31)",
+    )
+    ap.add_argument(
+        "--localization",
+        help="an extract written by `python -m ck3wiki.localize`, for builds without the game",
+    )
     ap.add_argument(
         "--prose",
         help="directory written by ck3wiki.prose; a page shows its paragraph only while"
@@ -266,6 +302,8 @@ def main(argv: list[str] | None = None) -> int:
         with_titled_kin=not args.no_titled_kin,
         cache=None if args.no_cache else args.cache,
         prose=args.prose,
+        game=args.game,
+        localization=args.localization,
     )
 
 

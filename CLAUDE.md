@@ -30,6 +30,10 @@ uv run --env-file .env python -m ck3wiki.prose saves --out prose       # ... fro
 uv run python -m ck3wiki.build saves --out site --prose prose            # ... folded into the pages
 uv sync --group dev --extra maps                                         # Pillow + numpy, for the maps
 uv run python -m ck3wiki.maps saves --out images                        # realm maps, from the game's own files
+uv run python -m ck3wiki.build saves --out site --game "<CK3>/game"      # names and causes in the game's own words
+uv run python -m ck3wiki.localize saves --out localization.json          # ... the extract ck_wiki's CI builds with
+uv run python -m ck3wiki.build saves --out site --localization localization.json
+uv run python -m ck3wiki.prose saves --out prose --game "<CK3>/game"     # prose from the same text the build uses (#54)
 ```
 
 ## Process
@@ -136,7 +140,11 @@ go to the owner with a recommended default, not into the code.
   the fact sheet does not hold gets the paragraph rejected, not saved. When a
   paragraph needs a number, put it in the fact sheet; never loosen the check.
 - Character names in saves are localization keys with diacritics marked by an
-  underscore. Drop the marker, never guess the letter (PLAN.md §8).
+  underscore (`A_sa`). With the game's text (`--game`, or the extract via
+  `--localization`) the key is looked up (`Åsa`); without it, drop the marker and
+  never guess the letter (PLAN.md §8, §17). A template in the game's text is
+  filled only from facts the save holds (pronouns from sex, the killer from
+  `dead_data`); anything else falls back to the transcribed key.
 - One wiki per playthrough. What separates them is the run, identified by seed
   and game version, never the title the wiki is about.
 - Runs are grouped by the save's own **fingerprint**, never by the release it
