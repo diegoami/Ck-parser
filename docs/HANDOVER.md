@@ -29,8 +29,9 @@ session (any model) can continue without the conversation history.
 - **Filter** (`filter.py`): title holders + family links decide who is kept.
 - **Fingerprint** (`fingerprint.py`): tier 1, header + ~32 KB of gamestate,
   ~3 ms per file.
-- **Run grouping** (`runs.py`): RunKey = (random_seed, bookmark_date, rules
-  hash, DLC hash); order by date, random_count, meta_real_date, mtime; tier-1
+- **Run grouping** (`runs.py`): bucket on (random_seed, version, bookmark_date,
+  rules hash); a DLC change inside a bucket is the same run only if the legacy
+  chain continues (#30); order by date, random_count, meta_real_date, mtime; tier-1
   monotonic checks; tier-2 `played_character.legacy` prefix check; divergence
   splits the run and adds a warning; `runs.json` manifest with incremental
   rescans; CLI `scan` / `verify`. Exit code 1 when any warning exists.
@@ -314,8 +315,9 @@ and in a first pass it outranks everything the graph could answer.
 - The middle 8 hex digits of the `SAV0102…` first line are not understood.
 - No `playthrough_id` exists in this save version. If a newer version adds one,
   prefer it as the RunKey and keep the seed as fallback.
-- `RunKey` includes the DLC hash, so toggling a DLC mid-run would split the
-  run. A CLI override is planned, not built.
+- A DLC toggled mid-run no longer splits the run when the legacy chain
+  continues across it (#30, PLAN.md §3). No real save has done it: the rule is
+  tested on the fixture only.
 - A quoted string **can** span lines: ~1 090 truce descriptions per Germania
   save. The handover used to say none did; the tokenizer now reads them, and
   refuses an unclosed string or a `#` comment with `FormatError` (PLAN.md §5).

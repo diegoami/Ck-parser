@@ -189,8 +189,16 @@ rather than being a warning beside it, because it is the version the run was
 *started* on (§5) and so cannot drift mid-run: two saves that disagree about it
 are two games, not one game that was patched.
 
-Group files by `RunKey`. Inside a group, order by `date`, then `random_count`,
-then file mtime.
+Group files by `RunKey` **without its DLC set** (`Fingerprint.chain_key`, #30).
+Inside a group, order by `date`, then `random_count`, then file mtime. Where
+the DLC set changes between two consecutive saves, tier 2 decides: if the later
+save's legacy chain continues the earlier one's (same player, a prefix), it is
+one playthrough, and the run carries a *note* (not a warning, so `runs verify`
+still passes). If it doesn't, the run splits with a warning, as a different DLC
+set always used to. Tier 2 is read only for those pairs, so a build over saves
+whose DLC set never changes pays nothing for it. The run is still named after
+its first save, `dlcs_hash` included, so no existing id moved: the five release
+saves build byte-identical to `poc-reference-1`.
 
 **Tier 2 — chain check (cheap parse of one block).**
 For each group with more than one snapshot, extract `played_character.legacy` from
@@ -245,8 +253,10 @@ warning with the title/character id; it does not abort the load.
 - **Autosaves**: several files can share a `date` (autosave + manual save the same
   day). `random_count` orders them; identical `random_count` means identical
   content, keep one.
-- **Same seed, different rules or DLC set**: treated as different runs by the
-  `RunKey`; reported so the user can override if the game was patched mid-run.
+- **Same seed, different rules**: different runs; CK3 fixes the rules at the
+  start of a game.
+- **Same seed, different DLC set**: one run if the legacy chain continues across
+  the change (a DLC toggled mid-game), two runs if not (#30).
 - **Game version changed mid-run**: same `RunKey`, different `version` → allowed,
   logged as a warning on the run.
 - **Renamed or moved files**: nothing depends on the filename; the CK3 default
@@ -515,8 +525,10 @@ Still open:
 1. Whether newer CK3 versions add a `playthrough_id`; if so, use it as the
    `RunKey` and keep the seed as a fallback.
 2. Meaning of the middle 8 hex digits of the `SAV0102…` header line.
-3. Behaviour of the `RunKey` when a DLC is enabled or disabled mid-run (the
-   `dlcs_hash` would split the run; the CLI needs an override for that case).
+3. ~~Behaviour when a DLC is enabled or disabled mid-run~~: decided on #30
+   (option B above). No real save has done it yet: all six Germania saves,
+   the owner's local 1329 one included, share one DLC set. The rule is tested
+   on the fixture only.
 
 ---
 

@@ -319,6 +319,8 @@ def resolve_saves(path: str, run_id: str | None = None, log=None) -> list[str]:
     run = runs[0]
     for warning in run.warnings:
         print(f"warning: {warning}", file=log)
+    for note in run.notes:
+        print(f"note: {note}", file=log)
     print(f"run {run.run_id}: {len(run.snapshots)} snapshot(s), oldest first", file=log)
     return [snapshot.fp.file for snapshot in run.snapshots]
 

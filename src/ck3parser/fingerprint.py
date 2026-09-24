@@ -57,6 +57,17 @@ class Fingerprint:
         return (self.random_seed, self.version, self.bookmark_date, self.rules_hash, self.dlcs_hash)
 
     @property
+    def chain_key(self) -> tuple:
+        """The run key without the DLC set: what grouping buckets on (#30).
+
+        A player can enable or disable a DLC mid-playthrough and keep playing
+        the same game, so a changed DLC set alone does not make another run.
+        Inside a bucket, `runs` accepts a change of DLC set only where the
+        legacy chain proves the two saves are one playthrough.
+        """
+        return (self.random_seed, self.version, self.bookmark_date, self.rules_hash)
+
+    @property
     def run_id(self) -> str:
         return (
             f"{self.random_seed}-{self.version}-{self.bookmark_date}"
