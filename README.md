@@ -45,6 +45,7 @@ src/ck3wiki/
   build.py        `python -m ck3wiki.build` — the wikis themselves
   prose.py        `python -m ck3wiki.prose` — paragraphs written from each page's facts
   queue.py        `python -m ck3wiki.queue` — portraits.json to the harvester's id files, and back
+  maps.py         `python -m ck3wiki.maps` — the realm on the game's own map, per save (extra: maps)
 tests/            pytest suite over a small hand-written gamestate fixture
 docs/PLAN.md      the plan
 docs/COMPANION_PROPOSAL.md  the image contract, as filed with the companion

@@ -50,6 +50,16 @@ def portrait_name(save_file: str | Path, character_id: int) -> str:
     return f"{save_checksum(save_file)}_{character_id}.png"
 
 
+def realm_map_name(save_file: str | Path, title_key: str) -> str:
+    """The subject title's realm on the map, as of one save (docs/PLAN.md §16).
+
+    Keyed on the save like a portrait, because a realm is a snapshot's; and on
+    the title, because the realm is the title holder's, whoever that is.
+    Rendered by `ck3wiki.maps` from the game's own map files, not harvested.
+    """
+    return f"realm_{save_checksum(save_file)}_{title_key}.png"
+
+
 def arms_name(digest: str) -> str:
     """One coat of arms, named after the recipe that draws it.
 

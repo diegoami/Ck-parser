@@ -1676,11 +1676,29 @@ Klementia 918 counties, 5 held directly; France's Ealhswith 329, 73 held
 directly, 65 of them in de jure Germany. The build cost is ~5 s across all
 three chronicles.
 
-### What the map will need (not built yet)
+### On the map (step 3)
 
-The save holds no geography; the game's files do (`map_data/provinces.png`,
-`definition.csv`, `default.map`, `common/landed_titles`). Barony keys map to
-provinces for 8 575 of 8 576 baronies across saves from 1.3.1 to 1.6.1.2
-(`b_khetaka` alone missing). The prototype on #39 reports "8 574 provinces
-placed", which counts something else: distinct provinces coloured after the
-barony-to-province join, not baronies matched.
+`python -m ck3wiki.maps SAVES --out images/` renders, per save, the subject
+title's holder's realm on the game's own map, from the game's files: never the
+save's, which hold no geography, and never copied or published, only the
+picture (owner's decision on #39). It needs the optional `maps` extra (Pillow,
+numpy) and finds the Steam install unless given `--game`. The image is named by
+`portraits.realm_map_name` (`realm_<save checksum>_<title>.png`), which the
+Realm section links whether or not it has been rendered, like a portrait; the
+build copies it from `--portraits` like any delivered image. Maps stay out of
+`portraits.json`: that is the companion's harvest queue, and nobody harvests a
+map.
+
+A barony is placed by its province in `common/landed_titles` and coloured by
+its de jure county's vassal rank. **Verified: every barony of all five saves is
+placed** (8 576 of 8 576; 8 567 of 8 567 for the 1.3.1 and 1.4.4 saves) against
+the installed game. An earlier figure, "8 575, `b_khetaka` missing", came from
+a rough grep, not from this code, and was wrong; and the first cut of the
+code's own pattern missed `b_pockington` and `b_leeds`, whose blocks open with
+a nested `cultural_names = { ... }`. The coverage the command prints on every
+run caught it, so the barony scan counts braces and takes `province` only at
+the barony's own level. The game's files carry `#` comments, which a save never
+does; they are stripped there, and the save tokenizer still refuses them.
+
+The five maps render in 22 s at 2048 × 1024 (every 4th pixel), cropped to the
+realm, 32–58 KB each.

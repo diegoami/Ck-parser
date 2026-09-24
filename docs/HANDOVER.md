@@ -153,9 +153,9 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 
 ## What is not done, in the order I would do it
 
-Next: #39's step 3, the local map command that renders each realm from the
-game's own map files and delivers the images like portraits (PLAN.md §16);
-the *Realm* section it will sit in is built. Open issues, in the
+Next: the product repository (#46, decided): `diegoami/ck3-chronicle`, built
+by its own sessions with this repository as the reference. The POC stays active
+for experiments. Realm maps are done here (PLAN.md §16) and get ported there. Open issues, in the
 order I would take them: #27's last step (delete
 `ck3parser.handoff` once the companion reads `portraits.json`), #30 (a DLC toggled
 mid-run splits it), #31 (localization, needs a decision about the game's
@@ -212,6 +212,10 @@ and in a first pass it outranks everything the graph could answer.
    | asked unpredictably, in words | graph + LM |
 
 ### Done since this list was last written
+
+- **Realm maps** (#39 step 3): `python -m ck3wiki.maps` renders each save's realm
+  on the game's own map; every barony of the five saves is placed; the Realm
+  section links each map whether it has been rendered or not (PLAN.md §16).
 
 - **Realms** (#39, option C, subject ruler only): `ck3parser.realm` computes a
   ruler's realm per snapshot, with depth as vassal rank and changes as windows

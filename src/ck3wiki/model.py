@@ -27,7 +27,7 @@ from ck3parser.faiths import Faith, find_faiths
 from ck3parser.family import Family, own_family
 from ck3parser.parser import Block, date_key, to_date
 from ck3parser.pipeline import SnapshotView
-from ck3parser.portraits import arms_name, portrait_name, save_checksum
+from ck3parser.portraits import arms_name, portrait_name, realm_map_name, save_checksum
 from ck3parser.realm import changes as realm_changes
 from ck3parser.realm import realm as compute_realm
 from ck3parser.titles import TitleRecord
@@ -112,6 +112,8 @@ class WikiRealm:
     changes: list[RealmCounty]  #: against the previous *held* snapshot; empty for the first
     #: vacant snapshots the changes above were measured across, oldest first
     across: list[str] = field(default_factory=list)
+    #: the derived name of this realm's map image; None for a vacant snapshot
+    map_file: str | None = None
 
     @property
     def counties(self) -> int:
@@ -361,6 +363,11 @@ class Wiki:
     def wanted_portraits(self) -> list[Portrait]:
         """Every portrait the wiki links, in character then save order."""
         return [p for c in sorted(self.characters) for p in self.characters[c].portraits]
+
+    @property
+    def wanted_maps(self) -> list[str]:
+        """The realm map images the Realm section links, rendered locally, not harvested."""
+        return [r.map_file for r in self.realms if r.map_file]
 
     @property
     def wanted_arms(self) -> list[Arms]:
@@ -673,6 +680,7 @@ def _load_realms(wiki: Wiki, views: list[SnapshotView]) -> None:
             kingdoms=sorted(kingdoms.values(), key=lambda k: (-k.total, k.name)),
             changes=moved,
             across=vacant if previous is not None else [],
+            map_file=realm_map_name(view.fp.file, wiki.title_key),
         ))
         previous, previous_names, vacant = current, names, []
 

@@ -11,11 +11,13 @@ from __future__ import annotations
 import html
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 from ck3parser.parser import date_key
 from ck3parser.portraits import IMAGE_DIR
 from ck3parser.vassalage import Vassalage
 
+from .maps import LEGEND as MAP_LEGEND
 from .model import Gap, Image, Wiki, WikiCharacter, WikiHouse, WikiTitle
 
 STYLE = """\
@@ -80,6 +82,14 @@ figure.shot.awaited figcaption::after { content: " · awaiting harvest"; }
 .infobox figure.shot img { aspect-ratio: auto; }
 .infobox figure.shot.awaited img { aspect-ratio: 3 / 4; }
 figure.shot.arms.awaited img { aspect-ratio: 1 / 1; }
+figure.shot.map { width: 100%; max-width: 56rem; }
+figure.shot.map img { aspect-ratio: auto; object-fit: contain; }
+figure.shot.map.awaited img { aspect-ratio: 2 / 1; }
+figure.shot.map.awaited figcaption::after { content: " · awaiting render"; }
+.legend { display: flex; flex-wrap: wrap; gap: .3rem 1rem; font-size: .85rem; color: var(--muted);
+          padding: 0; margin: .3rem 0 1rem; list-style: none; }
+.legend span { display: inline-block; width: .9rem; height: .9rem; vertical-align: -.1rem;
+               margin-right: .3rem; border: 1px solid var(--rule); }
 .current { color: var(--accent); font-weight: bold; }
 ul.plain { list-style: none; padding: 0; }
 ul.plain li { padding: .2rem 0; border-bottom: 1px solid var(--rule); }
@@ -336,7 +346,7 @@ def render_title(wiki: Wiki, title: WikiTitle, have: set[str], top: bool = False
         body.append("<p>No holders are recorded for this title.</p>")
 
     if title.key == wiki.title_key:
-        body.append(realm_section(wiki))
+        body.append(realm_section(wiki, have))
 
     stretches = title.vassalage(wiki.snapshots)
     if stretches:
@@ -378,8 +388,9 @@ CHANGE_WORD = {
 }
 
 
-def realm_section(wiki: Wiki) -> str:
+def realm_section(wiki: Wiki, have: set[str] | None = None) -> str:
     """The land held by whoever held the subject title, save by save (PLAN.md §16)."""
+    have = have or set()
     if not wiki.realms:
         return ""
     out = [
@@ -408,8 +419,26 @@ def realm_section(wiki: Wiki) -> str:
         )
     out.append("</tbody></table>")
 
-    moved = [c for r in wiki.realms for c in r.changes]
     held = [r for r in wiki.realms if r.ruler is not None]
+    maps = [r for r in held if r.map_file]
+    if maps:
+        out.append("<h3>On the map</h3>")
+        for r in maps:
+            out.append(image_slot(
+                SimpleNamespace(file=r.map_file), 1,
+                f"The realm of {wiki.named(r.ruler)} at {r.date}", f"{r.date}: {wiki.named(r.ruler)}",
+                have, kind="map",
+            ))
+        out.append('<ul class="legend">' + "".join(
+            f'<li><span style="background:rgb{colour}"></span>{e(label)}</li>' for colour, label in MAP_LEGEND
+        ) + "</ul>")
+        out.append(
+            '<p class="sub">Drawn on the game\'s own map from its files, per save; a county is'
+            " coloured by its rank in the realm at that save, and a map says nothing about"
+            " the years between two.</p>"
+        )
+
+    moved = [c for r in wiki.realms for c in r.changes]
     if len(held) > 1:
         out.append("<h3>Between the saves</h3>")
         if moved:
@@ -831,7 +860,9 @@ def write_site(
         (out / folder).mkdir(parents=True, exist_ok=True)
     (out / "style.css").write_text(STYLE, encoding="utf-8")
 
-    wanted = {image.file for image in (*wiki.wanted_portraits, *wiki.wanted_arms)}
+    # realm maps too: rendered locally, not harvested, but delivered to the same
+    # images/ and linked the same way, whether they are there yet or not
+    wanted = {image.file for image in (*wiki.wanted_portraits, *wiki.wanted_arms)} | set(wiki.wanted_maps)
     # only what this chronicle links: one directory can hold every run's images,
     # and copying all of them into each site would multiply them by the runs
     have = harvested(portraits) & wanted
