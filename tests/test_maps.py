@@ -23,7 +23,11 @@ BARONIES = ((
 COLOURS = {1: (10, 0, 0), 2: (20, 0, 0), 3: (30, 0, 0), 4: (40, 0, 0), 5: (50, 0, 0)}
 
 
-def game_dir(tmp_path):
+def game_dir(tmp_path, version="1.6.1.2"):
+    # the fixture's saves are 1.6.1.2; the install must say the same (#58)
+    (tmp_path / "launcher").mkdir(exist_ok=True)
+    (tmp_path / "launcher" / "launcher-settings.json").write_text(
+        f'{{"rawVersion": "{version}", "version": "{version} (Test)"}}', encoding="utf-8-sig")
     root = tmp_path / "game"
     (root / "map_data").mkdir(parents=True)
     (root / "common" / "landed_titles").mkdir(parents=True)
@@ -124,3 +128,15 @@ def test_the_realm_section_links_the_map_whether_or_not_it_is_there(tmp_path):
 def test_no_game_files_is_a_clear_error(tmp_path, capsys):
     assert main([str(tmp_path), "--game", str(tmp_path / "nowhere"), "--out", str(tmp_path / "o")]) == 2
     assert "cannot find the game's map files" in capsys.readouterr().err
+
+
+def test_a_save_from_another_game_version_gets_no_map(tmp_path, capsys):
+    # #58: the map must come from the version that wrote the save; strict
+    saves = tmp_path / "saves"
+    saves.mkdir()
+    save = make_save(saves / "a.ck3", version='"1.4.4"', edits=BARONIES)
+    out = tmp_path / "images"
+    args = [str(saves), "--game", str(game_dir(tmp_path)), "--out", str(out), "--title", "k_testland"]
+    assert main(args) == 0
+    assert not (out / realm_map_name(save, "k_testland")).exists()
+    assert "skipped, the save was made on 1.4.4, the install is 1.6.1.2" in capsys.readouterr().err

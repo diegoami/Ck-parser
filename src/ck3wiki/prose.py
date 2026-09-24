@@ -546,7 +546,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         backend = make_backend(args.backend, args.url, args.model, os.environ.get("CK3_PROSE_API_KEY"))
         runs = discover(args.save, args.run_id)
-        loc = load_localization(args.game, args.localization)
+        source = load_localization(args.game, args.localization)
     except (ValueError, OSError, LookupError) as exc:
         print(exc, file=sys.stderr)
         return 2
@@ -556,6 +556,7 @@ def main(argv: list[str] | None = None) -> int:
         subject = subject_of(run, args.title, log)
         if subject is None:
             continue
+        loc = source.for_run(run.version)[0] if source is not None else None
         wiki = load_run(run, subject, log=log, cache_dir=Path(args.cache), loc=loc)
         if wiki is None:
             continue

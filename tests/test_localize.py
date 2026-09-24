@@ -26,7 +26,10 @@ GAME = {
 }
 
 
-def game_dir(tmp_path):
+def game_dir(tmp_path, version="1.6.1.2"):
+    (tmp_path / "launcher").mkdir(exist_ok=True)
+    (tmp_path / "launcher" / "launcher-settings.json").write_text(
+        f'{{"rawVersion": "{version}"}}', encoding="utf-8-sig")
     folder = tmp_path / "game" / "localization" / "english"
     folder.mkdir(parents=True, exist_ok=True)
     lines = "".join(f' {k}:0 "{v}"\n' for k, v in GAME.items())
@@ -74,7 +77,7 @@ def test_the_extract_holds_what_the_chronicles_used_and_builds_the_same(tmp_path
     extract = tmp_path / "localization.json"
     assert localize_main([str(saves), "--game", str(game_dir(tmp_path)), "--out", str(extract),
                           "--title", "k_testland", "--cache", str(tmp_path / "cache")]) == 0
-    keys = Localization.from_extract(extract).table
+    keys = Localization.from_extract(extract, "1.6.1.2").table
     assert "never_used" not in keys and "cause_natural" in keys  # a reference is kept with its user
     assert keys["Test"] == "Tést"
 
@@ -122,3 +125,53 @@ def test_a_cultures_heritage_is_the_games_name_for_it(tmp_path):
     assert {c.heritage for c in localized.cultures.values()} == {"North Testic"}
     assert {c.heritage for c in plain.cultures.values()} == {"Test North"}  # the key, tidied, as before
     assert "heritage_test_north_name" in localized.loc.used  # so the extract keeps it
+
+
+def test_the_games_text_is_only_used_for_its_own_version(tmp_path, capsys):
+    # #58: a 1.4.4 save next to a 1.6.1.2 install is left as it was before #31
+    saves = tmp_path / "saves"
+    saves.mkdir()
+    make_save(saves / "old.ck3", seed=9, version='"1.4.4"', edits=EDITS)
+    make_save(saves / "new.ck3", seed=7, edits=EDITS)
+    extract = tmp_path / "localization.json"
+    common = ["--title", "k_testland", "--cache", str(tmp_path / "cache")]
+    assert localize_main([str(saves), "--game", str(game_dir(tmp_path)), "--out", str(extract), *common]) == 0
+    err = capsys.readouterr().err
+    assert "skipped, the save was made on 1.4.4, the install is 1.6.1.2" in err
+    assert list(Localization.extract_versions(extract)) == ["1.6.1.2"]
+
+    for flag in (["--game", str(game_dir(tmp_path))], ["--localization", str(extract)]):
+        site = tmp_path / ("site_" + flag[0].strip("-"))
+        assert build_main([str(saves), "--out", str(site), *common, *flag]) == 0
+        pages = {p.name: (p / "characters" / "200.html").read_text(encoding="utf-8")
+                 for p in site.iterdir() if (p / "characters").is_dir()}
+        assert "Tést" in pages["7-1-6-1-2"]  # its own version: localized
+        assert "Tést" not in pages["9-1-4-4"] and "Test" in pages["9-1-4-4"]  # another: as before
+        assert "not localized" in capsys.readouterr().err
+
+
+def test_an_extract_keeps_each_versions_section(tmp_path):
+    path = tmp_path / "localization.json"
+    for version, name in (("1.6.1.2", "Tést"), ("1.4.4", "Testé")):
+        loc = Localization({"Test": name}, version=version)
+        loc.text("Test")
+        loc.write_extract(path)
+    assert sorted(Localization.extract_versions(path)) == ["1.4.4", "1.6.1.2"]
+    assert Localization.from_extract(path, "1.4.4").text("Test") == "Testé"
+    assert Localization.from_extract(path, "1.3.1") is None
+
+
+def test_an_install_of_unknown_version_is_refused(tmp_path, capsys):
+    from ck3parser.install import game_version, mismatch
+
+    assert game_version(tmp_path / "nowhere" / "game") is None
+    assert "unknown" in mismatch(None, "1.6.1.2") and "unknown" in mismatch("1.6.1.2", None)
+    assert mismatch("1.6.1.2", "1.6.1.2") is None
+    saves = tmp_path / "saves"
+    saves.mkdir()
+    make_save(saves / "a.ck3")
+    game = game_dir(tmp_path)
+    (tmp_path / "launcher" / "launcher-settings.json").unlink()
+    assert localize_main([str(saves), "--game", str(game), "--out", str(tmp_path / "x.json"),
+                          "--title", "k_testland", "--cache", str(tmp_path / "cache")]) == 2
+    assert not (tmp_path / "x.json").exists()

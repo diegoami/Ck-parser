@@ -145,6 +145,12 @@ go to the owner with a recommended default, not into the code.
   never guess the letter (PLAN.md §8, §17). A template in the game's text is
   filled only from facts the save holds (pronouns from sex, the killer from
   `dead_data`); anything else falls back to the transcribed key.
+- **Game files come from the game version that wrote the save** (#58, owner's
+  requirement), strictly: the install's `rawVersion`
+  (`launcher/launcher-settings.json`, `ck3parser.install`) must equal the run's
+  `version`, or maps are not drawn and text is not used for that run, naming
+  both versions. No override. The localization extract holds one section per
+  version; a run without its version's section is built as before #31.
 - One wiki per playthrough. What separates them is the run, identified by seed
   and game version, never the title the wiki is about.
 - Runs are grouped by the save's own **fingerprint**, never by the release it

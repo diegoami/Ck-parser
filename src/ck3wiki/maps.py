@@ -33,6 +33,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ck3parser.install import game_version, mismatch
 from ck3parser.portraits import realm_map_name
 from ck3parser.realm import realm
 from ck3parser.titles import TitleIndex, build_index
@@ -231,7 +232,9 @@ def main(argv: list[str] | None = None) -> int:
         print(exc, file=sys.stderr)
         return 2
     game = GameMap.load(root)
-    print(f"{root}: {len(game.barony_province)} baronies placed on {len(game.colour)} provinces", file=sys.stderr)
+    install = game_version(root)
+    print(f"{root} ({install}): {len(game.barony_province)} baronies placed on {len(game.colour)} provinces",
+          file=sys.stderr)
     args.out.mkdir(parents=True, exist_ok=True)
     written = 0
     for run in runs:
@@ -241,6 +244,11 @@ def main(argv: list[str] | None = None) -> int:
         for snapshot in run.snapshots:
             name = realm_map_name(snapshot.fp.file, subject)
             label = f"  {Path(snapshot.fp.file).name} [{snapshot.fp.date}]"
+            # the map of the version that wrote the save, or none (#58)
+            problem = mismatch(install, snapshot.fp.version)
+            if problem:
+                print(f"{label}: skipped, {problem}", file=sys.stderr)
+                continue
             if (args.out / name).exists() and not args.force:
                 print(f"{label}: {name} already there", file=sys.stderr)
                 continue
