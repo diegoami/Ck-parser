@@ -128,6 +128,30 @@ def group_snapshots(snapshots: Iterable[Snapshot]) -> list[Run]:
             )
             runs.extend(_split_on_tier1_failures(run, part))
     runs.sort(key=lambda r: (r.random_seed or 0, r.snapshots[0].sort_key()))
+    return _disambiguate(runs)
+
+
+def _disambiguate(runs: list[Run]) -> list[Run]:
+    """Give a repeated run id or slug a `-2`, `-3`... suffix, in run order.
+
+    A slug is a chronicle's output directory, so two runs sharing one would
+    overwrite each other's pages. The slug is the seed and the version, and two
+    runs can share both: a DLC set changed without the legacy chain continuing,
+    or turned off and back on around a break, which also repeats the id (#52).
+    The first run keeps its name, so nothing that already had a unique one moves.
+    """
+    for attr in ("run_id", "slug"):
+        seen: dict[str, int] = {}
+        for run in runs:
+            name = getattr(run, attr)
+            seen[name] = seen.get(name, 0) + 1
+            if seen[name] > 1:
+                candidate = f"{name}-{seen[name]}"
+                while candidate in seen:
+                    seen[name] += 1
+                    candidate = f"{name}-{seen[name]}"
+                seen[candidate] = 1
+                setattr(run, attr, candidate)
     return runs
 
 

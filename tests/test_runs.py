@@ -129,3 +129,18 @@ def test_an_unchanged_dlc_set_never_reads_the_legacy_chain(tmp_path, monkeypatch
     make_save(tmp_path / "b.ck3", date="1100.6.1", seed=1, random_count=200)
     (run,) = scan(tmp_path)
     assert len(run.snapshots) == 2 and run.notes == []
+
+
+def test_runs_that_would_share_a_name_are_told_apart(tmp_path):
+    # #52: off and back on, with the chain broken both times, gave the first and
+    # last runs one id; and any two runs of one seed and version shared a slug,
+    # the chronicle's directory, so one overwrote the other
+    make_save(tmp_path / "a.ck3", date="1000.1.1", seed=1, random_count=100, player_account="tester")
+    make_save(tmp_path / "b.ck3", date="1100.1.1", seed=1, random_count=200, edits=FEWER_DLCS, player_account="bob")
+    make_save(tmp_path / "c.ck3", date="1200.1.1", seed=1, random_count=300, player_account="tester")
+    runs = scan(tmp_path)
+    assert [[s.label for s in r.snapshots] for r in runs] == [["a.ck3"], ["b.ck3"], ["c.ck3"]]
+    assert len({r.run_id for r in runs}) == 3 and len({r.slug for r in runs}) == 3
+    # the first keeps its name; only the repeats are suffixed
+    assert runs[0].run_id == runs[0].snapshots[0].fp.run_id and runs[0].slug == runs[0].snapshots[0].fp.run_slug
+    assert runs[1].slug == f"{runs[0].slug}-2" and runs[2].run_id == f"{runs[0].run_id}-2"
