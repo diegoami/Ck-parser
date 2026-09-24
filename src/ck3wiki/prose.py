@@ -187,7 +187,7 @@ def character_facts(wiki: Wiki, cid: int) -> dict:
         "born": _date(character.birth),
         "died": _date(character.death),
         "died_aged": _age(character.birth, character.death),
-        "cause_of_death": _tidy(character.death_reason),
+        "cause_of_death": character.death_text or _tidy(character.death_reason),
         "house": house.name if house else None,
         "dynasty": house.dynasty.display_name if house and house.dynasty else None,
         "culture": culture.display_name if culture else None,

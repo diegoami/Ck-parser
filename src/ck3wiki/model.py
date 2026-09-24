@@ -25,6 +25,7 @@ from ck3parser.cultures import Culture, find_cultures
 from ck3parser.dynasties import Dynasty, House, arms_id, find_dynasties, find_houses, house_name
 from ck3parser.faiths import Faith, find_faiths
 from ck3parser.family import Family, own_family
+from ck3parser.localization import Localization
 from ck3parser.parser import Block, date_key, to_date
 from ck3parser.pipeline import SnapshotView
 from ck3parser.portraits import arms_name, portrait_name, realm_map_name, save_checksum
@@ -253,6 +254,10 @@ class WikiCharacter:
     former_spouses: list[int] = field(default_factory=list)
     children: list[int] = field(default_factory=list)
     real_father: int | None = None
+    #: who killed them, when the save's dead_data says (#31)
+    killer: int | None = None
+    #: the cause of death in the game's own words, when it could be filled in
+    death_text: str | None = None
     #: why this character has a page: ROLES, in the order they are worth
     #: harvesting (docs/PLAN.md §7, the queue)
     role: str = "ever-holder"
@@ -347,6 +352,8 @@ class Wiki:
     holdings: dict[int, dict[str, Holding]] = field(default_factory=dict)
     #: the subject title's holder's realm at each snapshot, oldest first (§16)
     realms: list[WikiRealm] = field(default_factory=list)
+    #: the game's text for the keys the save uses, when a build was given it (#31)
+    loc: Localization | None = None
     saves: list[dict] = field(default_factory=list)  #: {file, checksum, date} per snapshot
 
     def person(self, character_id: int) -> WikiCharacter | Relative | None:
@@ -441,7 +448,7 @@ def _merge_character(
     dead = char.get("dead_data")
     existing = wiki.characters.get(cid)
     record = existing or WikiCharacter(id=cid, role=role)
-    record.name = clean_name(str(char.get("first_name") or "")) or record.name
+    record.name = _person_name(wiki, char.get("first_name")) or record.name
     record.birth = record.birth or (str(char["birth"]) if char.get("birth") is not None else None)
     record.female = bool(char.get("female", record.female))
     house = char.get("dynasty_house")
@@ -456,6 +463,8 @@ def _merge_character(
         record.death = str(dead["date"])
         reason = dead.get("reason")
         record.death_reason = str(reason) if reason else record.death_reason
+        killer = dead.get("killer")
+        record.killer = killer if isinstance(killer, int) else record.killer
     if date not in record.seen:
         record.seen.append(date)
     name = Path(save_file).name
@@ -482,7 +491,7 @@ def _merge_character(
 
 def _merge_title(wiki: Wiki, record: TitleRecord, view: SnapshotView) -> WikiTitle:
     title = wiki.titles.get(record.key) or WikiTitle(key=record.key)
-    title.name = record.display_name
+    title.name = _title_name(wiki, record)
     title.tier = record.tier or title.tier
     title.first_seen = min(filter(None, [title.first_seen, view.fp.date]), key=date_key)
     title.last_seen = max(filter(None, [title.last_seen, view.fp.date]), key=date_key)
@@ -586,10 +595,11 @@ def build_wiki(
     with_kin: bool = True,
     with_siblings: bool = True,
     with_titled_kin: bool = True,
+    loc: Localization | None = None,
 ) -> Wiki:
     """Merge snapshots, oldest first, into one picture of the lineage."""
     views = sorted(views, key=lambda v: date_key(v.fp.date))
-    wiki = Wiki(run_id=views[0].fp.run_id if views else "", title_key=title_key)
+    wiki = Wiki(run_id=views[0].fp.run_id if views else "", title_key=title_key, loc=loc)
     for view in views:
         wiki.snapshots.append(view.fp.date)
         for record in view.titles:
@@ -620,15 +630,40 @@ def build_wiki(
     _load_title_arms(wiki, views)
     _load_cultures_and_faiths(wiki, views)
     _load_realms(wiki, views)
+    if loc is not None:
+        _localize(wiki, views)
     return wiki
 
 
-def _de_jure_kingdom(index, record) -> tuple[str | None, str]:
+def _localize(wiki: Wiki, views: list[SnapshotView]) -> None:
+    """The game's own words for key-named cultures and faiths, and causes of death (#31).
+
+    Every lookup happens here, during the build, so the keys a chronicle uses
+    are exactly the ones `wiki.loc.used` records: that is what an extract keeps.
+    A cause of death that needs its killer is filled only when the save names
+    one; the killer is named like anyone else the wiki mentions without a page.
+    """
+    loc = wiki.loc
+    for culture in wiki.cultures.values():
+        if culture.templated:
+            culture.localized = loc.text(culture.name)
+    for faith in wiki.faiths.values():
+        if not faith.name:
+            faith.localized = loc.text(faith.tag or faith.template)
+    _name_outsiders(wiki, views, {c.killer for c in wiki.characters.values() if c.killer is not None})
+    for character in wiki.characters.values():
+        if not character.death_reason:
+            continue
+        killer = wiki.named(character.killer) if wiki.person(character.killer) else None
+        character.death_text = loc.render(character.death_reason, female=character.female, killer=killer)
+
+
+def _de_jure_kingdom(wiki: Wiki, index, record) -> tuple[str | None, str]:
     """The kingdom a title belongs to on the map, whoever holds it."""
     seen = set()
     while record is not None and record.idx not in seen:
         if record.tier == "kingdom":
-            return record.key, record.display_name
+            return record.key, _title_name(wiki, record)
         seen.add(record.idx)
         record = index.resolve(record.de_jure_liege)
     return None, "No de jure kingdom"
@@ -657,7 +692,7 @@ def _load_realms(wiki: Wiki, views: list[SnapshotView]) -> None:
         counties = current.of_tier("county")
         kingdoms: dict[str | None, RealmKingdom] = {}
         for key, title in counties.items():
-            kkey, kname = _de_jure_kingdom(view.index, view.index.get(key))
+            kkey, kname = _de_jure_kingdom(wiki, view.index, view.index.get(key))
             row = kingdoms.setdefault(kkey, RealmKingdom(key=kkey, name=kname))
             if title.depth == 0:
                 row.held += 1
@@ -665,13 +700,13 @@ def _load_realms(wiki: Wiki, views: list[SnapshotView]) -> None:
                 row.vassals += 1
             else:
                 row.deeper += 1
-        names = {key: view.index.get(key).display_name for key in counties}
+        names = {key: _title_name(wiki, view.index.get(key)) for key in counties}
         moved = []
         if previous is not None:
             for change in realm_changes(previous, current):
                 name = names.get(change.key) or previous_names.get(change.key) or change.key
                 if change.key in current.in_save and change.key not in names:
-                    name = view.index.get(change.key).display_name
+                    name = _title_name(wiki, view.index.get(change.key))
                 moved.append(RealmCounty(change.key, name, change.kind, change.after, change.before))
         wiki.realms.append(WikiRealm(
             date=view.fp.date,
@@ -767,7 +802,7 @@ def _load_holdings(wiki: Wiki, views: list[SnapshotView]) -> None:
             holding = held.get(record.key)
             if holding is None:
                 holding = held[record.key] = Holding(
-                    key=record.key, name=record.display_name, tier=record.tier
+                    key=record.key, name=_title_name(wiki, record), tier=record.tier
                 )
             if view.fp.date not in holding.seen:
                 holding.seen.append(view.fp.date)
@@ -848,7 +883,12 @@ def _name_the_rest(wiki: Wiki, views: list[SnapshotView]) -> None:
         )
         if record.real_father is not None:
             outside.add(record.real_father)
-    outside -= wiki.characters.keys()
+    _name_outsiders(wiki, views, outside)
+
+
+def _name_outsiders(wiki: Wiki, views: list[SnapshotView], ids: set[int]) -> None:
+    """Name characters the wiki mentions but gives no page, newest save first."""
+    outside = set(ids) - wiki.characters.keys() - wiki.relatives.keys()
     for view in reversed(views):
         missing = outside - wiki.relatives.keys()
         if not missing:
@@ -857,11 +897,30 @@ def _name_the_rest(wiki: Wiki, views: list[SnapshotView]) -> None:
             dead = char.get("dead_data")
             wiki.relatives[cid] = Relative(
                 id=cid,
-                name=clean_name(str(char.get("first_name") or "")),
+                name=_person_name(wiki, char.get("first_name")),
                 birth=str(char["birth"]) if char.get("birth") is not None else None,
                 death=str(dead["date"]) if isinstance(dead, Block) and dead.get("date") else None,
                 female=bool(char.get("female")),
             )
+
+
+def _person_name(wiki: Wiki, raw: object) -> str:
+    """The game's text for a first-name key, or the key with its marker dropped (#31).
+
+    The underscore in `A_sa` marks a diacritic; the game's localization says
+    which (`Åsa`). Without it the marker is dropped and the letter never guessed.
+    """
+    key = str(raw or "")
+    found = wiki.loc.text(key) if wiki.loc is not None and key else None
+    return found or clean_name(key)
+
+
+def _title_name(wiki: Wiki, record: TitleRecord) -> str:
+    """The save's own name for a title; else the game's text for its key; else the key, tidied."""
+    if record.name:
+        return record.display_name
+    found = wiki.loc.text(record.key) if wiki.loc is not None else None
+    return found or record.display_name
 
 
 def _load_vassalage(wiki: Wiki, views: list[SnapshotView]) -> None:
@@ -971,18 +1030,4 @@ def _name_the_founders(wiki: Wiki, views: list[SnapshotView]) -> None:
     """
     outside = {f.founder for f in wiki.faiths.values() if f.founder is not None}
     outside |= {c.head for c in wiki.cultures.values() if c.head is not None}
-    outside -= wiki.characters.keys()
-    outside -= wiki.relatives.keys()
-    for view in reversed(views):
-        missing = outside - wiki.relatives.keys()
-        if not missing:
-            break
-        for cid, char in view.find_characters(missing).items():
-            dead = char.get("dead_data")
-            wiki.relatives[cid] = Relative(
-                id=cid,
-                name=clean_name(str(char.get("first_name") or "")),
-                birth=str(char["birth"]) if char.get("birth") is not None else None,
-                death=str(dead["date"]) if isinstance(dead, Block) and dead.get("date") else None,
-                female=bool(char.get("female")),
-            )
+    _name_outsiders(wiki, views, outside)

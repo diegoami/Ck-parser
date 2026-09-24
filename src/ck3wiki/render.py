@@ -520,7 +520,9 @@ def render_character(
         [
             ("Born", e(character.birth)),
             ("Died", e(character.death) if character.death else '<span class="tag">alive</span>'),
-            ("Cause", e(character.death_reason.replace("death_", "").replace("_", " ")) if character.death_reason else ""),
+            # the game's own words when a build had them (#31), else the key, tidied
+            ("Cause", e(character.death_text or character.death_reason.replace("death_", "").replace("_", " "))
+             if character.death_reason else ""),
             ("Sex", "female" if character.female else "male"),
             ("House", house_link(wiki, character.house, 1)),
             ("Culture", culture_link(wiki, character.culture, 1)),

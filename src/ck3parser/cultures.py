@@ -59,6 +59,8 @@ class Culture:
     created: str | None = None
     head: int | None = None
     parents: list[int] = field(default_factory=list)
+    #: the game's own text for a key-named culture, when it was looked up (#31)
+    localized: str | None = None
 
     @property
     def templated(self) -> bool:
@@ -75,7 +77,7 @@ class Culture:
         """The key, tidied, when there is a template; the game's own text if not."""
         if not self.templated:
             return self.name or f"Culture {self.id}"
-        return titled(self.name) or f"Culture {self.id}"
+        return self.localized or titled(self.name) or f"Culture {self.id}"
 
     @property
     def founded(self) -> str | None:

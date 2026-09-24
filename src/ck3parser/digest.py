@@ -37,7 +37,7 @@ from .parser import Block, PushbackLines, iter_children
 
 #: Bump this whenever the row shape changes. Old digests are then ignored, not
 #: migrated: rebuilding one costs a minute and a wrong one costs correctness.
-SCHEMA = "ck3-characters/1"
+SCHEMA = "ck3-characters/2"  #: 2: the killer, from dead_data (#31)
 
 #: Where character records live, in the order worth searching. A row records
 #: which of them it came from, because `living_characters` needs to know.
@@ -64,6 +64,8 @@ def _row(cid: int, char: Block, section: int) -> dict:
         row["d"] = str(dead["date"]) if dead.get("date") is not None else ""
         if dead.get("reason"):
             row["r"] = str(dead["reason"])
+        if isinstance(dead.get("killer"), int):
+            row["kl"] = dead["killer"]
     family = char.get("family_data")
     if isinstance(family, Block):
         own = own_family(cid, family)
@@ -98,6 +100,8 @@ def _block(row: dict) -> Block:
             dead.append(("date", row["d"]))
         if row.get("r"):
             dead.append(("reason", row["r"]))
+        if "kl" in row:
+            dead.append(("killer", row["kl"]))
         block.append(("dead_data", dead))
     family = Block()
     for kid in row.get("k", ()):

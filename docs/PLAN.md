@@ -1714,3 +1714,48 @@ does; they are stripped there, and the save tokenizer still refuses them.
 
 The five maps render in 22 s at 2048 × 1024 (every 4th pixel), cropped to the
 realm, 32–58 KB each.
+
+---
+
+## 17. The game's own words (#31)
+
+Decided on #31 (option C): a build on a machine with the game reads its
+English localization directly (`--game`); a build without it reads an
+**extract**, `localization.json`, holding only the keys the chronicles used,
+written by `python -m ck3wiki.localize` and committed to ck_wiki for its CI.
+With neither, nothing changes: the build is byte-identical to `poc-reference-1`.
+
+### What the save's keys turn out to be
+
+- **A first name with an underscore is a localization key**, not a mangled
+  word: `A_sa:0 "Åsa"`. The rule "drop the marker, never guess the letter"
+  (§8) still holds without the game; with it, the letter is looked up. Names
+  now read *Özgul, Bjørn, Étienne, Æthelræd, Böðvar*.
+- Causes of death are keys, **about 40 % of them templates**: *"drank
+  [CHARACTER.GetHerselfHimself] to death"*. `ck3parser.localization` fills the
+  character's pronouns, `$references$`, trait names, and the killer, which
+  `dead_data` records for 7 % of the dead (1 143 of those in battle, in a sample
+  of 30 000 from the 1364 save). The digest now stores it (`ck3-characters/2`).
+  Anything else, and formatting markup, gives no text, and the page shows the
+  tidied key as before. Nothing is guessed.
+- A line may carry a trailing `# comment` after its text (`death_depressed`);
+  a first cut that did not allow it lost two keys.
+- A title the save names keeps its own name (a player may rename one); only
+  an unnamed title takes the game's. Key-named cultures and faiths take the
+  game's; a faith its founder named keeps that name. House names are already
+  text in the save and are left alone. Heritage, language and ethos are still
+  tidied keys: they are tidied as they are read, so their keys are gone, and
+  are a follow-up.
+
+### Measured on the five release saves
+
+| | |
+|---|---|
+| game keys | 141 451 in 657 files |
+| extract | **9 390 keys, 228 KB**: 5 649 for Germania, 2 572 more for the HRE, 1 169 for France |
+| causes of death in the game's words | **15 582 of 15 583**; the one left is a `death_murder_known` whose killer the saves no longer have |
+| files whose text changes | 21 270 of 25 133 |
+| a build from the extract vs one from the game | **identical**, 0 files differ |
+
+A key a new save introduces is missing from the extract until `localize` runs
+again; until then that page shows the transcribed key, never a guess.
