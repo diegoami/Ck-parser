@@ -1743,9 +1743,13 @@ With neither, nothing changes: the build is byte-identical to `poc-reference-1`.
 - A title the save names keeps its own name (a player may rename one); only
   an unnamed title takes the game's. Key-named cultures and faiths take the
   game's; a faith its founder named keeps that name. House names are already
-  text in the save and are left alone. Heritage, language and ethos are still
-  tidied keys: they are tidied as they are read, so their keys are gone, and
-  are a follow-up.
+  text in the save and are left alone.
+- A culture's **heritage, language, ethos and martial custom** are keys too, but
+  the game keeps their names under **`<key>_name`**, beside `_desc`
+  (`heritage_north_germanic_name`: "North Germanic"). `Culture.keys` keeps the
+  raw keys the tidied text is made from. On Germania all four resolve for all
+  131 cultures ("Men Only", not the tidied "Male Only"). The 1.3 and 1.4 saves
+  store no aspects on a culture at all, and no name either: that is #56.
 
 ### Measured on the five release saves
 

@@ -649,6 +649,13 @@ def _localize(wiki: Wiki, views: list[SnapshotView]) -> None:
     for culture in wiki.cultures.values():
         if culture.templated:
             culture.localized = loc.text(culture.name)
+        # heritage, language, ethos and martial custom: tidied keys until now.
+        # The game keeps their names under `<key>_name` (`heritage_north_germanic`
+        # -> `heritage_north_germanic_name`: "North Germanic"), beside `_desc`
+        for aspect, key in culture.keys.items():
+            text = loc.text(f"{key}_name")
+            if text is not None:
+                setattr(culture, aspect, text)
     for faith in wiki.faiths.values():
         if not faith.name:
             faith.localized = loc.text(faith.tag or faith.template)
