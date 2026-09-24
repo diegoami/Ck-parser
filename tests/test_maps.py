@@ -140,3 +140,15 @@ def test_a_save_from_another_game_version_gets_no_map(tmp_path, capsys):
     assert main(args) == 0
     assert not (out / realm_map_name(save, "k_testland")).exists()
     assert "skipped, the save was made on 1.4.4, the install is 1.6.1.2" in capsys.readouterr().err
+
+
+def test_an_install_of_unknown_version_draws_nothing_and_fails(tmp_path, capsys):
+    # #61: strict (#58), and a failure, not exit 0 with an empty folder
+    saves = tmp_path / "saves"
+    saves.mkdir()
+    make_save(saves / "a.ck3", edits=BARONIES)
+    game = game_dir(tmp_path)
+    (tmp_path / "launcher" / "launcher-settings.json").unlink()
+    out = tmp_path / "images"
+    assert main([str(saves), "--game", str(game), "--out", str(out), "--title", "k_testland"]) == 2
+    assert "no maps drawn" in capsys.readouterr().err and not out.exists()

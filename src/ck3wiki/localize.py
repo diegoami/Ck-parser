@@ -49,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     loc = Localization.from_game(root)
     print(f"{loc.source}: {len(loc.table):,} keys, game version {loc.version}", file=sys.stderr)
     if not loc.version:
-        print("cannot tell the install's version (no launcher-settings.json): nothing written", file=sys.stderr)
+        print(f"nothing written: {mismatch(None, None)}", file=sys.stderr)
         return 2
     for run in runs:
         # only the version that wrote the save (#58): another version's text
@@ -64,8 +64,13 @@ def main(argv: list[str] | None = None) -> int:
         before = len(loc.used)
         load_run(run, subject, log=open(os.devnull, "w"), cache_dir=Path(args.cache), loc=loc)
         print(f"  {run.slug}: {len(loc.used) - before} new key(s)", file=sys.stderr)
-    written = loc.write_extract(args.out)
-    print(f"{written} key(s) written to {args.out} for {loc.version}; other versions kept", file=sys.stderr)
+    try:
+        written = loc.write_extract(args.out)
+    except (OSError, ValueError) as exc:
+        print(f"nothing written: {exc}", file=sys.stderr)
+        return 2
+    sections = ", ".join(Localization.extract_versions(args.out))
+    print(f"{written} key(s) written to {args.out} for {loc.version}; its sections: {sections}", file=sys.stderr)
     return 0
 
 

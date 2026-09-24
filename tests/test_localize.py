@@ -175,3 +175,50 @@ def test_an_install_of_unknown_version_is_refused(tmp_path, capsys):
     assert localize_main([str(saves), "--game", str(game), "--out", str(tmp_path / "x.json"),
                           "--title", "k_testland", "--cache", str(tmp_path / "cache")]) == 2
     assert not (tmp_path / "x.json").exists()
+
+
+def test_an_unknown_install_version_fails_the_build_and_prose(tmp_path, capsys):
+    # #61: `--game` whose version cannot be told is refused, not a build that
+    # exits 0 with nothing localized
+    from ck3wiki.prose import main as prose_main
+
+    saves = tmp_path / "saves"
+    saves.mkdir()
+    make_save(saves / "a.ck3")
+    game = game_dir(tmp_path)
+    (tmp_path / "launcher" / "launcher-settings.json").unlink()
+    common = ["--title", "k_testland", "--cache", str(tmp_path / "cache"), "--game", str(game)]
+    assert build_main([str(saves), "--out", str(tmp_path / "site"), *common]) == 2
+    assert prose_main([str(saves), "--out", str(tmp_path / "prose"), *common]) == 2
+    assert "rawVersion" in capsys.readouterr().err
+    assert not (tmp_path / "site").exists()
+
+
+def test_localize_upgrades_an_old_extract_and_keeps_other_versions(tmp_path, capsys):
+    # #60: writing over the pre-#58 extract is how it is upgraded, not a
+    # traceback; and two installs of different versions fill one file
+    import json
+
+    saves = tmp_path / "saves"
+    saves.mkdir()
+    make_save(saves / "old.ck3", seed=9, version='"1.4.4"', edits=EDITS)
+    make_save(saves / "new.ck3", seed=7, edits=EDITS)
+    extract = tmp_path / "localization.json"
+    extract.write_text(json.dumps({"schema": "ck3-localization/1", "keys": {"Test": "Tést"}}), encoding="utf-8")
+    common = ["--title", "k_testland", "--cache", str(tmp_path / "cache"), "--out", str(extract)]
+    for version in ("1.6.1.2", "1.4.4"):
+        (tmp_path / version).mkdir()
+        game = game_dir(tmp_path / version, version=version)
+        assert localize_main([str(saves), "--game", str(game), *common]) == 0
+    assert sorted(Localization.extract_versions(extract)) == ["1.4.4", "1.6.1.2"]
+    assert "its sections: 1.4.4, 1.6.1.2" in capsys.readouterr().err
+    for version in ("1.4.4", "1.6.1.2"):
+        assert Localization.from_extract(extract, version).table["Test"] == "Tést"
+
+    # a file that is no extract at all is left alone
+    other = tmp_path / "other.json"
+    other.write_text('{"something": "else"}', encoding="utf-8")
+    game = game_dir(tmp_path / "1.6.1.2")
+    assert localize_main([str(saves), "--game", str(game), *common[:-1], str(other)]) == 2
+    assert other.read_text(encoding="utf-8") == '{"something": "else"}'
+    assert "not overwriting it" in capsys.readouterr().err

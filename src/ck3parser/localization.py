@@ -59,6 +59,14 @@ def parse(text: str) -> dict[str, str]:
     return out
 
 
+def _read_extract(path: Path) -> tuple[str | None, dict[str, dict]]:
+    """An extract's schema and sections; no schema if it is not an extract at all."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or not isinstance(data.get("schema"), str):
+        return None, {}
+    return data["schema"], dict(data.get("versions") or {})
+
+
 class Localization:
     """Key -> text, with every key it was asked for and answered recorded."""
 
@@ -84,10 +92,10 @@ class Localization:
     @staticmethod
     def extract_versions(path: Path) -> dict[str, dict]:
         """An extract's sections by game version; an older schema is refused."""
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
-        if data.get("schema") != SCHEMA:
+        schema, versions = _read_extract(Path(path))
+        if schema != SCHEMA:
             raise ValueError(f"{path} is not a {SCHEMA} extract; write it again with ck3wiki.localize")
-        return dict(data.get("versions") or {})
+        return versions
 
     @classmethod
     def from_extract(cls, path: Path, version: str | None) -> Localization | None:
@@ -105,7 +113,15 @@ class Localization:
         if not self.version:
             raise ValueError("cannot write an extract without the game version the text came from")
         path = Path(path)
-        versions = self.extract_versions(path) if path.is_file() else {}
+        versions: dict[str, dict] = {}
+        if path.is_file():
+            schema, versions = _read_extract(path)
+            if schema is None or not schema.startswith("ck3-localization/"):
+                raise ValueError(f"{path} is not a localization extract; not overwriting it")
+            if schema != SCHEMA:
+                # an older extract: its text says no version, so none of it
+                # can be kept, and writing it again is how it is upgraded (#60)
+                versions = {}
         keys = {k: self.table[k] for k in sorted(self.used)}
         versions[self.version] = {"keys": keys}
         path.write_text(

@@ -195,7 +195,12 @@ def load_localization(game: str | None, extract: str | None) -> LocSource | None
         folder = Path(game) / "localization" / "english"
         if not folder.is_dir():
             raise OSError(f"no {folder}: pass the game's `game` directory")
-        return LocSource(game=Localization.from_game(Path(game)))
+        loc = Localization.from_game(Path(game))
+        if not loc.version:
+            # strict (#58): `--game` asked for text no run may use; fail, not
+            # a build that looks localized and is not
+            raise ValueError(mismatch(None, None))
+        return LocSource(game=loc)
     if extract:
         Localization.extract_versions(Path(extract))  # refuse a bad file up front
         return LocSource(extract=Path(extract))

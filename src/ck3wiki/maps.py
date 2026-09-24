@@ -231,8 +231,13 @@ def main(argv: list[str] | None = None) -> int:
     except (FileNotFoundError, LookupError) as exc:
         print(exc, file=sys.stderr)
         return 2
-    game = GameMap.load(root)
     install = game_version(root)
+    if not install:
+        # strict (#58): no map can be said to be the right one, so none is drawn,
+        # and the command fails rather than succeed with nothing
+        print(f"no maps drawn: {mismatch(install, None)}", file=sys.stderr)
+        return 2
+    game = GameMap.load(root)
     print(f"{root} ({install}): {len(game.barony_province)} baronies placed on {len(game.colour)} provinces",
           file=sys.stderr)
     args.out.mkdir(parents=True, exist_ok=True)

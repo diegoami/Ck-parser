@@ -42,7 +42,7 @@ def mismatch(install: str | None, save: str | None) -> str | None:
     files are the right ones.
     """
     if not install:
-        return "the install's version is unknown (no launcher-settings.json)"
+        return "the install's version is unknown (no rawVersion in launcher/launcher-settings.json)"
     if not save:
         return "the save's version is unknown"
     if install != save:

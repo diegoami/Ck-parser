@@ -556,7 +556,10 @@ def main(argv: list[str] | None = None) -> int:
         subject = subject_of(run, args.title, log)
         if subject is None:
             continue
-        loc = source.for_run(run.version)[0] if source is not None else None
+        loc = None
+        if source is not None:
+            loc, why = source.for_run(run.version)
+            print(f"  {run.slug}: {why}", file=log)
         wiki = load_run(run, subject, log=log, cache_dir=Path(args.cache), loc=loc)
         if wiki is None:
             continue
