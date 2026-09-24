@@ -1752,7 +1752,7 @@ With neither, nothing changes: the build is byte-identical to `poc-reference-1`.
 | | |
 |---|---|
 | game keys | 141 451 in 657 files |
-| extract | **9 390 keys, 228 KB**: 5 649 for Germania, 2 572 more for the HRE, 1 169 for France |
+| extract | **9 390 keys**, ~228–237 KB depending on the game patch the text is read from (the key count is the same; a review reading a later install got 237 289 bytes): 5 649 for Germania, 2 572 more for the HRE, 1 169 for France |
 | causes of death in the game's words | **15 582 of 15 583**; the one left is a `death_murder_known` whose killer the saves no longer have |
 | files whose text changes | 21 270 of 25 133 |
 | a build from the extract vs one from the game | **identical**, 0 files differ |

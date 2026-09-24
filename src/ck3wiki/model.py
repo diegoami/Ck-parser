@@ -638,8 +638,10 @@ def build_wiki(
 def _localize(wiki: Wiki, views: list[SnapshotView]) -> None:
     """The game's own words for key-named cultures and faiths, and causes of death (#31).
 
-    Every lookup happens here, during the build, so the keys a chronicle uses
-    are exactly the ones `wiki.loc.used` records: that is what an extract keeps.
+    Names and titles are looked up as they are merged, throughout `build_wiki`;
+    these are the lookups that wait until everything is loaded. Every one of them
+    happens during the build, so the keys a chronicle uses are exactly the ones
+    `wiki.loc.used` records: that is what an extract keeps.
     A cause of death that needs its killer is filled only when the save names
     one; the killer is named like anyone else the wiki mentions without a page.
     """

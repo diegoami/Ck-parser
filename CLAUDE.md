@@ -33,6 +33,7 @@ uv run python -m ck3wiki.maps saves --out images                        # realm 
 uv run python -m ck3wiki.build saves --out site --game "<CK3>/game"      # names and causes in the game's own words
 uv run python -m ck3wiki.localize saves --out localization.json          # ... the extract ck_wiki's CI builds with
 uv run python -m ck3wiki.build saves --out site --localization localization.json
+uv run python -m ck3wiki.prose saves --out prose --game "<CK3>/game"     # prose from the same text the build uses (#54)
 ```
 
 ## Process

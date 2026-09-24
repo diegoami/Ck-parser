@@ -86,3 +86,24 @@ def test_the_extract_holds_what_the_chronicles_used_and_builds_the_same(tmp_path
         pages[how] = (site / slug / "characters" / "101.html").read_text(encoding="utf-8")
     assert pages["game"] == pages["extract"]
     assert "was slain in battle by Fóunder" in pages["game"]
+
+
+def test_prose_written_localized_survives_a_localized_build(tmp_path):
+    # #54: prose written without the game's text had different facts from a
+    # localized build, so every paragraph was stale and left out
+    from ck3wiki.prose import main as prose_main
+
+    saves = tmp_path / "saves"
+    saves.mkdir()
+    make_save(saves / "a.ck3", edits=EDITS)
+    game = ["--game", str(game_dir(tmp_path))]
+    common = ["--title", "k_testland", "--cache", str(tmp_path / "cache")]
+    assert prose_main([str(saves), "--out", str(tmp_path / "prose"), *common, *game]) == 0
+    site = tmp_path / "site"
+    assert build_main([str(saves), "--out", str(site), "--prose", str(tmp_path / "prose"), *common, *game]) == 0
+    slug = next(p.name for p in site.iterdir() if p.is_dir())
+    page = (site / slug / "characters" / "200.html").read_text(encoding="utf-8")
+    assert '<section class="prose">' in page and "Tést" in page
+
+    # and a missing game folder is an argument error, not a traceback
+    assert prose_main([str(saves), "--out", str(tmp_path / "p2"), *common, "--game", str(tmp_path / "nowhere")]) == 2

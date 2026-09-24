@@ -517,7 +517,7 @@ def make_backend(name: str, url: str, model: str | None, api_key: str | None) ->
 def main(argv: list[str] | None = None) -> int:
     import os
 
-    from .build import discover, load_run, subject_of
+    from .build import discover, load_localization, load_run, subject_of
 
     ap = argparse.ArgumentParser(prog="python -m ck3wiki.prose", description=__doc__.splitlines()[0])
     ap.add_argument("save", help="a .ck3 file, or a directory of saves")
@@ -537,12 +537,17 @@ def main(argv: list[str] | None = None) -> int:
                     help="model name, as the server knows it (default: $CK3_PROSE_MODEL)")
     ap.add_argument("--force", action="store_true", help="rewrite prose that is still current")
     ap.add_argument("--cache", default=".ck3cache", help="character digests, as for the build")
+    # the same text the build will use, or the facts differ and every paragraph
+    # is stale by the time it is folded in (#54)
+    ap.add_argument("--game", help="the game's `game` directory, as for the build")
+    ap.add_argument("--localization", help="a localization extract, as for the build")
     args = ap.parse_args(argv)
 
     try:
         backend = make_backend(args.backend, args.url, args.model, os.environ.get("CK3_PROSE_API_KEY"))
         runs = discover(args.save, args.run_id)
-    except (ValueError, FileNotFoundError, LookupError) as exc:
+        loc = load_localization(args.game, args.localization)
+    except (ValueError, OSError, LookupError) as exc:
         print(exc, file=sys.stderr)
         return 2
     log = sys.stderr
@@ -551,7 +556,7 @@ def main(argv: list[str] | None = None) -> int:
         subject = subject_of(run, args.title, log)
         if subject is None:
             continue
-        wiki = load_run(run, subject, log=log, cache_dir=Path(args.cache))
+        wiki = load_run(run, subject, log=log, cache_dir=Path(args.cache), loc=loc)
         if wiki is None:
             continue
         pages = [("characters", c) for c in args.character] or rulers(wiki)
