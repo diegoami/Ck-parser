@@ -1661,6 +1661,21 @@ Changes: `c_asturias_de_oviedo` gained between 1358.9.13 and 1361.1.17;
 and passed on the next day: to vassals, so they stayed in the realm. Nothing
 left, and nothing is gone.
 
+### On the page (step 2)
+
+The subject title's page has a *Realm* section, built in CI from save data
+alone (`Wiki.realms`, `render.realm_section`): per save, who held the title and
+how many counties were held directly, through direct vassals and further
+down; the counties that joined, left or are gone between consecutive saves,
+each dated by the window; and, as of the last save, the counties grouped by
+their **de jure** kingdom, the map's own, whoever holds it. The realm follows
+the title, so Asa's 1358 realm is followed by Ludwig's 1361 one.
+
+On the five release saves: Germania as in the table above; the HRE's
+Klementia 918 counties, 5 held directly; France's Ealhswith 329, 73 held
+directly, 65 of them in de jure Germany. The build cost is ~5 s across all
+three chronicles.
+
 ### What the map will need (not built yet)
 
 The save holds no geography; the game's files do (`map_data/provinces.png`,

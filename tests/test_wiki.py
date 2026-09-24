@@ -867,3 +867,67 @@ def test_the_prose_is_told_nobody_came_next(tmp_path):
                  if r["title"] == wiki.titles["k_testland"].name)
     assert reign["until"] == "1 January 1080"
     assert reign["next_holder_recorded_from"] == "1 February 1090"
+
+
+# ---------------------------------------------------------------- realm
+
+#: c_far stops answering to c_test (inside the realm) and answers to d_empty,
+#: which nobody holds: it has left the realm.
+C_FAR_LEAVES = (("de_jure_liege=1\n\tde_facto_liege=2", "de_jure_liege=1\n\tde_facto_liege=1"),)
+
+
+def test_the_subject_title_shows_its_rulers_realm_save_by_save(tmp_path):
+    early = make_save(tmp_path / "a_1100.ck3", date="1100.6.1", seed=7, random_count=100)
+    late = make_save(tmp_path / "b_1120.ck3", date="1120.1.1", seed=7, random_count=200,
+                     edits=C_FAR_LEAVES)
+    wiki = build_wiki(views(early, late), "k_testland")
+    first, second = wiki.realms
+    # 201 holds c_test under the kingdom; 202 holds c_far under c_test
+    assert (first.date, first.ruler, first.by_rank) == ("1100.6.1", 200, {1: 1, 2: 1})
+    assert second.by_rank == {1: 1}
+    (change,) = second.changes
+    assert (change.key, change.kind, change.after, change.before) == ("c_far", "left", "1100.6.1", "1120.1.1")
+    (kingdom,) = first.kingdoms  # both counties are the map's Testland
+    assert (kingdom.key, kingdom.held, kingdom.vassals, kingdom.deeper) == ("k_testland", 0, 1, 1)
+
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    page = (out / "titles" / "k_testland.html").read_text(encoding="utf-8")
+    assert "<h2>Realm</h2>" in page
+    assert "1100.6.1 – 1120.1.1" in page and "left for another realm" in page
+    assert "By kingdom, at 1120.1.1" in page
+    # only the subject title carries it
+    assert "<h2>Realm</h2>" not in (out / "titles" / "c_test.html").read_text(encoding="utf-8")
+
+
+def test_a_single_save_has_a_realm_but_nothing_between(tmp_path):
+    wiki = build_wiki(views(make_save(tmp_path / "a.ck3")), "k_testland")
+    assert len(wiki.realms) == 1 and wiki.realms[0].changes == []
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    page = (out / "titles" / "k_testland.html").read_text(encoding="utf-8")
+    assert "<h2>Realm</h2>" in page and "Between the saves" not in page
+
+
+def test_a_vacant_save_is_a_row_and_changes_are_measured_across_it(tmp_path):
+    # #45: the middle save has nobody holding the kingdom. It used to vanish
+    # from the section, and the window across it looked like an ordinary one.
+    vacant = (("holder=200", "holder_was=200"),)
+    s1 = make_save(tmp_path / "a_1100.ck3", date="1100.6.1", seed=7, random_count=100)
+    s2 = make_save(tmp_path / "b_1105.ck3", date="1105.1.1", seed=7, random_count=150, edits=vacant)
+    s3 = make_save(tmp_path / "c_1120.ck3", date="1120.1.1", seed=7, random_count=200, edits=C_FAR_LEAVES)
+    wiki = build_wiki(views(s1, s2, s3), "k_testland")
+    first, middle, last = wiki.realms
+    assert middle.date == "1105.1.1" and middle.ruler is None and middle.counties == 0
+    # the realm did not exist at 1105, so nothing "left" there and came back:
+    # the change is measured from the last held save, across the vacancy
+    (change,) = last.changes
+    assert (change.key, change.kind, change.after, change.before) == ("c_far", "left", "1100.6.1", "1120.1.1")
+    assert last.across == ["1105.1.1"]
+
+    out = tmp_path / "site"
+    write_site(wiki, out)
+    page = (out / "titles" / "k_testland.html").read_text(encoding="utf-8")
+    assert "vacant</span> the title had no holder at this save" in page
+    assert "measured across 1105.1.1, when the title had no holder" in page
+    assert "By kingdom, at 1120.1.1" in page

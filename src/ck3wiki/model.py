@@ -28,6 +28,8 @@ from ck3parser.family import Family, own_family
 from ck3parser.parser import Block, date_key, to_date
 from ck3parser.pipeline import SnapshotView
 from ck3parser.portraits import arms_name, portrait_name, save_checksum
+from ck3parser.realm import changes as realm_changes
+from ck3parser.realm import realm as compute_realm
 from ck3parser.titles import TitleRecord
 from ck3parser.vassalage import INDEPENDENT, Vassalage, stretches
 
@@ -64,6 +66,56 @@ class Tenure:
 
     def sort_key(self) -> tuple[int, int, int]:
         return date_key(self.start) if self.start else (0, 0, 0)
+
+
+@dataclass
+class RealmKingdom:
+    """A realm's counties within one de jure kingdom, by vassal rank."""
+
+    key: str | None  #: None for counties with no de jure kingdom
+    name: str
+    held: int = 0  #: rank 0: the ruler's own
+    vassals: int = 0  #: rank 1: a direct vassal's
+    deeper: int = 0  #: rank 2 and below
+
+    @property
+    def total(self) -> int:
+        return self.held + self.vassals + self.deeper
+
+
+@dataclass
+class RealmCounty:
+    """A county that entered or left the realm, between two snapshots (§16)."""
+
+    key: str
+    name: str
+    kind: str  #: "gained", "left" or "gone" (ck3parser.realm.RealmChange)
+    after: str
+    before: str
+
+
+@dataclass
+class WikiRealm:
+    """The subject title's holder's realm at one snapshot, as the page shows it.
+
+    A summary rather than the realm itself: 1 000 counties a save times every
+    snapshot is more than a page needs, and every number here is computed from
+    `ck3parser.realm`, never counted twice.
+    """
+
+    date: str
+    #: None when the title had no holder at this snapshot: no realm existed,
+    #: and the row says so rather than leaving the save out (#45)
+    ruler: int | None
+    by_rank: dict[int, int]  #: counties at each vassal rank
+    kingdoms: list[RealmKingdom]  #: largest first
+    changes: list[RealmCounty]  #: against the previous *held* snapshot; empty for the first
+    #: vacant snapshots the changes above were measured across, oldest first
+    across: list[str] = field(default_factory=list)
+
+    @property
+    def counties(self) -> int:
+        return sum(self.by_rank.values())
 
 
 @dataclass
@@ -291,6 +343,8 @@ class Wiki:
     relatives: dict[int, Relative] = field(default_factory=dict)  #: named, but no page
     #: every title each character held at some snapshot, lineage or not
     holdings: dict[int, dict[str, Holding]] = field(default_factory=dict)
+    #: the subject title's holder's realm at each snapshot, oldest first (§16)
+    realms: list[WikiRealm] = field(default_factory=list)
     saves: list[dict] = field(default_factory=list)  #: {file, checksum, date} per snapshot
 
     def person(self, character_id: int) -> WikiCharacter | Relative | None:
@@ -558,7 +612,69 @@ def build_wiki(
     _load_houses(wiki, views)
     _load_title_arms(wiki, views)
     _load_cultures_and_faiths(wiki, views)
+    _load_realms(wiki, views)
     return wiki
+
+
+def _de_jure_kingdom(index, record) -> tuple[str | None, str]:
+    """The kingdom a title belongs to on the map, whoever holds it."""
+    seen = set()
+    while record is not None and record.idx not in seen:
+        if record.tier == "kingdom":
+            return record.key, record.display_name
+        seen.add(record.idx)
+        record = index.resolve(record.de_jure_liege)
+    return None, "No de jure kingdom"
+
+
+def _load_realms(wiki: Wiki, views: list[SnapshotView]) -> None:
+    """The subject title's holder's realm at each snapshot, and what changed.
+
+    Per snapshot and only per snapshot: a save says who each title's liege is,
+    never who it was, so a change is reported as the window between two saves
+    and nothing is drawn in between (docs/PLAN.md §9, §16). The realm follows
+    the title across a succession, so consecutive realms can be two people's.
+    """
+    previous = None
+    previous_names: dict[str, str] = {}
+    vacant: list[str] = []
+    for view in views:
+        ruler = view.target.holder
+        if ruler is None:
+            # the title is in the save but nobody holds it: no realm to show,
+            # and the next held snapshot is compared across this one
+            wiki.realms.append(WikiRealm(date=view.fp.date, ruler=None, by_rank={}, kingdoms=[], changes=[]))
+            vacant.append(view.fp.date)
+            continue
+        current = compute_realm(view.index, ruler, view.fp.date)
+        counties = current.of_tier("county")
+        kingdoms: dict[str | None, RealmKingdom] = {}
+        for key, title in counties.items():
+            kkey, kname = _de_jure_kingdom(view.index, view.index.get(key))
+            row = kingdoms.setdefault(kkey, RealmKingdom(key=kkey, name=kname))
+            if title.depth == 0:
+                row.held += 1
+            elif title.depth == 1:
+                row.vassals += 1
+            else:
+                row.deeper += 1
+        names = {key: view.index.get(key).display_name for key in counties}
+        moved = []
+        if previous is not None:
+            for change in realm_changes(previous, current):
+                name = names.get(change.key) or previous_names.get(change.key) or change.key
+                if change.key in current.in_save and change.key not in names:
+                    name = view.index.get(change.key).display_name
+                moved.append(RealmCounty(change.key, name, change.kind, change.after, change.before))
+        wiki.realms.append(WikiRealm(
+            date=view.fp.date,
+            ruler=ruler,
+            by_rank=dict(sorted(current.by_depth("county").items())),
+            kingdoms=sorted(kingdoms.values(), key=lambda k: (-k.total, k.name)),
+            changes=moved,
+            across=vacant if previous is not None else [],
+        ))
+        previous, previous_names, vacant = current, names, []
 
 
 def _load_title_arms(wiki: Wiki, views: list[SnapshotView]) -> None:

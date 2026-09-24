@@ -153,8 +153,9 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 
 ## What is not done, in the order I would do it
 
-Next: #39's steps 2 and 3, a *Realm* section on the subject title's page from
-`ck3parser.realm`, then the local map command (PLAN.md §16). Open issues, in the
+Next: #39's step 3, the local map command that renders each realm from the
+game's own map files and delivers the images like portraits (PLAN.md §16);
+the *Realm* section it will sit in is built. Open issues, in the
 order I would take them: #27's last step (delete
 `ck3parser.handoff` once the companion reads `portraits.json`), #30 (a DLC toggled
 mid-run splits it), #31 (localization, needs a decision about the game's

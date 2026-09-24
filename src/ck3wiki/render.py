@@ -335,6 +335,9 @@ def render_title(wiki: Wiki, title: WikiTitle, have: set[str], top: bool = False
     else:
         body.append("<p>No holders are recorded for this title.</p>")
 
+    if title.key == wiki.title_key:
+        body.append(realm_section(wiki))
+
     stretches = title.vassalage(wiki.snapshots)
     if stretches:
         body.append("<h2>Vassalage</h2>")
@@ -365,6 +368,93 @@ def render_title(wiki: Wiki, title: WikiTitle, have: set[str], top: bool = False
         body.append(movement_note(wiki, title))
     body.append("</div></div>")
     return page(heading, "\n".join(body), depth=1, subtitle=f"{len(title.tenures)} recorded rulers", top=top)
+
+
+CHANGE_WORD = {
+    "gained": "joined the realm",
+    "left": "left for another realm",
+    # absence is never an ending the save states (PLAN.md §9)
+    "gone": "gone from the save — destroyed or pruned, the save does not say which",
+}
+
+
+def realm_section(wiki: Wiki) -> str:
+    """The land held by whoever held the subject title, save by save (PLAN.md §16)."""
+    if not wiki.realms:
+        return ""
+    out = [
+        "<h2>Realm</h2>",
+        "<p>The counties held by whoever held this title at each save: directly, by"
+        " a direct vassal, or further down the chain of vassals. A save says who each"
+        " title answers to, never who it did, so a realm is known at the saves only,"
+        " and what changed between two of them is dated by the window between.</p>",
+        "<table><thead><tr><th class='num'>Save</th><th>Held by</th>"
+        "<th class='num'>Counties</th><th class='num'>Held directly</th>"
+        "<th class='num'>Through direct vassals</th><th class='num'>Further down</th>"
+        "</tr></thead><tbody>",
+    ]
+    for r in wiki.realms:
+        if r.ruler is None:
+            out.append(
+                f"<tr><td class='num'>{e(r.date)}</td><td colspan='5'><span class='tag'>vacant"
+                "</span> the title had no holder at this save, so there was no realm</td></tr>"
+            )
+            continue
+        deeper = sum(n for rank, n in r.by_rank.items() if rank >= 2)
+        out.append(
+            f"<tr><td class='num'>{e(r.date)}</td><td>{character_link(wiki, r.ruler, 1)}</td>"
+            f"<td class='num'>{r.counties:,}</td><td class='num'>{r.by_rank.get(0, 0):,}</td>"
+            f"<td class='num'>{r.by_rank.get(1, 0):,}</td><td class='num'>{deeper:,}</td></tr>"
+        )
+    out.append("</tbody></table>")
+
+    moved = [c for r in wiki.realms for c in r.changes]
+    held = [r for r in wiki.realms if r.ruler is not None]
+    if len(held) > 1:
+        out.append("<h3>Between the saves</h3>")
+        if moved:
+            out.append(
+                "<table><thead><tr><th class='num'>Between</th><th>County</th><th>What</th>"
+                "</tr></thead><tbody>"
+            )
+            for c in moved:
+                out.append(
+                    f"<tr><td class='num'>{e(c.after)} – {e(c.before)}</td>"
+                    f"<td>{title_link(wiki, c.key, 1) if c.key in wiki.titles else e(c.name)}</td>"
+                    f"<td>{e(CHANGE_WORD.get(c.kind, c.kind))}</td></tr>"
+                )
+            out.append("</tbody></table>")
+        else:
+            out.append("<p>No county joined or left the realm between the saves.</p>")
+        for r in held:
+            if r.across:
+                out.append(
+                    f'<p class="sub">Changes up to {e(r.date)} are measured across'
+                    f" {', '.join(e(d) for d in r.across)}, when the title had no holder:"
+                    " the window runs from the last save it was held in.</p>"
+                )
+
+    if not held:
+        return "\n".join(out)
+    last = held[-1]
+    out.append(f"<h3>By kingdom, at {e(last.date)}</h3>")
+    out.append(
+        "<table><thead><tr><th>De jure kingdom</th><th class='num'>Counties</th>"
+        "<th class='num'>Held directly</th><th class='num'>Through direct vassals</th>"
+        "<th class='num'>Further down</th></tr></thead><tbody>"
+    )
+    for k in last.kingdoms:
+        name = title_link(wiki, k.key, 1) if k.key in wiki.titles else e(k.name)
+        out.append(
+            f"<tr><td>{name}</td><td class='num'>{k.total:,}</td><td class='num'>{k.held:,}</td>"
+            f"<td class='num'>{k.vassals:,}</td><td class='num'>{k.deeper:,}</td></tr>"
+        )
+    out.append("</tbody></table>")
+    out.append(
+        '<p class="sub">Kingdoms are the map\'s own, the de jure ones, whoever holds'
+        " them; a realm's vassal kingdoms need not match.</p>"
+    )
+    return "\n".join(out)
 
 
 def movement_note(wiki: Wiki, title: WikiTitle) -> str:
