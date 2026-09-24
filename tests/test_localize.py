@@ -79,11 +79,13 @@ def test_the_extract_holds_what_the_chronicles_used_and_builds_the_same(tmp_path
 
     pages = {}
     for how, flag in (("game", ["--game", str(game_dir(tmp_path))]), ("extract", ["--localization", str(extract)])):
-        site = tmp_path / how
+        # its own folder: `tmp_path / "game"` is the fake game, and a site
+        # written into it made picking the chronicle depend on listing order
+        site = tmp_path / f"site_{how}"
         assert build_main([str(saves), "--title", "k_testland", "--out", str(site),
                            "--cache", str(tmp_path / "cache"), *flag]) == 0
-        slug = next(p.name for p in site.iterdir() if p.is_dir())
-        pages[how] = (site / slug / "characters" / "101.html").read_text(encoding="utf-8")
+        (chronicle,) = [p for p in site.iterdir() if (p / "characters").is_dir()]
+        pages[how] = (chronicle / "characters" / "101.html").read_text(encoding="utf-8")
     assert pages["game"] == pages["extract"]
     assert "was slain in battle by Fóunder" in pages["game"]
 
@@ -101,8 +103,8 @@ def test_prose_written_localized_survives_a_localized_build(tmp_path):
     assert prose_main([str(saves), "--out", str(tmp_path / "prose"), *common, *game]) == 0
     site = tmp_path / "site"
     assert build_main([str(saves), "--out", str(site), "--prose", str(tmp_path / "prose"), *common, *game]) == 0
-    slug = next(p.name for p in site.iterdir() if p.is_dir())
-    page = (site / slug / "characters" / "200.html").read_text(encoding="utf-8")
+    (chronicle,) = [p for p in site.iterdir() if (p / "characters").is_dir()]
+    page = (chronicle / "characters" / "200.html").read_text(encoding="utf-8")
     assert '<section class="prose">' in page and "Tést" in page
 
     # and a missing game folder is an argument error, not a traceback
