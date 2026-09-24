@@ -8,6 +8,13 @@ dependencies = [
     "neo4j>=5.20",
 ]
 
+[project.optional-dependencies]
+# realm maps (python -m ck3wiki.maps): the game's map files are a PNG raster
+maps = [
+    "pillow>=10",
+    "numpy>=1.26",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8",
