@@ -14,6 +14,9 @@ session (any model) can continue without the conversation history.
 | Real saves | **ck_wiki's** Releases, tagged by run seed; `scripts/fetch_saves.sh` downloads and checksums them into `./saves` |
 | Branch | work lands on `main` through a PR per task |
 | Published wiki | `diegoami/ck_wiki` — its `images/` holds the companion's harvested images, its `portraits.json` the queue; the pages are built there, never committed |
+| The product | `diegoami/ck3-chronicle` (#46): library, CLI, GitHub and desktop editions, ported from here by its own sessions. This repository is its read-only reference and stays active for experiments |
+| Parity reference | release `poc-reference-1` (commit `40fd399`): `site-sha256.txt` holds the checksum of every file a plain build of the five release saves writes, 25 133 of them. ck3-chronicle ports against it; a change here that alters a plain build needs a `poc-reference-2` and a note to that repository |
+| Game files | a local CK3 install (1.6.1.2 on the owner's machine), used only for runs of its own version (#58). ck_wiki's CI has none: it builds from `localization.json` (the extract, one section per version) and the maps committed to `images/` |
 | CI | `.github/workflows/ci.yml`, runs `uv run pytest` on the fixture on every push and PR, ~15 s; a green push to `main` then sends `parser-updated` to ck_wiki, which rebuilds with that commit (needs the `CK_WIKI_DISPATCH_TOKEN` secret; without it, ck_wiki's daily schedule catches up) |
 
 ## What is done
@@ -55,8 +58,8 @@ session (any model) can continue without the conversation history.
   (`python -m ck3wiki.build SAVES --out site`). One chronicle per playthrough
   under `site/<seed>-<version>/`, with a landing page above them; the subject
   title is auto-detected per run and `--title` overrides it. This is the
-  project's actual deliverable; see PLAN.md §8. Factual pages only, no LLM
-  prose. `diegoami/ck_wiki` publishes it to Pages; this repository no longer
+  project's actual deliverable; see PLAN.md §8. Factual pages; prose only
+  with `--prose`, and none is published yet (PLAN.md §15). `diegoami/ck_wiki` publishes it to Pages; this repository no longer
   does, and its `pages.yml` is gone.
 - **Who was played** (`ck3parser/player.py`): `primary_title_key` reads the
   played character from the header, finds their `landed_data.domain`, and
@@ -99,7 +102,8 @@ session (any model) can continue without the conversation history.
   whether or not the file exists; missing ones render as *awaiting harvest*.
   `portraits.json`, at the site root and in each chronicle, is the
   machine-readable list of what is still wanted. On the five release saves that is
-  5 630 images across 3 chronicles, none harvested yet.
+  7 501 images across 3 chronicles (ck_wiki's build of 2026-09-25), none
+  harvested yet.
 - **Vassalage** (`ck3wiki/model.py`, `Vassalage`): every title in the wiki is
   asked of every snapshot who its de facto liege was, through that snapshot's
   own index rather than by assuming it was the subject. Consecutive snapshots
@@ -147,7 +151,10 @@ Measured on the three real saves (same run, 1358 / 1361 / 1364):
 | `sections SAVE` | 54 distinct top-level keys, 14 M lines, 4.8 s |
 | `sections SAVE --verify` | ~41 M tokens, balanced, max depth 7, ~38 s |
 | `handoff saves --title e_germany --run <germany>` | 26 / 2 / 25 harvestable per snapshot, 48 distinct across the run, 22 / 1 / 21 houses, all with arms, ~2 m |
-| `ck3wiki.build saves` on all five release saves | 3 chronicles, 25 086 pages, 7 430 images wanted, 1 m 11 s locally with a warm cache |
+| `ck3wiki.build saves` on all five release saves | 3 chronicles, 25 124 pages, 7 501 images wanted; byte-identical to `poc-reference-1` (25 133 files) |
+| `ck3wiki.build saves --localization localization.json` | Germania localized from the 1.6.1.2 section, identical to a `--game` build; HRE and France identical to a plain build |
+| `ck3wiki.localize saves` with a 1.6.1.2 install | 5 731 keys for Germania; the 1.4.4 and 1.3.1 runs skipped, naming both versions |
+| `ck3wiki.maps saves` with a 1.6.1.2 install | Germania's 3 maps, every barony placed; HRE and France skipped |
 | `ck3wiki.build <germania>` with family, cold cache | 1 chronicle, 7 393 pages, 2 470 images, 3 m 51 s |
 | `ck3wiki.build <germania>` with family, warm cache | the same 7 393 pages, **1 m 06 s** — against 9 m 55 s before the digest and before sibling pages |
 | `runs scan` on all five | 3 runs: seeds 576691683 / 633048653 / 1370892195 on versions 1.6.1.2 / 1.4.4 / 1.3.1 |
@@ -219,6 +226,14 @@ and in a first pass it outranks everything the graph could answer.
 
 ### Done since this list was last written
 
+- **Scope of the game-file work** (owner, on #56): the latest playthrough only.
+  #56 is `blocked` until an install of 1.4.4 or 1.3.1 exists; its checklist says
+  what follows then (PLAN.md §18). #36 closed.
+- **ck_wiki follows the version rule** (ck_wiki#5): the HRE and France realm
+  maps are withdrawn and `localization.json` is `ck3-localization/2`, 1.6.1.2
+  only. `localize` upgrades an older extract in place (#60), and `maps`,
+  `build --game` and `prose --game` fail when the install's version cannot be
+  told (#61).
 - **Game files from the save's own version** (#58): maps and the game's text
   only for runs whose version equals the install's (1.6.1.2 here: Germania).
   The HRE and France maps and text, made from 1.6.1.2 files, are withdrawn
@@ -369,9 +384,18 @@ and in a first pass it outranks everything the graph could answer.
   ends them at the death and shows the gap (PLAN.md §9). `MATCH ()-[h:HELD_BY]->(c)
   WHERE c.death IS NOT NULL AND h.to > c.death` finds them. Part of #24.
 - Character names in a save are localization *keys* with diacritics marked by an
-  underscore (`FranC_ois`). The wiki drops the marker rather than guessing the
-  letter; real names need the game's localization files, which this project does
-  not read.
+  underscore (`FranC_ois`). Without the game's text the wiki drops the marker
+  rather than guessing the letter; with it (`--game`, or the extract through
+  `--localization`) the key is looked up — only for runs of the text's own
+  game version (PLAN.md §17, §18). On ck_wiki that is Germania alone.
+- A save's `version` may be the version its run **started** on rather than the
+  one that wrote it (above). The version rule (#58) compares that field,
+  as the companion does; if it proves to be the starting version, a run
+  carried across patches would be matched against the wrong install.
+  Unverified.
+- The 1.3/1.4 saves' cultures carry only `culture_template`: no name, no
+  aspects. Their pages read "Culture N" until an install of their own version
+  is available (#56, blocked; PLAN.md §18).
 - Two titles can share a display name (a duchy and a kingdom of Pomerania), so
   a name alone never identifies a title. The key does.
 - What separates one wiki from another is the **run**, identified by seed and
@@ -419,6 +443,9 @@ uv run python -m ck3parser.handoff saves --title e_germany --out handoff
 # 26 / 2 / 25 harvestable per snapshot, 48 distinct characters
 
 uv run python -m ck3wiki.build saves --out site   # one chronicle per run
+gh release download poc-reference-1 -p site-sha256.txt -D /tmp/ref
+(cd site && sha256sum -c --quiet /tmp/ref/site-sha256.txt)   # silent: parity holds
+# a deliberate change to a plain build: say so in the PR, then a new reference tag
 
 uv run python -m ck3parser.pipeline saves --title e_germany --dry-run
 # 3 snapshots oldest first, 37/19/51 vassals, 0 missing characters, exit 0
