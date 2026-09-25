@@ -177,6 +177,11 @@ of their own version** (1.4.4, 1.3.1), the precondition #58 set; until one is
 available nothing is done for them, and no fallback is shown in its place
 (PLAN.md §18).
 
+**Blocked too: #64**, whether a save's `version` is the version that wrote it.
+The #58 rule depends on it. The measurements so far point that way (below,
+*Known gaps*). What settles it is an old save re-saved by the current game,
+which the owner postponed; the issue lists what follows for each answer.
+
 **The wiki comes first.** The graph is a milestone and an interesting artifact
 in its own right (PLAN.md §12), but the published chronicle is the deliverable,
 and in a first pass it outranks everything the graph could answer.
@@ -339,11 +344,18 @@ and in a first pass it outranks everything the graph could answer.
   lineage, so a title that leaves it keeps an open `HELD_BY` — the flaw the
   wiki had with Denmark (PLAN.md §9). Filed as #24.
 
-- `version="1.6.1.2"` in all three saves while the DLC list contains DLCs
-  released well after 1.6. The player started this run on 1.6.1.2 and carried
-  it through later patches, so the field records the version at run start, not
-  at save time (unverified against a freshly started game). Stored as-is; only
-  used for a warning on change.
+- A save's `version`: PLAN.md §5 calls it the version the run **started** on,
+  from a report that Germania was carried through later patches and from
+  "DLCs released well after 1.6". The measurements say otherwise, though they
+  don't prove it (#64):
+  - the version rises with the real save date: 1.3.1 in 2021-04, 1.4.4 in
+    2022-02, 1.6.1.2 in 2026-02/03;
+  - each save's format matches its label (the culture records, #56);
+  - the owner's install, updated 2026-09-18 with all 15 DLC folders, is itself
+    1.6.1.2, so the DLC argument fails.
+  It is part of the RunKey, and the #58 rule compares it with the install's
+  `rawVersion`, as the companion does. If it is the starting version after all,
+  a run carried across patches is matched against the wrong install.
 - `meta_real_date` is the real-world save date as years since 1900
   (`126.3.6` = 2026-03-06). It is used for ordering and as a scumming check.
 - The middle 8 hex digits of the `SAV0102…` first line are not understood.
@@ -388,11 +400,6 @@ and in a first pass it outranks everything the graph could answer.
   rather than guessing the letter; with it (`--game`, or the extract through
   `--localization`) the key is looked up — only for runs of the text's own
   game version (PLAN.md §17, §18). On ck_wiki that is Germania alone.
-- A save's `version` may be the version its run **started** on rather than the
-  one that wrote it (above). The version rule (#58) compares that field,
-  as the companion does; if it proves to be the starting version, a run
-  carried across patches would be matched against the wrong install.
-  Unverified.
 - The 1.3/1.4 saves' cultures carry only `culture_template`: no name, no
   aspects. Their pages read "Culture N" until an install of their own version
   is available (#56, blocked; PLAN.md §18).
