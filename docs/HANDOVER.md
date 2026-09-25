@@ -158,12 +158,17 @@ Next: the product repository (#46, decided): `diegoami/ck3-chronicle`, built
 by its own sessions with this repository as the reference. The POC stays active
 for experiments. Realm maps are done here (PLAN.md §16) and get ported there. Open issues, in the
 order I would take them: #27's last step (delete
-`ck3parser.handoff` once the companion reads `portraits.json`), #30 (a DLC toggled
-mid-run splits it), #31 (localization, needs a decision about the game's
-files), #24 (the graph's two title flaws), #25 with diegoami/ck_wiki#1 (prose in
-ck_wiki's workflow, postponed). The companion has not answered
-diegoami/ck_portrait_generator#1 since 2026-09-18, and ck_wiki's `images/` is
-still empty.
+`ck3parser.handoff` once the companion reads `portraits.json`), #24 (the graph's
+two title flaws), #25 with diegoami/ck_wiki#1 (prose in ck_wiki's workflow,
+postponed). The companion has not answered diegoami/ck_portrait_generator#1
+since 2026-09-18; ck_wiki's `images/` holds only Germania's three realm maps.
+
+**Blocked, not next: #56**, the HRE and France cultures shown as "Culture N".
+The owner scoped the game-file work to the latest playthrough (Germania,
+1.6.1.2, done). Older playthroughs get names and aspects only from **an install
+of their own version** (1.4.4, 1.3.1), the precondition #58 set; until one is
+available nothing is done for them, and no fallback is shown in its place
+(PLAN.md §18).
 
 **The wiki comes first.** The graph is a milestone and an interesting artifact
 in its own right (PLAN.md §12), but the published chronicle is the deliverable,

@@ -1790,3 +1790,11 @@ Against the release saves only Germania (1.6.1.2) matches; the HRE (1.4.4) and
 France (1.3.1) had had maps and text generated from 1.6.1.2 files, which were
 withdrawn from ck_wiki (owner's decision). They come back when files of their
 own versions are available.
+
+**Scope (owner, on #56):** the game-file features target the **latest
+playthrough** only. An older one is a to-do whose precondition is an install of
+its own version. Its cultures show why: from 1.3/1.4 saves the records carry
+only `culture_template`, no `name` and no aspects, so the name and aspects are
+in that version's `common/culture/cultures/*.txt` and its text. No fallback
+(such as the template key) is shown meanwhile: it would change every page
+without the game, and `poc-reference-1` with it.
